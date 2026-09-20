@@ -1,5 +1,7 @@
 <RCC>
     <qresource prefix="/betternotes">
         <file>windows/Main.qml</file>
+        <file>windows/StickyNote.qml</file>
+        <file>windows/WindowPlacement.js</file>
     </qresource>
 </RCC>

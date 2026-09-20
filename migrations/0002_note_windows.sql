@@ -1,0 +1,11 @@
+CREATE TABLE note_windows (
+    note_id INTEGER PRIMARY KEY REFERENCES notes(id) ON DELETE CASCADE,
+    x INTEGER,
+    y INTEGER,
+    width INTEGER NOT NULL CHECK (width BETWEEN 240 AND 16384),
+    height INTEGER NOT NULL CHECK (height BETWEEN 180 AND 16384),
+    screen TEXT NOT NULL,
+    collapsed INTEGER NOT NULL CHECK (collapsed IN (0, 1)),
+    is_open INTEGER NOT NULL CHECK (is_open IN (0, 1)),
+    CHECK ((x IS NULL AND y IS NULL) OR (x IS NOT NULL AND y IS NOT NULL))
+);

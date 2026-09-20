@@ -1,4 +1,4 @@
-use crate::{Error, Note, NoteStore, NoteSummary, Result};
+use crate::{Error, Note, NoteStore, NoteSummary, Result, WindowState};
 use std::path::Path;
 
 /// Owns the active draft; only successful writes clear the dirty flag.
@@ -10,6 +10,21 @@ pub struct NotesSession {
 }
 
 impl NotesSession {
+    /// One session per sticky window; the UI permits only one editor per note.
+    pub fn open_note(path: &Path, id: i64) -> Result<Self> {
+        let store = NoteStore::open(path)?;
+        let note = store.get(id)?;
+        Ok(Self {
+            store,
+            summaries: vec![NoteSummary {
+                id: note.id,
+                title: note.title.clone(),
+            }],
+            current: Some(note),
+            dirty: false,
+        })
+    }
+
     pub fn open(path: &Path) -> Result<Self> {
         let store = NoteStore::open(path)?;
         let summaries = store.list()?;
@@ -33,6 +48,32 @@ impl NotesSession {
     }
     pub fn dirty(&self) -> bool {
         self.dirty
+    }
+
+    pub fn window_state(&self) -> Result<WindowState> {
+        self.store
+            .window_state(self.current.as_ref().ok_or(Error::NoSelection)?.id)
+    }
+
+    pub fn save_window_state(&self, state: &WindowState) -> Result<()> {
+        self.store
+            .save_window_state(self.current.as_ref().ok_or(Error::NoSelection)?.id, state)
+    }
+
+    pub fn open_window_ids(&self) -> Result<Vec<i64>> {
+        self.store.open_window_ids()
+    }
+
+    /// Sticky reload must never silently switch to a different note after deletion.
+    pub fn reload_note(&mut self) -> Result<()> {
+        let id = self.current.as_ref().ok_or(Error::NoSelection)?.id;
+        let note = self.store.get(id)?;
+        if let Some(summary) = self.summaries.iter_mut().find(|summary| summary.id == id) {
+            summary.title.clone_from(&note.title);
+        }
+        self.current = Some(note);
+        self.dirty = false;
+        Ok(())
     }
 
     pub fn current_index(&self) -> Option<usize> {

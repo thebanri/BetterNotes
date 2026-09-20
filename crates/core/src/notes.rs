@@ -42,6 +42,8 @@ pub enum Error {
     Clock,
     #[error("The note revision limit was reached.")]
     RevisionOverflow,
+    #[error("The saved window geometry is invalid. The note has not been changed.")]
+    InvalidWindowState,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

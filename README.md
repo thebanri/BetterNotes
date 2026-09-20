@@ -1,9 +1,8 @@
 # BetterNotes
 
-Linux-first desktop notes application, currently at **Phase 2 — Basic Notes**.
-BetterNotes is a working codename. Create, edit and delete plain-text notes in one
-main window, with autosave and local SQLite persistence. Independent desktop
-sticky windows belong to Phase 3.
+Linux-first desktop notes application, currently at **Phase 3 — Sticky Windows**.
+BetterNotes is a working codename. Create, edit and delete plain-text notes in
+independent windows, with autosave, SQLite persistence and saved window state.
 
 ## Architecture
 
@@ -16,11 +15,16 @@ Cargo.toml              Rust workspace
 crates/core/src/lib.rs  Qt-independent core
 crates/core/src/store.rs SQLite persistence and migrations
 crates/core/src/session.rs Draft state and save-before-navigation rules
+crates/core/src/window_state.rs Validated per-note window state
 crates/core/src/paths.rs Linux XDG data path resolution
 app/build.rs            CXX-Qt code generation and Qt resources
 app/src/main.rs         Qt lifecycle and startup errors
+app/src/engine.rs       Shared QML loading and error handling
+app/src/platform.rs     Qt platform capability policy
 app/src/notes_bridge.rs Notes QObject exposed to QML
-qml/windows/Main.qml   Notes list and editor
+qml/windows/Main.qml   Notes library and window ownership
+qml/windows/StickyNote.qml Independent note editor
+qml/windows/WindowPlacement.js Display fitting and recovery
 qml/qml.qrc            Embedded UI resource manifest
 migrations/            Versioned SQL schema
 docs/architecture.md   Integration evaluation and decisions
@@ -86,22 +90,33 @@ cargo build --locked
 cargo run --locked -p betternotes
 ```
 
-Use **New note** (Ctrl+N), choose a note from the list, and edit its title or body.
-Tab navigates controls; Up/Down selects notes when the list has keyboard focus.
-Ctrl+S saves immediately. Close with the window manager or Ctrl+Q.
+Use **New note** (Ctrl+N in the library), or open an existing note from the list.
+Each note has its own ordinary desktop window; opening the same note again
+focuses its existing window where the compositor permits. Multiple notes can be
+edited at once. Use the native title bar to move a window and its borders to
+resize it. **Collapse/Expand** hides/shows the editor and preserves expanded size.
+Tab navigates controls; Up/Down and Enter navigate/open notes in the library.
 
-After 500 ms without an edit, a one-shot timer saves the draft. Selecting another
-note, creating a note, and closing the window also save pending edits immediately.
-The status shows whether changes remain unsaved. Delete requires confirmation;
-it permanently removes the selected note, including its pending draft.
+Each editor saves after 500 ms without typing. Ctrl+S saves immediately.
+**Menu → Delete note** asks for confirmation and permanently removes that note.
+The window's close button or Ctrl+W saves and closes just that window; its note
+stays in the library. **Menu → All notes** brings the library back into view.
 
-Database errors appear in the window and on stderr. Failed saves keep the draft
-and block navigation or closure that would lose it. Use **Save again** to retry a
-save, or repeat the failed operation after resolving its cause. **Reload** reads
-the saved notes again and asks before discarding a pending draft. When another
-process edited/deleted the same note, copy any unsaved text before reloading.
-Startup storage errors disable editing and offer **Retry opening**; they never
-silently switch to temporary storage or replace the database.
+Closing the library, its Quit button, or Ctrl+Q in any window saves all notes and
+quits. Windows still open at quit are restored on the next launch. Individually
+closed windows stay closed. Normal expanded size, collapsed state and screen name
+are stored; X11 also stores position. Minimized/maximized states are deliberately
+restored as ordinary windows. Geometry saves are debounced for 500 ms, with an
+immediate flush when closing or quitting. Closing a window does not delete a note.
+
+Database errors appear in the affected window and on stderr. A failed save blocks
+normal closure/quit and retains every pending draft. Retry with Ctrl+S or **Menu →
+Save**. **Reload saved note** asks before discarding unsaved edits and does not
+switch to another note if the original was deleted externally. Copy valuable
+unsaved text before reloading. For an unrecoverable error, **Discard changes and
+close…** provides an explicitly confirmed escape; if storage cannot be updated,
+that window may reopen next time. Startup failures offer **Retry opening**;
+they never replace the database or silently use volatile storage.
 
 Notes live in `$XDG_DATA_HOME/betternotes/notes.sqlite3`, falling back to
 `$HOME/.local/share/betternotes/notes.sqlite3` if XDG_DATA_HOME is unset, empty or
@@ -128,11 +143,29 @@ initialize a platform plugin, it may terminate before Rust can handle the error;
 inspect Qt's stderr and use `QT_DEBUG_PLUGINS=1` for diagnostic details. Do not
 substitute X11 behavior for missing Wayland functionality.
 
+### Placement and desktop limitations
+
+Wayland leaves absolute window placement to the compositor: BetterNotes does not
+save or set global x/y coordinates there. Restoring the screen and size is a
+request which tiling compositors may override. Interactive native moving/resizing
+continues to use the window manager. X11 position restoration is also best effort.
+See [Qt's position limitations](https://doc.qt.io/qt-6/qwindow.html#position).
+
+On restoration, missing screens fall back to the library's current display and
+geometry is clamped to display bounds. **Bring here** in the library recovers an
+existing or closed note onto its current display where positioning is supported;
+Wayland still chooses placement. Hotplug screen-list changes trigger recovery.
+Qt Quick exposes display bounds rather than per-display work areas here, so panel
+overlap can still require manual movement. These are ordinary windows, without
+always-on-top, desktop-layer or workspace pinning. No tray/background mode is added.
+
 ## Validation
 
 `cargo test` checks CRUD, reopening saved data, migrations and rollback, concurrent
-edits, failed writes, crash recovery and XDG paths. A headless Qt test exercises the
-actual QML editor, its autosave timer, selection, deletion and close-time saving.
+edits, failed writes, crash recovery, XDG paths, and window-state persistence.
+A standalone Qt test runs on its process main thread and exercises the actual
+QML windows: independent edits, autosave, resizing, collapse/expand, close versus
+delete, restoration, lost-display recovery calculations and refusal of unsafe quit.
 Tests use temporary data directories, not your real notes. Qt's expected
 missing-resource warning appears during the error-path test. Headless tests do
 not establish visual quality, physical keyboard interaction or compositor compatibility.
@@ -140,17 +173,20 @@ not establish visual quality, physical keyboard interaction or compositor compat
 To keep a headless executable running briefly for a manual startup check:
 
 ```sh
-QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software timeout 3s target/debug/betternotes
+betternotes_test_data=$(mktemp -d)
+XDG_DATA_HOME="$betternotes_test_data" QT_QPA_PLATFORM=offscreen \
+  QT_QUICK_BACKEND=software timeout 3s target/debug/betternotes
 ```
 
 The successful startup line should appear without QML errors. Timeout status 124
 means the event loop remained running until the timeout; it is not a graceful exit.
-See [the Phase 2 validation report](docs/phase-2-validation.md) for commands and
-actual results; [the original report](docs/validation.md) records Phase 1.
+See [the Phase 3 validation report](docs/phase-3-validation.md) for commands and
+actual results. Earlier reports record [Phase 2](docs/phase-2-validation.md) and
+[Phase 1](docs/validation.md).
 
 ## Scope and next phase
 
-Phase 2 includes SQLite migrations, the Rust note model, create/edit/delete,
-autosave and persistence. Phase 3 should add independent sticky windows and window
-state persistence while respecting Wayland restrictions. No later-phase features
-are included here. Project licensing remains undecided; no license was assigned.
+Phase 3 adds independent note windows, moving/resizing through native decorations,
+collapse/expand and saved window state. Phase 4 should address themes and polished,
+responsive QML components with high-DPI validation. No later-phase features are
+included here. Project licensing remains undecided; no license was assigned.

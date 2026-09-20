@@ -94,3 +94,60 @@ will be added to the same boundary when a requested feature actually needs them.
 
 This phase supplies one application window. It does not add sticky windows,
 rich text, search, tags, reminders, tray integration, IPC or import/export.
+
+## Phase 3 — Sticky Windows
+
+Keep CXX-Qt and the Phase 2 store/session design. The main window is now a note
+library, and each independent `StickyNote.qml` contains its own NotesBackend and
+Rust editing session. A session opened for a sticky loads only that note. The
+library refreshes its titles after saves/deletions. The library's QML registry
+owns window objects and enforces one editor per note per process; IDs cross the
+bridge as strings so JavaScript number precision cannot confuse note identities.
+No global session state, worker, new dependency or platform service is needed.
+Each editor has a SQLite connection; existing revision checks continue to protect
+against edits from other processes. Window objects are destroyed on close.
+
+The QObject parent keeps lifetimes explicit, while `transientParent: null` and
+ordinary Qt window flags make notes independent top-level windows. Native title
+bars and borders provide moving, resizing and minimizing through the compositor.
+This avoids custom drag-coordinate handling, and works with Qt versions before
+the newer QML system-move helpers. See [Qt Window ownership and transient parents](https://doc.qt.io/qt-6/qml-qtquick-window.html#transientParent-prop).
+Collapse hides the editor and reduces height; the expanded size is retained.
+
+Migration 2 adds `note_windows`, keyed by note ID with `ON DELETE CASCADE`.
+The upgrade and schema version change are transactional and preserve existing
+notes. Old Phase 2 binaries reject schema 2 rather than attempting a downgrade.
+Window snapshots contain normal expanded client size, optional position, display
+name, collapsed state and whether to reopen. They do not change content revisions.
+The core validates sizes and coordinates, and SQLite enforces basic constraints.
+Content and geometry each use an edit/event-driven 500 ms single-shot timer;
+normal close and quit flush pending work without constant polling.
+
+Closing a note saves it and marks its window closed. Closing the library or
+choosing Quit first saves every open editor and records each as open for restart;
+only when all succeed are any windows closed. Failure retains the windows and
+drafts, although earlier successful writes remain committed. Confirmed deletion
+removes the note and its window state. A separate confirmed discard-and-close
+action provides recovery from unrecoverable storage errors without deleting the
+saved note. If its geometry write fails, the previous reopening flag remains.
+
+The platform capability decision lives in `app/src/platform.rs`, exposed by the
+ApplicationInfo adapter. QML supplies the actual [Qt platform plugin](https://doc.qt.io/qt-6/qml-qtqml-qt.html#platform-prop),
+including xcb under XWayland. Only xcb (and offscreen tests) uses absolute x/y.
+On Wayland, positions are neither saved nor set; the compositor chooses them.
+See [QWindow position limitations](https://doc.qt.io/qt-6/qwindow.html#position).
+QML's `windows/WindowPlacement.js` handles visual geometry fitting. Screen/size
+restoration and activation are hints, especially on tiling desktops.
+Missing displays fall back to the library/current screen, dimensions and X11
+coordinates are clamped to display bounds, and screen-list changes trigger
+recovery. Bring here provides a manual recovery action. ScreenInfo does not expose
+per-screen work areas; margins reduce decoration overlap but cannot guarantee
+avoidance of every panel. There is no workspace, desktop-layer or always-on-top
+integration. Minimized/maximized state is not persisted: reopening uses ordinary
+windows so notes remain discoverable.
+
+Qt integration tests now use a standalone Cargo test executable (`harness=false`)
+to create and destroy Qt objects on the process main thread. The shared engine
+loader retains Phase 1's resource-error handling. The test uses real embedded
+QML windows and isolated temporary storage; it does not certify real compositor
+interaction or native decoration drag/resize behavior.

@@ -1,4 +1,4 @@
-use crate::{Error, Note, NoteSummary, Result};
+use crate::{Error, Note, NoteSummary, Result, WindowState};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::{
     path::Path,
@@ -6,8 +6,9 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x424e4f54; // BNOT, an internal identifier, not a public app ID.
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 const INITIAL_SCHEMA: &str = include_str!("../../../migrations/0001_notes.sql");
+const WINDOW_SCHEMA: &str = include_str!("../../../migrations/0002_note_windows.sql");
 
 pub struct NoteStore {
     connection: Connection,
@@ -114,6 +115,51 @@ impl NoteStore {
         }
         Ok(())
     }
+
+    pub fn window_state(&self, note_id: i64) -> Result<WindowState> {
+        let state = self.connection.query_row(
+            "SELECT x, y, width, height, screen, collapsed, is_open FROM note_windows WHERE note_id = ?1",
+            [note_id],
+            |row| Ok(WindowState {
+                position: row.get::<_, Option<i32>>(0)?.zip(row.get(1)?),
+                width: row.get(2)?, height: row.get(3)?, screen: row.get(4)?,
+                collapsed: row.get(5)?, open: row.get(6)?,
+            }),
+        ).optional()?.unwrap_or_default();
+        state.validate()?;
+        Ok(state)
+    }
+
+    /// Separate from content revisions: resizing must not cause edit conflicts.
+    pub fn save_window_state(&self, note_id: i64, state: &WindowState) -> Result<()> {
+        state.validate()?;
+        self.connection.execute(
+            "INSERT INTO note_windows (note_id, x, y, width, height, screen, collapsed, is_open)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(note_id) DO UPDATE SET x=excluded.x, y=excluded.y,
+             width=excluded.width, height=excluded.height, screen=excluded.screen,
+             collapsed=excluded.collapsed, is_open=excluded.is_open",
+            params![
+                note_id,
+                state.position.map(|p| p.0),
+                state.position.map(|p| p.1),
+                state.width,
+                state.height,
+                state.screen,
+                state.collapsed,
+                state.open
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn open_window_ids(&self) -> Result<Vec<i64>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT note_id FROM note_windows WHERE is_open = 1 ORDER BY note_id")?;
+        let rows = statement.query_map([], |row| row.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
 }
 
 fn migrate(connection: &mut Connection, initial_schema: &str) -> Result<()> {
@@ -135,13 +181,19 @@ fn migrate(connection: &mut Connection, initial_schema: &str) -> Result<()> {
         }
         transaction.execute_batch(initial_schema)?;
         transaction.pragma_update(None, "application_id", APPLICATION_ID)?;
-        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     } else if application_id != APPLICATION_ID {
         return Err(Error::UnrecognizedDatabase);
     }
     // Reject incomplete schemas without ever resetting existing data.
     transaction.prepare(
         "SELECT id, title, content, created_at, updated_at, revision FROM notes LIMIT 0",
+    )?;
+    if version < 2 {
+        transaction.execute_batch(WINDOW_SCHEMA)?;
+        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    }
+    transaction.prepare(
+        "SELECT note_id, x, y, width, height, screen, collapsed, is_open FROM note_windows LIMIT 0",
     )?;
     transaction.commit()?;
     Ok(())

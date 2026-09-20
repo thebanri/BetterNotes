@@ -1,5 +1,6 @@
+#![allow(clippy::too_many_arguments)]
 //! Qt adapter for the independent Rust editing session. No SQL or note rules in QML.
-use betternotes_core::{paths, Error, NotesSession, Result};
+use betternotes_core::{paths, Error, NotesSession, Result, WindowState};
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 use std::pin::Pin;
@@ -16,12 +17,16 @@ pub mod ffi {
         #[qobject]
         #[qml_element]
         #[qproperty(QStringList, titles, READ, NOTIFY = list_changed)]
+        #[qproperty(QStringList, note_ids, READ, NOTIFY = list_changed, cxx_name = "noteIds")]
+        #[qproperty(QStringList, restore_ids, READ, NOTIFY = list_changed, cxx_name = "restoreIds")]
+        #[qproperty(QString, current_id, READ, NOTIFY = selection_changed, cxx_name = "currentId")]
         #[qproperty(i32, current_index, READ, NOTIFY = selection_changed, cxx_name = "currentIndex")]
         #[qproperty(QString, draft_title, READ, NOTIFY = selection_changed, cxx_name = "draftTitle")]
         #[qproperty(QString, draft_content, READ, NOTIFY = selection_changed, cxx_name = "draftContent")]
         #[qproperty(bool, ready, READ, NOTIFY = status_changed)]
         #[qproperty(bool, dirty, READ, NOTIFY = status_changed)]
         #[qproperty(QString, error_message, READ, NOTIFY = status_changed, cxx_name = "errorMessage")]
+        #[qproperty(QString, window_error, READ, NOTIFY = status_changed, cxx_name = "windowError")]
         type NotesBackend = super::NotesBackendRust;
 
         #[qsignal]
@@ -33,6 +38,46 @@ pub mod ffi {
 
         #[qinvokable]
         fn initialize(self: Pin<&mut Self>) -> bool;
+        #[qinvokable]
+        #[cxx_name = "initializeNote"]
+        fn initialize_note(self: Pin<&mut Self>, id: QString) -> bool;
+        #[qinvokable]
+        #[cxx_name = "reloadNote"]
+        fn reload_note(self: Pin<&mut Self>) -> bool;
+        #[qinvokable]
+        #[cxx_name = "saveWindow"]
+        fn save_window(
+            self: Pin<&mut Self>,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+            screen: QString,
+            collapsed: bool,
+            positioned: bool,
+            open: bool,
+        ) -> bool;
+        #[qinvokable]
+        #[cxx_name = "savedX"]
+        fn saved_x(&self) -> i32;
+        #[qinvokable]
+        #[cxx_name = "savedY"]
+        fn saved_y(&self) -> i32;
+        #[qinvokable]
+        #[cxx_name = "savedWidth"]
+        fn saved_width(&self) -> i32;
+        #[qinvokable]
+        #[cxx_name = "savedHeight"]
+        fn saved_height(&self) -> i32;
+        #[qinvokable]
+        #[cxx_name = "savedScreen"]
+        fn saved_screen(&self) -> QString;
+        #[qinvokable]
+        #[cxx_name = "savedCollapsed"]
+        fn saved_collapsed(&self) -> bool;
+        #[qinvokable]
+        #[cxx_name = "savedPositioned"]
+        fn saved_positioned(&self) -> bool;
         #[qinvokable]
         #[cxx_name = "createNote"]
         fn create_note(self: Pin<&mut Self>) -> bool;
@@ -58,12 +103,17 @@ pub mod ffi {
 pub struct NotesBackendRust {
     session: Option<NotesSession>,
     titles: QStringList,
+    note_ids: QStringList,
+    restore_ids: QStringList,
+    current_id: QString,
     current_index: i32,
     draft_title: QString,
     draft_content: QString,
     ready: bool,
     dirty: bool,
     error_message: QString,
+    window_error: QString,
+    window_state: WindowState,
 }
 
 impl Default for NotesBackendRust {
@@ -71,12 +121,17 @@ impl Default for NotesBackendRust {
         Self {
             session: None,
             titles: QStringList::default(),
+            note_ids: QStringList::default(),
+            restore_ids: QStringList::default(),
+            current_id: QString::default(),
             current_index: -1,
             draft_title: QString::default(),
             draft_content: QString::default(),
             ready: false,
             dirty: false,
             error_message: QString::default(),
+            window_error: QString::default(),
+            window_state: WindowState::default(),
         }
     }
 }
@@ -86,15 +141,117 @@ impl ffi::NotesBackend {
         if self.ready {
             return true;
         }
-        let result = paths::database_path().and_then(|path| NotesSession::open(&path));
+        let result = paths::database_path().and_then(|path| {
+            let session = NotesSession::open(&path)?;
+            let ids = session.open_window_ids()?;
+            Ok((session, ids))
+        });
         match result {
-            Ok(session) => {
+            Ok((session, ids)) => {
+                self.as_mut().rust_mut().restore_ids = ids
+                    .iter()
+                    .map(|id| QString::from(&id.to_string()))
+                    .collect();
                 self.as_mut().rust_mut().session = Some(session);
                 self.as_mut().rust_mut().ready = true;
                 self.finish(Ok(()), true)
             }
             Err(error) => self.finish(Err(error), false),
         }
+    }
+
+    pub fn initialize_note(mut self: Pin<&mut Self>, id: QString) -> bool {
+        let result = id
+            .to_string()
+            .parse::<i64>()
+            .map_err(|_| Error::InvalidSelection)
+            .and_then(|id| {
+                paths::database_path().and_then(|path| NotesSession::open_note(&path, id))
+            });
+        match result {
+            Ok(session) => {
+                match session.window_state() {
+                    Ok(state) => self.as_mut().rust_mut().window_state = state,
+                    Err(error) => {
+                        eprintln!("BetterNotes: window state: {error}");
+                        self.as_mut().rust_mut().window_error = QString::from(&error.to_string());
+                    }
+                }
+                self.as_mut().rust_mut().session = Some(session);
+                self.as_mut().rust_mut().ready = true;
+                self.finish(Ok(()), true)
+            }
+            Err(error) => self.finish(Err(error), false),
+        }
+    }
+
+    pub fn reload_note(self: Pin<&mut Self>) -> bool {
+        self.perform(true, NotesSession::reload_note)
+    }
+
+    // Geometry failures are separate from content save failures, so autosave
+    // cannot clear a window-state error before the user has seen it.
+    #[allow(clippy::too_many_arguments)]
+    pub fn save_window(
+        mut self: Pin<&mut Self>,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        screen: QString,
+        collapsed: bool,
+        positioned: bool,
+        open: bool,
+    ) -> bool {
+        let state = WindowState {
+            position: positioned.then_some((x, y)),
+            width,
+            height,
+            screen: screen.to_string(),
+            collapsed,
+            open,
+        };
+        let result = self
+            .session
+            .as_ref()
+            .ok_or(Error::NoSelection)
+            .and_then(|session| session.save_window_state(&state));
+        let success = result.is_ok();
+        let message = result
+            .err()
+            .map(|error| error.to_string())
+            .unwrap_or_default();
+        if !success {
+            eprintln!("BetterNotes: window state: {message}");
+        }
+        self.as_mut().rust_mut().window_error = QString::from(&message);
+        if success {
+            self.as_mut().rust_mut().window_state = state;
+        }
+        self.status_changed();
+        success
+    }
+
+    pub fn saved_x(&self) -> i32 {
+        self.window_state.position.map(|p| p.0).unwrap_or(0)
+    }
+    pub fn saved_y(&self) -> i32 {
+        self.window_state.position.map(|p| p.1).unwrap_or(0)
+    }
+    pub fn saved_width(&self) -> i32 {
+        self.window_state.width
+    }
+    pub fn saved_height(&self) -> i32 {
+        self.window_state.height
+    }
+    pub fn saved_screen(&self) -> QString {
+        QString::from(&self.window_state.screen)
+    }
+    pub fn saved_collapsed(&self) -> bool {
+        self.window_state.collapsed
+    }
+    pub fn saved_positioned(&self) -> bool {
+        self.window_state.position.is_some()
     }
 
     fn perform(
@@ -127,6 +284,15 @@ impl ffi::NotesBackend {
                     .iter()
                     .map(|note| QString::from(&note.title))
                     .collect();
+                let note_ids = session
+                    .summaries()
+                    .iter()
+                    .map(|note| QString::from(&note.id.to_string()))
+                    .collect();
+                let current_id = session
+                    .current()
+                    .map(|note| QString::from(&note.id.to_string()))
+                    .unwrap_or_default();
                 let index = session
                     .current_index()
                     .and_then(|i| i32::try_from(i).ok())
@@ -141,6 +307,8 @@ impl ffi::NotesBackend {
                     .unwrap_or_default();
                 let dirty = session.dirty();
                 state.titles = titles;
+                state.note_ids = note_ids;
+                state.current_id = current_id;
                 state.current_index = index;
                 state.draft_title = title;
                 state.draft_content = content;

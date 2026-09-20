@@ -4,6 +4,16 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[[bin]]
+name = "betternotes"
+path = "src/main.rs"
+test = false
+
+[[test]]
+name = "qml"
+path = "tests/qml.rs"
+harness = false
+
 [dependencies]
 betternotes-core = { path = "../crates/core" }
 cxx.workspace = true

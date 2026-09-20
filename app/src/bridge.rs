@@ -1,4 +1,4 @@
-//! Thin Qt adapter. Application identity is owned by the independent Rust core.
+//! Thin adapter for application identity and the isolated Qt platform policy.
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -17,6 +17,10 @@ pub mod ffi {
 
         #[qinvokable]
         fn version(&self) -> QString;
+
+        #[qinvokable]
+        #[cxx_name = "canPositionWindows"]
+        fn can_position_windows(&self, plugin: QString) -> bool;
     }
 }
 
@@ -24,6 +28,10 @@ pub mod ffi {
 pub struct ApplicationInfoRust;
 
 impl ffi::ApplicationInfo {
+    pub fn can_position_windows(&self, plugin: cxx_qt_lib::QString) -> bool {
+        crate::platform::can_position_windows(&plugin.to_string())
+    }
+
     pub fn name(&self) -> cxx_qt_lib::QString {
         betternotes_core::APPLICATION_NAME.into()
     }
