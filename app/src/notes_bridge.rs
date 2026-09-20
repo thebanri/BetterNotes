@@ -27,6 +27,7 @@ pub mod ffi {
         #[qproperty(QStringList, pinned_states, READ, NOTIFY = list_changed, cxx_name = "pinnedStates")]
         #[qproperty(QStringList, archived_states, READ, NOTIFY = list_changed, cxx_name = "archivedStates")]
         #[qproperty(QStringList, priorities, READ, NOTIFY = list_changed)]
+        #[qproperty(QStringList, note_tags, READ, NOTIFY = list_changed, cxx_name = "noteTags")]
         #[qproperty(QStringList, all_tags, READ, NOTIFY = list_changed, cxx_name = "allTags")]
         #[qproperty(QStringList, restore_ids, READ, NOTIFY = list_changed, cxx_name = "restoreIds")]
         #[qproperty(QString, current_id, READ, NOTIFY = selection_changed, cxx_name = "currentId")]
@@ -222,6 +223,7 @@ pub struct NotesBackendRust {
     pinned_states: QStringList,
     archived_states: QStringList,
     priorities: QStringList,
+    note_tags: QStringList,
     all_tags: QStringList,
     restore_ids: QStringList,
     current_id: QString,
@@ -255,6 +257,7 @@ impl Default for NotesBackendRust {
             pinned_states: QStringList::default(),
             archived_states: QStringList::default(),
             priorities: QStringList::default(),
+            note_tags: QStringList::default(),
             all_tags: QStringList::default(),
             restore_ids: QStringList::default(),
             current_id: QString::default(),
@@ -469,6 +472,13 @@ impl ffi::NotesBackend {
                     .iter()
                     .map(|note| QString::from(&note.priority.to_string()))
                     .collect();
+                // One comma-joined entry per row, so a list delegate can show a
+                // note's tags without a query of its own.
+                let note_tags = session
+                    .summaries()
+                    .iter()
+                    .map(|note| QString::from(&note.tags.join(",")))
+                    .collect();
                 let all_tags = session
                     .list_tags()
                     .unwrap_or_default()
@@ -495,6 +505,7 @@ impl ffi::NotesBackend {
                 state.pinned_states = pinned_states;
                 state.archived_states = archived_states;
                 state.priorities = priorities;
+                state.note_tags = note_tags;
                 state.all_tags = all_tags;
                 state.current_id = current_id;
                 state.current_index = index;

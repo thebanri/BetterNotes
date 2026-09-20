@@ -1,7 +1,11 @@
 use crate::{
-    Error, Note, NoteStore, NoteSummary, Result, SearchResult, ThemePreference, WindowState,
+    preview::plain_preview, Error, Note, NoteStore, NoteSummary, Result, SearchResult,
+    ThemePreference, WindowState,
 };
 use std::path::Path;
+
+/// Preview length for list rows, matching the store's list query.
+const PREVIEW_CHARS: usize = 140;
 
 /// Owns the active draft; only successful writes clear the dirty flag.
 pub struct NotesSession {
@@ -16,7 +20,7 @@ impl NotesSession {
     pub fn open_note(path: &Path, id: i64) -> Result<Self> {
         let store = NoteStore::open(path)?;
         let note = store.get(id)?;
-        let snippet = note.content.chars().take(80).collect();
+        let snippet = plain_preview(&note.content, PREVIEW_CHARS);
         Ok(Self {
             store,
             summaries: vec![NoteSummary {
@@ -102,7 +106,7 @@ impl NotesSession {
         let note = self.store.get(id)?;
         if let Some(summary) = self.summaries.iter_mut().find(|summary| summary.id == id) {
             summary.title.clone_from(&note.title);
-            summary.snippet = note.content.chars().take(80).collect();
+            summary.snippet = plain_preview(&note.content, PREVIEW_CHARS);
             summary.priority = note.priority;
             summary.is_archived = note.is_archived;
             summary.is_pinned = note.is_pinned;
@@ -175,7 +179,7 @@ impl NotesSession {
                 .update(self.current.as_ref().ok_or(Error::NoSelection)?)?;
             if let Some(summary) = self.summaries.iter_mut().find(|note| note.id == saved.id) {
                 summary.title.clone_from(&saved.title);
-                summary.snippet = saved.content.chars().take(80).collect();
+                summary.snippet = plain_preview(&saved.content, PREVIEW_CHARS);
                 summary.priority = saved.priority;
                 summary.is_archived = saved.is_archived;
                 summary.is_pinned = saved.is_pinned;

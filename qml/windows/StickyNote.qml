@@ -18,11 +18,6 @@ ApplicationWindow {
     property bool initialized: false
     property bool retiring: false
     property bool placing: false
-    // True while an interactive (compositor-driven) resize is running. During a
-    // drag the surface is painted opaque and square: a translucent, antialiased
-    // rounded surface leaves the freshly exposed edge pixels unpainted for a
-    // frame, which the compositor shows as smeared/ghosted content.
-    property bool resizing: false
     property int expandedWidth: 380
     property int expandedHeight: 360
     property int normalX: 0
@@ -146,6 +141,8 @@ ApplicationWindow {
     // QObject ownership belongs to the library; these remain independent windows.
     // Qt.Tool ensures desktop sticky notes act as utility widgets and do not appear as separate application windows in the taskbar/dock.
     // By default, sticky notes stay on bottom (desktop level) unless toggled to always-on-top.
+    // Both stacking hints are X11-only: Wayland has no protocol for a client to
+    // place itself in a layer, so on Wayland a note is an ordinary window.
     transientParent: null
     flags: Qt.Tool | Qt.FramelessWindowHint | (alwaysOnTop ? Qt.WindowStaysOnTopHint : Qt.WindowStaysOnBottomHint)
     title: (titleEditor.text.trim().length ? titleEditor.text : qsTr("Untitled note")) + " — BetterNotes"
@@ -155,12 +152,15 @@ ApplicationWindow {
     minimumHeight: collapsed ? collapsedHeight : 180
     maximumHeight: collapsed ? collapsedHeight : 16384
     visible: false
-    color: noteWindow.resizing ? noteWindow.activeBg : "transparent"
+    // The surface must stay opaque. A translucent sticky note leaves stale
+    // pixels behind on Wayland/KWin every time an interactive resize shrinks it,
+    // so a quick drag smears copies of the old frames across the desktop. That
+    // rules out window-level rounded corners, which need an alpha channel; the
+    // rounded header pill and toolbar carry the soft look instead.
+    color: noteWindow.activeBg
 
     background: Rectangle {
         id: windowCard
-        radius: noteWindow.resizing ? 0 : 16
-        antialiasing: !noteWindow.resizing
         color: noteWindow.activeBg
         border.width: 1
         border.color: noteWindow.activeBorder
@@ -214,9 +214,13 @@ ApplicationWindow {
         placing = false
     }
 
-    // Sticky notes sit at desktop level unless pinned. Mapping or un-minimising a
-    // window makes the compositor raise it, so re-assert the intended layer
-    // afterwards rather than leaving every note stacked above other apps.
+    // Applies the note's intended layer after the user toggles the pin.
+    //
+    // Only X11 honours both directions. On Wayland a client cannot restack
+    // itself: lower() is a no-op and the stays-on-bottom hint is ignored, so an
+    // unpinned note keeps whatever position the compositor gave it. Never call
+    // this to "tidy up" a window that is already where the user left it -- on
+    // Wayland the raise() half is the only part that takes effect.
     function restoreStacking() {
         if (alwaysOnTop) raise()
         else lower()
@@ -227,23 +231,6 @@ ApplicationWindow {
         place({width: expandedWidth, height: expandedHeight, positioned: false}, fallbackScreen, true)
         persist(true)
         requestActivate()
-    }
-
-    // The compositor owns the drag once startSystemResize() succeeds, so the
-    // MouseArea never sees the release. Settle the flag a short moment after the
-    // last geometry change instead.
-    function beginResize(edges) {
-        resizeSettle.stop()
-        resizing = true
-        if (!startSystemResize(edges)) {
-            resizing = false
-            return
-        }
-        resizeSettle.restart()
-    }
-
-    function extendResize() {
-        if (resizing) resizeSettle.restart()
     }
 
     function captureGeometry() {
@@ -305,12 +292,13 @@ ApplicationWindow {
     }
 
     // Changing the stays-on-top/bottom hint does not restack an already mapped
-    // window on its own; nudge it so pinning takes effect immediately.
+    // window on its own; nudge it so pinning takes effect immediately. This is
+    // an explicit user action, so raising on Wayland is what they asked for.
     onAlwaysOnTopChanged: if (initialized && !retiring) restoreStacking()
     onXChanged: captureGeometry()
     onYChanged: captureGeometry()
-    onWidthChanged: { extendResize(); captureGeometry() }
-    onHeightChanged: { extendResize(); captureGeometry() }
+    onWidthChanged: captureGeometry()
+    onHeightChanged: captureGeometry()
     onScreenChanged: captureGeometry()
     onClosing: function(close) {
         settingsModal.close()
@@ -337,7 +325,6 @@ ApplicationWindow {
     }
 
     Timer { id: geometrySave; interval: 500; onTriggered: noteWindow.persist(true) }
-    Timer { id: resizeSettle; interval: 260; onTriggered: noteWindow.resizing = false }
     Timer {
         id: autosave
         interval: 500
@@ -990,7 +977,7 @@ ApplicationWindow {
         z: 20
         onPressed: function(mouse) {
             if (mouse.button === Qt.LeftButton) {
-                noteWindow.beginResize(Qt.RightEdge)
+                noteWindow.startSystemResize(Qt.RightEdge)
             }
         }
     }
@@ -1007,7 +994,7 @@ ApplicationWindow {
         z: 20
         onPressed: function(mouse) {
             if (mouse.button === Qt.LeftButton) {
-                noteWindow.beginResize(Qt.LeftEdge)
+                noteWindow.startSystemResize(Qt.LeftEdge)
             }
         }
     }
@@ -1025,7 +1012,7 @@ ApplicationWindow {
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
             if (mouse.button === Qt.LeftButton) {
-                noteWindow.beginResize(Qt.BottomEdge)
+                noteWindow.startSystemResize(Qt.BottomEdge)
             }
         }
     }
@@ -1041,7 +1028,7 @@ ApplicationWindow {
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
             if (mouse.button === Qt.LeftButton) {
-                noteWindow.beginResize(Qt.BottomEdge | Qt.RightEdge)
+                noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
             }
         }
 
@@ -1070,7 +1057,7 @@ ApplicationWindow {
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
             if (mouse.button === Qt.LeftButton) {
-                noteWindow.beginResize(Qt.BottomEdge | Qt.LeftEdge)
+                noteWindow.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
             }
         }
     }

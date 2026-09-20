@@ -9,6 +9,7 @@ pub mod ipc;
 mod notes;
 pub mod notifications;
 pub mod paths;
+pub mod preview;
 pub mod reminders;
 mod session;
 pub mod settings;
@@ -30,6 +31,7 @@ pub use ipc::{
 };
 pub use notes::{Error, Note, NoteSummary, Result, SearchResult};
 pub use notifications::NotificationService;
+pub use preview::{plain_preview, to_plain_text};
 pub use reminders::{
     clear_reminder_for_note, dismiss_or_advance_reminder, get_due_reminders, get_reminder_for_note,
     set_reminder, DueReminder, Recurrence, Reminder,

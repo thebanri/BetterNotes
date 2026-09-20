@@ -80,13 +80,19 @@ ApplicationWindow {
             noteWindows[id] = sticky
         }
         windowError = ""
-        if (recover) sticky.recover(window.screen)
-        else {
-            if (sticky.visibility === Window.Minimized) sticky.showNormal()
-            else if (!sticky.visible) sticky.show()
-            if (activate === false) sticky.restoreStacking()
-            else sticky.requestActivate()
+        if (recover) {
+            sticky.recover(window.screen)
+        } else if (sticky.visibility === Window.Minimized) {
+            sticky.showNormal()
+            if (activate !== false) sticky.requestActivate()
+        } else if (!sticky.visible) {
+            sticky.show()
+            if (activate !== false) sticky.requestActivate()
+        } else if (activate !== false) {
+            sticky.requestActivate()
         }
+        // A note that is already on screen is left untouched when activate is
+        // false: any show/raise call on it would restack it above other apps.
         return sticky
     }
 
@@ -101,19 +107,18 @@ ApplicationWindow {
         if (sticky) sticky.destroy()
     }
 
+    // Reveals notes that are not on screen and changes nothing about the ones
+    // that already are. Wayland gives a client no way to restack itself -- the
+    // stays-on-bottom hint is ignored and lower() does nothing -- so any show()
+    // or raise() here would push the whole board in front of other windows and
+    // there would be no way to put it back.
     function showAllNotes() {
         const allIds = backend.noteIds
         for (let i = 0; i < allIds.length; ++i) {
-            openNote(allIds[i], false, false)
-        }
-        // Revealing the whole board must not promote it: only notes the user
-        // pinned belong on top, the rest return to desktop level.
-        const ids = Object.keys(noteWindows)
-        for (let i = 0; i < ids.length; ++i) {
-            const sticky = noteWindows[ids[i]]
-            if (sticky.visibility === Window.Minimized) sticky.showNormal()
+            const sticky = noteWindows[allIds[i]]
+            if (!sticky) openNote(allIds[i], false, false)
+            else if (sticky.visibility === Window.Minimized) sticky.showNormal()
             else if (!sticky.visible) sticky.show()
-            sticky.restoreStacking()
         }
     }
 
@@ -177,78 +182,102 @@ ApplicationWindow {
         }
     }
 
+    // Row counts for the filter chips. These read the list properties directly
+    // so the bindings refresh with the model.
+    function countNotes(kind) {
+        let total = 0
+        for (let i = 0; i < backend.titles.length; ++i) {
+            const pinned = backend.pinnedStates[i] === "true"
+            const archived = backend.archivedStates[i] === "true"
+            if (kind === "pinned" ? pinned : (kind === "archived" ? archived : !archived)) total += 1
+        }
+        return total
+    }
+
+    function noteTagsAt(index) {
+        const joined = backend.noteTags[index] || ""
+        return joined.length > 0 ? joined.split(",") : []
+    }
+
+    function cycleThemeMode() {
+        if (backend.themeMode === "system") backend.setThemeMode("light")
+        else if (backend.themeMode === "light") backend.setThemeMode("dark")
+        else backend.setThemeMode("system")
+    }
+
     header: Rectangle {
-        height: 48
+        height: 56
         color: theme.surface
-        border.width: 1
-        border.color: theme.border
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 1
+            color: theme.border
+        }
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 12
+            anchors.leftMargin: 16
             anchors.rightMargin: 12
             spacing: 8
 
             Label {
                 text: applicationInfo.name()
-                font.pixelSize: 15
+                font.pixelSize: 16
                 font.weight: Font.Bold
                 color: theme.textPrimary
             }
 
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 20
-                color: theme.border
-                Layout.leftMargin: 4
-                Layout.rightMargin: 4
-            }
-
-            UI.StyledButton {
-                text: qsTr("New note")
+            UI.Tag {
                 theme: window.theme
-                variant: "accent"
-                enabled: backend.ready
-                onClicked: window.createNote()
-            }
-
-            UI.StyledButton {
-                text: qsTr("📌 Open all stickies")
-                theme: window.theme
-                variant: "secondary"
-                enabled: backend.ready && backend.noteIds.length > 0
-                onClicked: window.showAllNotes()
-            }
-
-            UI.StyledButton {
-                text: qsTr("Refresh")
-                theme: window.theme
-                variant: "ghost"
-                enabled: backend.ready
-                onClicked: backend.reload()
+                text: backend.noteIds.length === 1 ? qsTr("1 note") : qsTr("%1 notes").arg(backend.noteIds.length)
+                visible: backend.ready
+                Layout.alignment: Qt.AlignVCenter
             }
 
             Item { Layout.fillWidth: true }
 
             UI.StyledButton {
-                text: {
-                    if (backend.themeMode === "light") return "☀️ " + qsTr("Light")
-                    if (backend.themeMode === "dark") return "🌙 " + qsTr("Dark")
-                    return "🖥️ " + qsTr("System")
-                }
+                iconName: "library"
                 theme: window.theme
                 variant: "ghost"
-                onClicked: {
-                    if (backend.themeMode === "system") backend.setThemeMode("light")
-                    else if (backend.themeMode === "light") backend.setThemeMode("dark")
-                    else backend.setThemeMode("system")
-                }
+                implicitWidth: 32
+                implicitHeight: 32
+                padding: 0
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Command palette (Ctrl+K)")
+                onClicked: commandPalette.open()
             }
 
             UI.StyledButton {
-                text: qsTr("Quit")
+                iconName: "palette"
                 theme: window.theme
                 variant: "ghost"
+                implicitWidth: 32
+                implicitHeight: 32
+                padding: 0
+                ToolTip.visible: hovered
+                ToolTip.text: {
+                    if (backend.themeMode === "light") return qsTr("Theme: Light — click for Dark")
+                    if (backend.themeMode === "dark") return qsTr("Theme: Dark — click to follow the system")
+                    return qsTr("Theme: System — click for Light")
+                }
+                onClicked: window.cycleThemeMode()
+            }
+
+            UI.StyledButton {
+                iconName: "x"
+                theme: window.theme
+                variant: "ghost"
+                implicitWidth: 32
+                implicitHeight: 32
+                padding: 0
+                ToolTip.visible: hovered
+                ToolTip.text: systemTray.available || Object.keys(window.noteWindows).length > 0
+                    ? qsTr("Close the library — notes keep running")
+                    : qsTr("Quit")
                 onClicked: window.close()
             }
         }
@@ -256,14 +285,14 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 14
-        spacing: 10
+        anchors.margins: 16
+        spacing: 12
 
         Rectangle {
             visible: window.windowError.length > 0 || backend.errorMessage.length > 0
             Layout.fillWidth: true
             implicitHeight: errorRow.implicitHeight + 16
-            radius: theme.radiusSm
+            radius: theme.radiusMd
             color: theme.dangerSubtle
             border.width: 1
             border.color: theme.danger
@@ -300,7 +329,11 @@ ApplicationWindow {
             UI.StyledTextField {
                 id: searchField
                 Layout.fillWidth: true
-                placeholderText: qsTr("Search notes with FTS5 (Ctrl+K)...")
+                Layout.preferredHeight: 34
+                leftPadding: 32
+                rightPadding: 32
+                placeholderText: qsTr("Search titles, content and tags…")
+                Accessible.name: qsTr("Search notes")
                 theme: window.theme
                 onTextChanged: {
                     window.searchFilter = text.trim()
@@ -308,13 +341,58 @@ ApplicationWindow {
                         backend.search(window.searchFilter)
                     }
                 }
+                Keys.onEscapePressed: clear()
+
+                UI.AppIcon {
+                    name: "search"
+                    size: 15
+                    color: theme.textMuted
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                UI.StyledButton {
+                    iconName: "x"
+                    iconSize: 12
+                    theme: window.theme
+                    variant: "ghost"
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    padding: 0
+                    focusPolicy: Qt.NoFocus
+                    visible: searchField.text.length > 0
+                    anchors.right: parent.right
+                    anchors.rightMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Clear search")
+                    onClicked: searchField.clear()
+                }
             }
 
             UI.StyledButton {
-                text: qsTr("Palette (Ctrl+K)")
+                text: qsTr("New note")
+                iconName: "plus"
+                iconSize: 14
                 theme: window.theme
-                variant: "ghost"
-                onClicked: commandPalette.open()
+                variant: "accent"
+                implicitHeight: 34
+                enabled: backend.ready
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Create a note (Ctrl+N)")
+                onClicked: window.createNote()
+            }
+
+            UI.StyledButton {
+                text: qsTr("Show all")
+                theme: window.theme
+                variant: "secondary"
+                implicitHeight: 34
+                enabled: backend.ready && backend.noteIds.length > 0
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Bring back notes that are closed or minimised, leaving the ones already on screen where they are")
+                onClicked: window.showAllNotes()
             }
         }
 
@@ -323,52 +401,47 @@ ApplicationWindow {
             spacing: 6
             visible: backend.ready && window.searchFilter.length === 0
 
-            UI.StyledButton {
-                text: qsTr("All")
-                theme: window.theme
-                variant: window.filterTab === "all" ? "accent" : "ghost"
-                implicitHeight: 28
-                padding: 4
-                leftPadding: 10
-                rightPadding: 10
-                onClicked: window.filterTab = "all"
-            }
-
-            UI.StyledButton {
-                text: "📌 " + qsTr("Pinned")
-                theme: window.theme
-                variant: window.filterTab === "pinned" ? "accent" : "ghost"
-                implicitHeight: 28
-                padding: 4
-                leftPadding: 10
-                rightPadding: 10
-                onClicked: window.filterTab = "pinned"
-            }
-
-            UI.StyledButton {
-                text: "📦 " + qsTr("Archived")
-                theme: window.theme
-                variant: window.filterTab === "archived" ? "accent" : "ghost"
-                implicitHeight: 28
-                padding: 4
-                leftPadding: 10
-                rightPadding: 10
-                onClicked: window.filterTab = "archived"
+            Repeater {
+                model: [
+                    {key: "all", label: qsTr("All")},
+                    {key: "pinned", label: qsTr("Pinned")},
+                    {key: "archived", label: qsTr("Archived")}
+                ]
+                delegate: UI.StyledButton {
+                    required property var modelData
+                    text: modelData.label + "  " + window.countNotes(modelData.key)
+                    theme: window.theme
+                    variant: window.filterTab === modelData.key ? "accent" : "ghost"
+                    implicitHeight: 28
+                    padding: 4
+                    leftPadding: 12
+                    rightPadding: 12
+                    onClicked: window.filterTab = modelData.key
+                }
             }
 
             Item { Layout.fillWidth: true }
+
+            UI.StyledButton {
+                text: qsTr("Hide all")
+                theme: window.theme
+                variant: "ghost"
+                implicitHeight: 28
+                padding: 4
+                leftPadding: 10
+                rightPadding: 10
+                enabled: Object.keys(window.noteWindows).length > 0
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Minimise every open note window")
+                onClicked: window.hideAllNotes()
+            }
         }
 
-        RowLayout {
+        // Tags wrap instead of overflowing the row when a database has many.
+        Flow {
             Layout.fillWidth: true
             spacing: 4
             visible: backend.ready && backend.allTags.length > 0 && window.searchFilter.length === 0
-
-            Label {
-                text: qsTr("Tags:")
-                font.pixelSize: 11
-                color: theme.textSecondary
-            }
 
             Repeater {
                 model: backend.allTags
@@ -379,129 +452,136 @@ ApplicationWindow {
                     variant: "ghost"
                     implicitHeight: 24
                     padding: 2
-                    leftPadding: 6
-                    rightPadding: 6
-                    onClicked: {
-                        searchField.text = modelData
-                    }
+                    leftPadding: 8
+                    rightPadding: 8
+                    font.pixelSize: 11
+                    onClicked: searchField.text = modelData
                 }
             }
-            Item { Layout.fillWidth: true }
         }
 
         Label {
-            text: window.searchFilter.length > 0 ?
-                qsTr("Showing search results for '%1'").arg(window.searchFilter) :
-                qsTr("Open a note to edit it in its own window. Bring here recovers a misplaced window.")
+            text: window.searchFilter.length > 0
+                ? qsTr("Search results for “%1”").arg(window.searchFilter)
+                : qsTr("Select a note to open its window. “Bring here” recovers one that is off-screen.")
             wrapMode: Text.WordWrap
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             font.pixelSize: 12
             color: theme.textSecondary
+            visible: backend.ready
         }
 
         Rectangle {
             visible: backend.ready && ((window.searchFilter.length === 0 && backend.titles.length === 0) || (window.searchFilter.length > 0 && backend.searchResultIds.length === 0))
             Layout.fillWidth: true
             Layout.fillHeight: true
-            radius: theme.radiusMd
+            radius: theme.radiusLg
             color: theme.surface
             border.width: 1
             border.color: theme.border
 
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 12
+                width: Math.min(360, parent.width - 48)
+                spacing: 10
 
-                Label {
-                    text: window.searchFilter.length > 0 ? "🔍" : "📝"
-                    font.pixelSize: 36
+                UI.AppIcon {
+                    name: window.searchFilter.length > 0 ? "search" : "library"
+                    size: 32
+                    strokeWidth: 1.5
+                    color: theme.textMuted
                     Layout.alignment: Qt.AlignHCenter
                 }
                 Label {
-                    text: window.searchFilter.length > 0 ? qsTr("No matching notes found") : qsTr("No notes yet")
+                    text: window.searchFilter.length > 0 ? qsTr("No matching notes") : qsTr("No notes yet")
                     font.pixelSize: 16
-                    font.weight: Font.Bold
+                    font.weight: Font.DemiBold
                     color: theme.textPrimary
                     Layout.alignment: Qt.AlignHCenter
                 }
                 Label {
-                    text: window.searchFilter.length > 0 ?
-                        qsTr("Try a different search term or check archived notes.") :
-                        qsTr("Create your first note to capture ideas and keep them on your desktop.")
+                    text: window.searchFilter.length > 0
+                        ? qsTr("Try another term, or check the archived filter.")
+                        : qsTr("Create your first note to keep it on your desktop.")
                     font.pixelSize: 13
                     color: theme.textSecondary
-                    Layout.alignment: Qt.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
                 }
                 UI.StyledButton {
                     text: qsTr("Create note")
+                    iconName: "plus"
+                    iconSize: 14
                     theme: window.theme
                     variant: "accent"
+                    visible: window.searchFilter.length === 0
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: window.createNote()
                 }
             }
         }
 
-        ScrollView {
+        ListView {
+            id: notesList
             visible: (window.searchFilter.length === 0 && backend.titles.length > 0) || (window.searchFilter.length > 0 && backend.searchResultIds.length > 0)
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            model: window.searchFilter.length > 0 ? backend.searchResultIds : backend.titles
+            spacing: 8
+            activeFocusOnTab: true
+            boundsBehavior: Flickable.StopAtBounds
+            // Leave the scrollbar its own gutter so it never sits on a card.
+            rightMargin: 10
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+                anchors.right: parent.right
+            }
 
-            ListView {
-                id: notesList
-                model: window.searchFilter.length > 0 ? backend.searchResultIds : backend.titles
-                spacing: 6
-                activeFocusOnTab: true
-                Keys.onReturnPressed: {
-                    if (currentIndex >= 0) {
-                        const targetId = window.searchFilter.length > 0 ? backend.searchResultIds[currentIndex] : backend.noteIds[currentIndex]
-                        window.openNote(targetId)
-                    }
+            function idAt(index) {
+                return window.searchFilter.length > 0 ? backend.searchResultIds[index] : backend.noteIds[index]
+            }
+
+            Keys.onReturnPressed: {
+                if (currentIndex >= 0) window.openNote(idAt(currentIndex))
+            }
+
+            delegate: UI.NoteCard {
+                id: noteDelegate
+                required property int index
+                required property string modelData
+                theme: window.theme
+                noteTitle: window.searchFilter.length > 0
+                    ? (backend.searchResultTitles[index] || qsTr("Untitled note"))
+                    : modelData
+                snippet: window.searchFilter.length > 0
+                    ? (backend.searchResultSnippets[index] || "")
+                    : (backend.snippets[index] || "")
+                tags: window.searchFilter.length > 0 ? [] : window.noteTagsAt(index)
+                isPinned: window.searchFilter.length === 0 && backend.pinnedStates[index] === "true"
+                isArchived: window.searchFilter.length === 0 && backend.archivedStates[index] === "true"
+                priority: window.searchFilter.length === 0 ? parseInt(backend.priorities[index] || "0") : 0
+                visible: {
+                    if (window.searchFilter.length > 0) return true
+                    const pinned = backend.pinnedStates[index] === "true"
+                    const archived = backend.archivedStates[index] === "true"
+                    if (window.filterTab === "pinned") return pinned
+                    if (window.filterTab === "archived") return archived
+                    return !archived
                 }
-                delegate: UI.NoteCard {
-                    id: noteDelegate
-                    required property int index
-                    required property string modelData
-                    theme: window.theme
-                    noteTitle: {
-                        if (window.searchFilter.length > 0) {
-                            return backend.searchResultTitles[index] || qsTr("Untitled note")
-                        }
-                        return modelData
-                    }
-                    snippet: {
-                        if (window.searchFilter.length > 0) {
-                            return backend.searchResultSnippets[index] || ""
-                        }
-                        return backend.snippets[index] || ""
-                    }
-                    isPinned: window.searchFilter.length === 0 && backend.pinnedStates[index] === "true"
-                    isArchived: window.searchFilter.length === 0 && backend.archivedStates[index] === "true"
-                    priority: window.searchFilter.length === 0 ? parseInt(backend.priorities[index] || "0") : 0
-                    visible: {
-                        if (window.searchFilter.length > 0) return true
-                        const pinned = backend.pinnedStates[index] === "true"
-                        const archived = backend.archivedStates[index] === "true"
-                        if (window.filterTab === "pinned") return pinned
-                        if (window.filterTab === "archived") return archived
-                        return !archived
-                    }
-                    height: visible ? implicitHeight : 0
-                    highlighted: ListView.isCurrentItem
-                    onClicked: {
-                        notesList.currentIndex = index
-                        const targetId = window.searchFilter.length > 0 ? backend.searchResultIds[index] : backend.noteIds[index]
-                        window.openNote(targetId)
-                    }
-                    onBringHereRequested: {
-                        const targetId = window.searchFilter.length > 0 ? backend.searchResultIds[noteDelegate.index] : backend.noteIds[noteDelegate.index]
-                        window.openNote(targetId, true)
-                    }
+                height: visible ? implicitHeight : 0
+                highlighted: ListView.isCurrentItem
+                onClicked: {
+                    notesList.currentIndex = index
+                    window.openNote(notesList.idAt(index))
                 }
+                onBringHereRequested: window.openNote(notesList.idAt(noteDelegate.index), true)
             }
         }
     }
+
 
     UI.CommandPalette {
         id: commandPalette

@@ -57,6 +57,29 @@ Window {
         check(platformInfo.canPositionWindows("xcb"), "X11 placement unavailable")
     }
 
+    // "Show all" reveals notes that are not on screen and must leave the ones
+    // that already are exactly as they were. Stacking itself needs a real
+    // compositor, so this covers the reveal contract the stacking bug broke:
+    // every call used to show()/raise() windows that were already visible.
+    function assertShowAllNotes(library, ids) {
+        library.hideAllNotes()
+        for (let i = 0; i < ids.length; ++i) {
+            check(library.noteWindows[ids[i]].visibility === Window.Minimized, "Hide all left a note on screen")
+        }
+        library.showAllNotes()
+        for (let i = 0; i < ids.length; ++i) {
+            const sticky = library.noteWindows[ids[i]]
+            check(sticky.visibility !== Window.Minimized, "Show all failed to restore a minimised note")
+            check(sticky.visible, "Show all left a note hidden")
+        }
+        const before = ids.map(function(id) { return library.noteWindows[id].visibility })
+        library.showAllNotes()
+        check(Object.keys(library.noteWindows).length === ids.length, "Show all duplicated a note window")
+        for (let i = 0; i < ids.length; ++i) {
+            check(library.noteWindows[ids[i]].visibility === before[i], "Show all disturbed a note already on screen")
+        }
+    }
+
     function clickTool(window, name) {
         const button = findItem(window.contentItem, name)
         check(button && button.enabled, "Formatting button unavailable: " + name)
@@ -226,6 +249,7 @@ Window {
                 harness.secondId = harness.second.noteId
                 harness.check(harness.first.transientParent === null && harness.second.transientParent === null, "Notes are transient windows")
                 harness.check(harness.library.openNote(harness.firstId) === harness.first, "Duplicate editor created")
+                harness.assertShowAllNotes(harness.library, [harness.firstId, harness.secondId])
                 harness.edit(harness.first, "Autosaved title", "Plain <b>text</b>\nİstanbul 🦀")
                 harness.edit(harness.second, "Second", "Independent draft")
                 harness.first.width = 420

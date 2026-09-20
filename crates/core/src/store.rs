@@ -13,6 +13,8 @@ const SETTINGS_SCHEMA: &str = include_str!("../../../migrations/0003_settings.sq
 const SEARCH_ORG_SCHEMA: &str =
     include_str!("../../../migrations/0004_search_and_organization.sql");
 const PRODUCTIVITY_SCHEMA: &str = include_str!("../../../migrations/0005_productivity.sql");
+/// Preview length for list rows and search results, in characters.
+const PREVIEW_CHARS: usize = 140;
 
 pub struct NoteStore {
     connection: Connection,
@@ -33,7 +35,10 @@ impl NoteStore {
 
     pub fn list(&self) -> Result<Vec<NoteSummary>> {
         let mut statement = self.connection.prepare(
-            "SELECT n.id, n.title, substr(n.content, 1, 80), n.priority, n.is_archived, n.is_pinned,
+            // Rich-text bodies open with a long `<head>`, so the preview needs
+            // more raw characters than it will finally show. It stays a
+            // substring: list queries never load whole note bodies.
+            "SELECT n.id, n.title, substr(n.content, 1, 2000), n.priority, n.is_archived, n.is_pinned,
                     COALESCE((SELECT group_concat(t.name, ',') FROM note_tags nt JOIN tags t ON nt.tag_id = t.id WHERE nt.note_id = n.id), '')
              FROM notes n
              ORDER BY n.is_pinned DESC, n.updated_at DESC, n.id DESC",
@@ -49,10 +54,11 @@ impl NoteStore {
                     .filter(|s| !s.is_empty())
                     .collect()
             };
+            let content: String = row.get(2)?;
             Ok(NoteSummary {
                 id: row.get(0)?,
                 title: row.get(1)?,
-                snippet: row.get(2)?,
+                snippet: crate::preview::plain_preview(&content, PREVIEW_CHARS),
                 priority: row.get(3)?,
                 is_archived: row.get::<_, i32>(4)? != 0,
                 is_pinned: row.get::<_, i32>(5)? != 0,
@@ -193,7 +199,7 @@ impl NoteStore {
             return Ok(Vec::new());
         }
         let mut statement = self.connection.prepare(
-            "SELECT n.id, n.title, snippet(notes_fts, 1, '<b>', '</b>', '...', 16)
+            "SELECT n.id, n.title, snippet(notes_fts, 1, '', '', '…', 24)
              FROM notes_fts
              JOIN notes n ON notes_fts.rowid = n.id
              WHERE notes_fts MATCH ?1
@@ -201,10 +207,11 @@ impl NoteStore {
              LIMIT 50",
         )?;
         let rows = statement.query_map([clean_query], |row| {
+            let snippet: String = row.get(2)?;
             Ok(SearchResult {
                 id: row.get(0)?,
                 title: row.get(1)?,
-                snippet: row.get(2)?,
+                snippet: crate::preview::plain_preview(&snippet, PREVIEW_CHARS),
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
