@@ -476,6 +476,14 @@ ApplicationWindow {
                 else backend.setThemeMode("system")
             }
             else if (action === "diagnostics") diagnosticsDialog.open()
+            else if (action === "export_json") {
+                backend.exportNotesJson("betternotes_export.json")
+                backend.sendNotification(qsTr("Export complete"), qsTr("Notes exported to betternotes_export.json"))
+            }
+            else if (action === "export_markdown") {
+                backend.exportNotesMarkdown("betternotes_markdown_export")
+                backend.sendNotification(qsTr("Export complete"), qsTr("Notes exported to betternotes_markdown_export"))
+            }
         }
     }
 
@@ -534,6 +542,13 @@ ApplicationWindow {
                     diagnosticsDialog.open()
                 }
             }
+            Platform.MenuItem {
+                text: qsTr("Export notes (JSON)")
+                onTriggered: {
+                    backend.exportNotesJson("betternotes_export.json")
+                    backend.sendNotification(qsTr("Export complete"), qsTr("Notes exported to betternotes_export.json"))
+                }
+            }
             Platform.MenuSeparator {}
             Platform.MenuItem {
                 text: qsTr("Quit")
@@ -574,4 +589,14 @@ ApplicationWindow {
     Shortcut { sequences: [StandardKey.Quit]; context: Qt.WindowShortcut; onActivated: window.close() }
     Shortcut { sequences: ["Ctrl+K", "Ctrl+Shift+P"]; context: Qt.WindowShortcut; onActivated: commandPalette.open() }
     Shortcut { sequences: ["Ctrl+Alt+Space"]; onActivated: window.openQuickCapture() }
+
+    Timer {
+        id: reminderTimer
+        interval: 30000
+        running: true
+        repeat: true
+        onTriggered: {
+            if (backend.ready) backend.checkReminders()
+        }
+    }
 }

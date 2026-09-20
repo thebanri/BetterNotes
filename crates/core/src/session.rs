@@ -238,4 +238,72 @@ impl NotesSession {
         self.dirty = false;
         Ok(())
     }
+
+    pub fn store(&self) -> &NoteStore {
+        &self.store
+    }
+
+    pub fn set_reminder(
+        &self,
+        note_id: i64,
+        remind_at: i64,
+        recurrence: crate::Recurrence,
+    ) -> Result<i64> {
+        crate::set_reminder(self.store.raw_connection(), note_id, remind_at, recurrence)
+    }
+
+    pub fn get_reminder(&self, note_id: i64) -> Result<Option<crate::Reminder>> {
+        crate::get_reminder_for_note(self.store.raw_connection(), note_id)
+    }
+
+    pub fn clear_reminder(&self, note_id: i64) -> Result<()> {
+        crate::clear_reminder_for_note(self.store.raw_connection(), note_id)
+    }
+
+    pub fn check_due_reminders(&self, now_sec: i64) -> Result<Vec<crate::DueReminder>> {
+        crate::get_due_reminders(self.store.raw_connection(), now_sec)
+    }
+
+    pub fn dismiss_reminder(&self, reminder_id: i64) -> Result<()> {
+        crate::dismiss_or_advance_reminder(self.store.raw_connection(), reminder_id)
+    }
+
+    pub fn add_attachment(
+        &self,
+        data_dir: &Path,
+        note_id: i64,
+        source_path: &Path,
+    ) -> Result<crate::Attachment> {
+        crate::add_attachment(data_dir, self.store.raw_connection(), note_id, source_path)
+    }
+
+    pub fn list_attachments(&self, note_id: i64) -> Result<Vec<crate::Attachment>> {
+        crate::list_attachments(self.store.raw_connection(), note_id)
+    }
+
+    pub fn delete_attachment(&self, data_dir: &Path, attachment_id: &str) -> Result<()> {
+        crate::delete_attachment(data_dir, self.store.raw_connection(), attachment_id)
+    }
+
+    pub fn export_json(&self, output_path: &Path) -> Result<()> {
+        let notes = self.store.all_notes_for_export()?;
+        crate::export_notes_json(&notes, output_path)
+    }
+
+    pub fn export_markdown(&self, output_dir: &Path) -> Result<()> {
+        let notes = self.store.all_notes_for_export()?;
+        crate::export_notes_markdown_dir(&notes, output_dir)
+    }
+
+    pub fn import_json(&mut self, input_path: &Path) -> Result<usize> {
+        let count = crate::import_notes_json(&self.store, input_path)?;
+        self.reload()?;
+        Ok(count)
+    }
+
+    pub fn import_markdown(&mut self, input_path: &Path) -> Result<usize> {
+        let count = crate::import_note_markdown_file(&self.store, input_path)?;
+        self.reload()?;
+        Ok(count)
+    }
 }

@@ -46,7 +46,7 @@ fn upgrade_from_v3_to_v4_preserves_data_and_enables_fts_and_tags() {
         .unwrap()
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 4);
+    assert!(version >= 4);
 }
 
 #[test]

@@ -6,12 +6,13 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x424e4f54; // BNOT, an internal identifier, not a public app ID.
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 const INITIAL_SCHEMA: &str = include_str!("../../../migrations/0001_notes.sql");
 const WINDOW_SCHEMA: &str = include_str!("../../../migrations/0002_note_windows.sql");
 const SETTINGS_SCHEMA: &str = include_str!("../../../migrations/0003_settings.sql");
 const SEARCH_ORG_SCHEMA: &str =
     include_str!("../../../migrations/0004_search_and_organization.sql");
+const PRODUCTIVITY_SCHEMA: &str = include_str!("../../../migrations/0005_productivity.sql");
 
 pub struct NoteStore {
     connection: Connection,
@@ -302,6 +303,42 @@ impl NoteStore {
     pub fn set_theme(&self, theme: ThemePreference) -> Result<()> {
         self.set_setting("theme", theme.as_str())
     }
+
+    pub fn raw_connection(&self) -> &Connection {
+        &self.connection
+    }
+
+    pub fn all_notes_for_export(&self) -> Result<Vec<crate::export_import::ExportNote>> {
+        let mut statement = self.connection.prepare(
+            "SELECT n.title, n.content, n.priority, n.is_archived, n.is_pinned, n.created_at, n.updated_at,
+                    COALESCE((SELECT group_concat(t.name, ',') FROM note_tags nt JOIN tags t ON nt.tag_id = t.id WHERE nt.note_id = n.id), '')
+             FROM notes n
+             ORDER BY n.id ASC",
+        )?;
+        let rows = statement.query_map([], |row| {
+            let tags_str: String = row.get(7)?;
+            let tags = if tags_str.is_empty() {
+                Vec::new()
+            } else {
+                tags_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            };
+            Ok(crate::export_import::ExportNote {
+                title: row.get(0)?,
+                content: row.get(1)?,
+                priority: row.get(2)?,
+                is_archived: row.get::<_, i32>(3)? != 0,
+                is_pinned: row.get::<_, i32>(4)? != 0,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+                tags,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
 }
 
 fn migrate(connection: &mut Connection, initial_schema: &str) -> Result<()> {
@@ -342,11 +379,17 @@ fn migrate(connection: &mut Connection, initial_schema: &str) -> Result<()> {
     transaction.prepare("SELECT key, value FROM settings LIMIT 0")?;
     if version < 4 {
         transaction.execute_batch(SEARCH_ORG_SCHEMA)?;
-        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     }
     transaction.prepare("SELECT rowid, title, content, tags FROM notes_fts LIMIT 0")?;
     transaction.prepare("SELECT id, name FROM tags LIMIT 0")?;
     transaction.prepare("SELECT note_id, tag_id FROM note_tags LIMIT 0")?;
+    if version < 5 {
+        transaction.execute_batch(PRODUCTIVITY_SCHEMA)?;
+        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    }
+    transaction
+        .prepare("SELECT id, note_id, remind_at, recurrence, dismissed FROM reminders LIMIT 0")?;
+    transaction.prepare("SELECT id, note_id, filename, mime_type, byte_size, stored_rel_path FROM attachments LIMIT 0")?;
     transaction.commit()?;
     Ok(())
 }

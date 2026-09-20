@@ -244,6 +244,29 @@ ApplicationWindow {
                         text: noteWindow.alwaysOnTop ? qsTr("✓ Always on top") : qsTr("Always on top")
                         onTriggered: noteWindow.alwaysOnTop = !noteWindow.alwaysOnTop
                     }
+                    MenuItem {
+                        text: qsTr("⏰ Remind in 1 hour")
+                        onTriggered: {
+                            const nowSec = Math.round(Date.now() / 1000)
+                            backend.setReminder(nowSec + 3600, "none")
+                            backend.sendNotification(qsTr("Reminder set"), qsTr("We will remind you in 1 hour."))
+                        }
+                    }
+                    MenuItem {
+                        text: qsTr("⏰ Remind tomorrow (daily)")
+                        onTriggered: {
+                            const nowSec = Math.round(Date.now() / 1000)
+                            backend.setReminder(nowSec + 86400, "daily")
+                            backend.sendNotification(qsTr("Recurring reminder set"), qsTr("Daily reminder activated."))
+                        }
+                    }
+                    MenuItem {
+                        text: qsTr("Clear reminder")
+                        onTriggered: {
+                            backend.clearReminder()
+                            backend.sendNotification(qsTr("Reminder cleared"), qsTr("Active reminder removed."))
+                        }
+                    }
                     MenuItem { text: qsTr("Save"); onTriggered: noteWindow.flush() && noteWindow.persist(true) }
                     MenuItem {
                         text: qsTr("Copy to clipboard")

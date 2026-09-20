@@ -150,6 +150,34 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "sendNotification"]
         fn send_notification(self: Pin<&mut Self>, title: QString, body: QString) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "setReminder"]
+        fn set_reminder(self: Pin<&mut Self>, timestamp_sec: i64, recurrence: QString) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "clearReminder"]
+        fn clear_reminder(self: Pin<&mut Self>) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "checkReminders"]
+        fn check_reminders(self: Pin<&mut Self>) -> i32;
+
+        #[qinvokable]
+        #[cxx_name = "exportNotesJson"]
+        fn export_notes_json(self: Pin<&mut Self>, file_path: QString) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "exportNotesMarkdown"]
+        fn export_notes_markdown(self: Pin<&mut Self>, dir_path: QString) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "importNotesJson"]
+        fn import_notes_json(self: Pin<&mut Self>, file_path: QString) -> i32;
+
+        #[qinvokable]
+        #[cxx_name = "importNoteMarkdown"]
+        fn import_note_markdown(self: Pin<&mut Self>, file_path: QString) -> i32;
     }
 }
 
@@ -614,5 +642,87 @@ impl ffi::NotesBackend {
         let _ =
             betternotes_core::NotificationService::notify(&title.to_string(), &body.to_string());
         true
+    }
+
+    pub fn set_reminder(self: Pin<&mut Self>, timestamp_sec: i64, recurrence: QString) -> bool {
+        let rec = betternotes_core::Recurrence::parse(&recurrence.to_string());
+        self.perform(false, |session| {
+            if let Some(note) = session.current() {
+                session.set_reminder(note.id, timestamp_sec, rec)?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn clear_reminder(self: Pin<&mut Self>) -> bool {
+        self.perform(false, |session| {
+            if let Some(note) = session.current() {
+                session.clear_reminder(note.id)?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn check_reminders(mut self: Pin<&mut Self>) -> i32 {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let mut triggered = 0;
+        let mut rust = self.as_mut().rust_mut();
+        let session_opt = rust.session.as_mut();
+        if let Some(session) = session_opt {
+            if let Ok(due_list) = session.check_due_reminders(now) {
+                for due in due_list {
+                    let _ = betternotes_core::NotificationService::notify(
+                        &format!("Reminder: {}", due.note_title),
+                        "Your sticky note reminder is due now.",
+                    );
+                    let _ = session.dismiss_reminder(due.reminder_id);
+                    triggered += 1;
+                }
+            }
+        }
+        triggered
+    }
+
+    pub fn export_notes_json(self: Pin<&mut Self>, file_path: QString) -> bool {
+        self.perform(false, |session| {
+            session.export_json(std::path::Path::new(&file_path.to_string()))
+        })
+    }
+
+    pub fn export_notes_markdown(self: Pin<&mut Self>, dir_path: QString) -> bool {
+        self.perform(false, |session| {
+            session.export_markdown(std::path::Path::new(&dir_path.to_string()))
+        })
+    }
+
+    pub fn import_notes_json(mut self: Pin<&mut Self>, file_path: QString) -> i32 {
+        let path = file_path.to_string();
+        let mut count = 0;
+        let success = self.as_mut().perform(true, |session| {
+            count = session.import_json(std::path::Path::new(&path))? as i32;
+            Ok(())
+        });
+        if success {
+            count
+        } else {
+            -1
+        }
+    }
+
+    pub fn import_note_markdown(mut self: Pin<&mut Self>, file_path: QString) -> i32 {
+        let path = file_path.to_string();
+        let mut count = 0;
+        let success = self.as_mut().perform(true, |session| {
+            count = session.import_markdown(std::path::Path::new(&path))? as i32;
+            Ok(())
+        });
+        if success {
+            count
+        } else {
+            -1
+        }
     }
 }

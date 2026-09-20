@@ -1,10 +1,12 @@
 # BetterNotes
 
-Linux-first desktop notes application, currently at **Phase 7 — Wayland / X11**.
+Linux-first desktop notes application, currently at **Phase 8 — Productivity**.
 BetterNotes is a working codename. Create, edit and delete plain-text notes in
 independent windows, with autosave, SQLite persistence, saved window state,
 light/dark/system themes, FTS5 search, system tray, quick capture, notifications,
-Wayland/X11 compositor compatibility, always-on-top, and desktop diagnostics.
+Wayland/X11 compositor compatibility, always-on-top, desktop diagnostics,
+one-time & recurring reminders, safe file attachments, JSON/Markdown import/export,
+and crash-safe atomic backup & restore.
 
 ## Architecture
 
@@ -192,12 +194,13 @@ actual results. Earlier reports record [Phase 4](docs/phase-4-validation.md),
 See also the [Wayland/X11 Compatibility Guide](docs/wayland-x11-compatibility.md).
 
 ## Scope and next phase
+ 
+Phase 8 implements Productivity features: one-time and recurring reminders,
+desktop notification alerts, safe file/image attachments, JSON and Markdown
+import/export, and crash-safe atomic backup and restore tooling (`betternotes backup`,
+`betternotes restore`, `betternotes export`, `betternotes import`).
 
-Phase 7 implements Wayland and X11 Compositor Compatibility across KDE Plasma,
-GNOME, XFCE, Cinnamon, MATE, Budgie, Hyprland, and Sway, including tiling window
-rules, always-on-top window management, and platform diagnostics (`betternotes --diagnostics`).
-
-Phase 8 will implement Productivity features: one-time and recurring reminders,
-desktop notification alerts, file and image attachments, JSON/Markdown import/export,
-and backup/recovery tooling.
+Phase 9 will implement CLI and IPC: full CLI subcommands (`new`, `list`, `search`,
+`show`, `archive`), single-instance Unix domain socket IPC daemon, and command
+dispatch to running instances.
 No later-phase features are included here. Project licensing remains undecided; no license was assigned.

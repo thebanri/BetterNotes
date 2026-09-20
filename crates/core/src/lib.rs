@@ -1,20 +1,34 @@
 //! Qt-independent notes, persistence and editor state.
 
+pub mod attachments;
 pub mod autostart;
+pub mod backup;
 pub mod desktop;
+pub mod export_import;
 mod notes;
 pub mod notifications;
 pub mod paths;
+pub mod reminders;
 mod session;
 pub mod settings;
 pub mod shortcuts;
 mod store;
 mod window_state;
 
+pub use attachments::{add_attachment, delete_attachment, list_attachments, Attachment};
 pub use autostart::{is_autostart_enabled, set_autostart};
+pub use backup::{create_backup, restore_backup, BackupManifest};
 pub use desktop::{DesktopEnvironment, DesktopReport, DisplayServer};
+pub use export_import::{
+    export_notes_json, export_notes_markdown_dir, import_note_markdown_file, import_notes_json,
+    ExportArchive, ExportNote,
+};
 pub use notes::{Error, Note, NoteSummary, Result, SearchResult};
 pub use notifications::NotificationService;
+pub use reminders::{
+    clear_reminder_for_note, dismiss_or_advance_reminder, get_due_reminders, get_reminder_for_note,
+    set_reminder, DueReminder, Recurrence, Reminder,
+};
 pub use session::NotesSession;
 pub use settings::ThemePreference;
 pub use shortcuts::GlobalShortcutService;
