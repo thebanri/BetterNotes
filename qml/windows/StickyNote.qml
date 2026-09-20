@@ -18,6 +18,11 @@ ApplicationWindow {
     property bool initialized: false
     property bool retiring: false
     property bool placing: false
+    // True while an interactive (compositor-driven) resize is running. During a
+    // drag the surface is painted opaque and square: a translucent, antialiased
+    // rounded surface leaves the freshly exposed edge pixels unpainted for a
+    // frame, which the compositor shows as smeared/ghosted content.
+    property bool resizing: false
     property int expandedWidth: 380
     property int expandedHeight: 360
     property int normalX: 0
@@ -150,12 +155,12 @@ ApplicationWindow {
     minimumHeight: collapsed ? collapsedHeight : 180
     maximumHeight: collapsed ? collapsedHeight : 16384
     visible: false
-    color: "transparent"
+    color: noteWindow.resizing ? noteWindow.activeBg : "transparent"
 
     background: Rectangle {
         id: windowCard
-        radius: 16
-        antialiasing: true
+        radius: noteWindow.resizing ? 0 : 16
+        antialiasing: !noteWindow.resizing
         color: noteWindow.activeBg
         border.width: 1
         border.color: noteWindow.activeBorder
@@ -209,11 +214,36 @@ ApplicationWindow {
         placing = false
     }
 
+    // Sticky notes sit at desktop level unless pinned. Mapping or un-minimising a
+    // window makes the compositor raise it, so re-assert the intended layer
+    // afterwards rather than leaving every note stacked above other apps.
+    function restoreStacking() {
+        if (alwaysOnTop) raise()
+        else lower()
+    }
+
     function recover(fallbackScreen) {
         showNormal()
         place({width: expandedWidth, height: expandedHeight, positioned: false}, fallbackScreen, true)
         persist(true)
         requestActivate()
+    }
+
+    // The compositor owns the drag once startSystemResize() succeeds, so the
+    // MouseArea never sees the release. Settle the flag a short moment after the
+    // last geometry change instead.
+    function beginResize(edges) {
+        resizeSettle.stop()
+        resizing = true
+        if (!startSystemResize(edges)) {
+            resizing = false
+            return
+        }
+        resizeSettle.restart()
+    }
+
+    function extendResize() {
+        if (resizing) resizeSettle.restart()
     }
 
     function captureGeometry() {
@@ -274,10 +304,13 @@ ApplicationWindow {
         return true
     }
 
+    // Changing the stays-on-top/bottom hint does not restack an already mapped
+    // window on its own; nudge it so pinning takes effect immediately.
+    onAlwaysOnTopChanged: if (initialized && !retiring) restoreStacking()
     onXChanged: captureGeometry()
     onYChanged: captureGeometry()
-    onWidthChanged: captureGeometry()
-    onHeightChanged: captureGeometry()
+    onWidthChanged: { extendResize(); captureGeometry() }
+    onHeightChanged: { extendResize(); captureGeometry() }
     onScreenChanged: captureGeometry()
     onClosing: function(close) {
         settingsModal.close()
@@ -304,6 +337,7 @@ ApplicationWindow {
     }
 
     Timer { id: geometrySave; interval: 500; onTriggered: noteWindow.persist(true) }
+    Timer { id: resizeSettle; interval: 260; onTriggered: noteWindow.resizing = false }
     Timer {
         id: autosave
         interval: 500
@@ -956,7 +990,7 @@ ApplicationWindow {
         z: 20
         onPressed: function(mouse) {
             if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.RightEdge)
+                noteWindow.beginResize(Qt.RightEdge)
             }
         }
     }
@@ -973,7 +1007,7 @@ ApplicationWindow {
         z: 20
         onPressed: function(mouse) {
             if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.LeftEdge)
+                noteWindow.beginResize(Qt.LeftEdge)
             }
         }
     }
@@ -991,7 +1025,7 @@ ApplicationWindow {
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
             if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.BottomEdge)
+                noteWindow.beginResize(Qt.BottomEdge)
             }
         }
     }
@@ -1007,7 +1041,7 @@ ApplicationWindow {
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
             if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
+                noteWindow.beginResize(Qt.BottomEdge | Qt.RightEdge)
             }
         }
 
@@ -1036,7 +1070,7 @@ ApplicationWindow {
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
             if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
+                noteWindow.beginResize(Qt.BottomEdge | Qt.LeftEdge)
             }
         }
     }

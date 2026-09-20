@@ -62,7 +62,9 @@ ApplicationWindow {
     }
     Component.onCompleted: initialize()
 
-    function openNote(id, recover) {
+    // activate defaults to true; pass false to reveal a note without pulling it
+    // above other windows or stealing keyboard focus.
+    function openNote(id, recover, activate) {
         let sticky = noteWindows[id]
         if (!sticky) {
             sticky = stickyComponent.createObject(window, {noteId: id}) as StickyNote
@@ -81,7 +83,9 @@ ApplicationWindow {
         if (recover) sticky.recover(window.screen)
         else {
             if (sticky.visibility === Window.Minimized) sticky.showNormal()
-            sticky.requestActivate()
+            else if (!sticky.visible) sticky.show()
+            if (activate === false) sticky.restoreStacking()
+            else sticky.requestActivate()
         }
         return sticky
     }
@@ -100,13 +104,16 @@ ApplicationWindow {
     function showAllNotes() {
         const allIds = backend.noteIds
         for (let i = 0; i < allIds.length; ++i) {
-            openNote(allIds[i])
+            openNote(allIds[i], false, false)
         }
+        // Revealing the whole board must not promote it: only notes the user
+        // pinned belong on top, the rest return to desktop level.
         const ids = Object.keys(noteWindows)
         for (let i = 0; i < ids.length; ++i) {
             const sticky = noteWindows[ids[i]]
             if (sticky.visibility === Window.Minimized) sticky.showNormal()
-            sticky.requestActivate()
+            else if (!sticky.visible) sticky.show()
+            sticky.restoreStacking()
         }
     }
 
