@@ -86,8 +86,10 @@ Window {
                 MouseArea {
                     anchors.fill: parent
                     property point clickPos: Qt.point(0, 0)
-                    onPressed: clickPos = Qt.point(mouse.x, mouse.y)
-                    onPositionChanged: {
+                    onPressed: function(mouse) {
+                        clickPos = Qt.point(mouse.x, mouse.y)
+                    }
+                    onPositionChanged: function(mouse) {
                         modalRoot.x += mouse.x - clickPos.x
                         modalRoot.y += mouse.y - clickPos.y
                     }

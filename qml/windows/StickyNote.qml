@@ -105,12 +105,11 @@ ApplicationWindow {
     minimumHeight: collapsed ? collapsedHeight : 180
     maximumHeight: collapsed ? collapsedHeight : 16384
     visible: false
-    color: "transparent"
+    color: noteWindow.activeBg
 
     background: Rectangle {
         id: windowCard
         color: noteWindow.activeBg
-        radius: 12
         border.width: 1
         border.color: noteWindow.activeBorder
     }
@@ -262,37 +261,19 @@ ApplicationWindow {
     header: Rectangle {
         id: headerContainer
         height: 38
-        color: "transparent"
+        color: noteWindow.activeBg
 
         Rectangle {
             id: headerBar
             anchors.fill: parent
+            anchors.leftMargin: 4
+            anchors.rightMargin: 4
+            anchors.topMargin: 3
+            anchors.bottomMargin: 3
             color: activeHeader
-            radius: 12
+            radius: 8
             border.width: 1
             border.color: noteWindow.activeBorder
-
-            // When expanded, square off bottom corners so header bar connects smoothly with note body
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.leftMargin: 1
-                anchors.rightMargin: 1
-                height: 12
-                color: parent.color
-                visible: !noteWindow.collapsed
-            }
-
-            // Crisp dividing border between header and note body
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: 1
-                color: noteWindow.activeBorder
-                visible: !noteWindow.collapsed
-            }
         }
 
         MouseArea {
