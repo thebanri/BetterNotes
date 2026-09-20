@@ -152,10 +152,19 @@ pub fn handle_domain_request(store: &mut NoteStore, request: &IpcRequest) -> Ipc
                     note.title = effective_title.to_string();
                     note.content = content.clone();
                     match store.update(&note) {
-                        Ok(saved) => IpcResponse::ok_msg(
-                            format!("Created note #{} \"{}\"", saved.id, saved.title),
-                            Some(serde_json::json!({ "id": saved.id, "title": saved.title })),
-                        ),
+                        Ok(saved) => {
+                            let _ = store.save_window_state(
+                                saved.id,
+                                &crate::WindowState {
+                                    open: true,
+                                    ..crate::WindowState::default()
+                                },
+                            );
+                            IpcResponse::ok_msg(
+                                format!("Created note #{} \"{}\"", saved.id, saved.title),
+                                Some(serde_json::json!({ "id": saved.id, "title": saved.title })),
+                            )
+                        }
                         Err(e) => IpcResponse::err(format!("Failed to save note content: {e}")),
                     }
                 }
