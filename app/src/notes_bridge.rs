@@ -147,6 +147,21 @@ pub mod ffi {
         #[cxx_name = "setNoteColor"]
         fn set_note_color(self: Pin<&mut Self>, color: QString) -> bool;
         #[qinvokable]
+        #[cxx_name = "noteFontFamily"]
+        fn note_font_family(&self) -> QString;
+        #[qinvokable]
+        #[cxx_name = "setNoteFontFamily"]
+        fn set_note_font_family(self: Pin<&mut Self>, family: QString) -> bool;
+        #[qinvokable]
+        #[cxx_name = "noteFontSize"]
+        fn note_font_size(&self) -> i32;
+        #[qinvokable]
+        #[cxx_name = "setNoteFontSize"]
+        fn set_note_font_size(self: Pin<&mut Self>, size: i32) -> bool;
+        #[qinvokable]
+        #[cxx_name = "attachImage"]
+        fn attach_image(self: Pin<&mut Self>, file_url: QString) -> QString;
+        #[qinvokable]
         #[cxx_name = "setAutostart"]
         fn set_autostart(self: Pin<&mut Self>, enabled: bool) -> bool;
         #[qinvokable]
@@ -656,6 +671,67 @@ impl ffi::NotesBackend {
             .ok_or(Error::NoSelection)
             .and_then(|session| session.set_note_color(&color_str));
         result.is_ok()
+    }
+
+    pub fn note_font_family(&self) -> QString {
+        let family = self
+            .session
+            .as_ref()
+            .map(|s| s.note_font_family())
+            .unwrap_or_else(|| "default".to_string());
+        QString::from(&family)
+    }
+
+    pub fn set_note_font_family(mut self: Pin<&mut Self>, family: QString) -> bool {
+        let family_str = family.to_string();
+        let result = self
+            .as_mut()
+            .rust_mut()
+            .session
+            .as_mut()
+            .ok_or(Error::NoSelection)
+            .and_then(|session| session.set_note_font_family(&family_str));
+        result.is_ok()
+    }
+
+    pub fn note_font_size(&self) -> i32 {
+        self.session
+            .as_ref()
+            .map(|s| s.note_font_size())
+            .unwrap_or(13)
+    }
+
+    pub fn set_note_font_size(mut self: Pin<&mut Self>, size: i32) -> bool {
+        let result = self
+            .as_mut()
+            .rust_mut()
+            .session
+            .as_mut()
+            .ok_or(Error::NoSelection)
+            .and_then(|session| session.set_note_font_size(size));
+        result.is_ok()
+    }
+
+    pub fn attach_image(mut self: Pin<&mut Self>, file_url: QString) -> QString {
+        let url_str = file_url.to_string();
+        let path_str = if let Some(stripped) = url_str.strip_prefix("file://") {
+            stripped
+        } else {
+            &url_str
+        };
+        let source_path = std::path::Path::new(path_str);
+        if let Some(session) = self.as_mut().rust_mut().session.as_mut() {
+            if let Ok(att) = session.add_attachment_file(source_path) {
+                if let Ok(data_dir) = betternotes_core::paths::data_directory(
+                    std::env::var_os("XDG_DATA_HOME").as_deref(),
+                    std::env::var_os("HOME").as_deref(),
+                ) {
+                    let full_path = data_dir.join("attachments").join(&att.stored_rel_path);
+                    return QString::from(&format!("file://{}", full_path.display()));
+                }
+            }
+        }
+        QString::default()
     }
 
     pub fn set_autostart(mut self: Pin<&mut Self>, enabled: bool) -> bool {

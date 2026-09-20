@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import BetterNotes.App
 import "../themes" as Themes
 import "../components" as UI
@@ -32,6 +33,35 @@ ApplicationWindow {
 
     property bool alwaysOnTop: false
     property string noteTint: "yellow"
+    property string noteFontFamily: "default"
+    property int noteFontSize: 13
+    property bool isRichText: false
+
+    function checkRichText(content) {
+        if (!content || content.length === 0) return false
+        return content.indexOf("<!DOCTYPE") !== -1 ||
+               content.indexOf("<html") !== -1 ||
+               content.indexOf("<h1") !== -1 ||
+               content.indexOf("<h2") !== -1 ||
+               content.indexOf("<img") !== -1 ||
+               content.indexOf("<font") !== -1 ||
+               content.indexOf("<u>") !== -1
+    }
+
+    function computeCustomTint(colorHex, role) {
+        let base = Qt.color(colorHex)
+        if (!base || base === "transparent") return theme.noteBackground
+        if (theme.isDark) {
+            if (role === "bg") return Qt.rgba(base.r * 0.18 + 0.04, base.g * 0.18 + 0.04, base.b * 0.18 + 0.04, 1.0)
+            if (role === "header") return Qt.rgba(base.r * 0.28 + 0.06, base.g * 0.28 + 0.06, base.b * 0.28 + 0.06, 1.0)
+            return Qt.rgba(base.r * 0.45 + 0.1, base.g * 0.45 + 0.1, base.b * 0.45 + 0.1, 1.0)
+        } else {
+            if (role === "bg") return Qt.rgba(1.0 - (1.0 - base.r) * 0.10, 1.0 - (1.0 - base.g) * 0.10, 1.0 - (1.0 - base.b) * 0.10, 1.0)
+            if (role === "header") return Qt.rgba(1.0 - (1.0 - base.r) * 0.22, 1.0 - (1.0 - base.g) * 0.22, 1.0 - (1.0 - base.b) * 0.22, 1.0)
+            return Qt.rgba(1.0 - (1.0 - base.r) * 0.45, 1.0 - (1.0 - base.g) * 0.45, 1.0 - (1.0 - base.b) * 0.45, 1.0)
+        }
+    }
+
     readonly property var tintPalettes: ({
         "yellow": {
             bg: theme.isDark ? "#28231a" : "#fefce8",
@@ -59,9 +89,9 @@ ApplicationWindow {
             border: theme.isDark ? "#4c2f70" : "#d8b4fe"
         }
     })
-    readonly property color activeBg: tintPalettes[noteTint] ? tintPalettes[noteTint].bg : theme.noteBackground
-    readonly property color activeHeader: tintPalettes[noteTint] ? tintPalettes[noteTint].header : theme.noteHeader
-    readonly property color activeBorder: tintPalettes[noteTint] ? tintPalettes[noteTint].border : theme.noteBorder
+    readonly property color activeBg: tintPalettes[noteTint] ? tintPalettes[noteTint].bg : (noteTint.startsWith("#") ? computeCustomTint(noteTint, "bg") : theme.noteBackground)
+    readonly property color activeHeader: tintPalettes[noteTint] ? tintPalettes[noteTint].header : (noteTint.startsWith("#") ? computeCustomTint(noteTint, "header") : theme.noteHeader)
+    readonly property color activeBorder: tintPalettes[noteTint] ? tintPalettes[noteTint].border : (noteTint.startsWith("#") ? computeCustomTint(noteTint, "border") : theme.noteBorder)
 
     // QObject ownership belongs to the library; these remain independent windows.
     // Qt.Tool ensures desktop sticky notes act as utility widgets and do not appear as separate application windows in the taskbar/dock.
@@ -94,6 +124,11 @@ ApplicationWindow {
         collapsed = backend.savedCollapsed()
         const savedColor = backend.noteColor()
         if (savedColor && savedColor.length > 0) noteTint = savedColor
+        const savedFont = backend.noteFontFamily()
+        if (savedFont && savedFont.length > 0) noteFontFamily = savedFont
+        const savedSize = backend.noteFontSize()
+        if (savedSize > 0) noteFontSize = savedSize
+        isRichText = checkRichText(backend.draftContent)
         place({x: backend.savedX(), y: backend.savedY(), width: backend.savedWidth(),
             height: backend.savedHeight(), screen: backend.savedScreen(),
             positioned: backend.savedPositioned()}, fallbackScreen, false)
@@ -387,6 +422,78 @@ ApplicationWindow {
         showDialog(deleteDialog)
     }
 
+    function formatSelection(prefix, suffix) {
+        contentEditor.forceActiveFocus()
+        if (!isRichText) {
+            isRichText = true
+            contentEditor.textFormat = TextEdit.RichText
+        }
+        if (contentEditor.selectionStart !== contentEditor.selectionEnd) {
+            var start = Math.min(contentEditor.selectionStart, contentEditor.selectionEnd)
+            var end = Math.max(contentEditor.selectionStart, contentEditor.selectionEnd)
+            var sel = contentEditor.selectedText
+            contentEditor.remove(start, end)
+            contentEditor.insert(start, prefix + sel + suffix)
+        } else {
+            var pos = contentEditor.cursorPosition
+            contentEditor.insert(pos, prefix + qsTr("text") + suffix)
+        }
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+    }
+
+    function insertImageTag(imageUrl) {
+        contentEditor.forceActiveFocus()
+        if (!isRichText) {
+            isRichText = true
+            contentEditor.textFormat = TextEdit.RichText
+        }
+        var imgWidth = Math.max(160, Math.min(300, Math.round(contentEditor.width - 24)))
+        var imgTag = "<br><img src=\"" + imageUrl + "\" width=\"" + imgWidth + "\" /><br>"
+        var pos = contentEditor.cursorPosition
+        contentEditor.insert(pos, imgTag)
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+B"
+        onActivated: noteWindow.formatSelection("<b>", "</b>")
+    }
+    Shortcut {
+        sequence: "Ctrl+I"
+        onActivated: noteWindow.formatSelection("<i>", "</i>")
+    }
+    Shortcut {
+        sequence: "Ctrl+U"
+        onActivated: noteWindow.formatSelection("<u>", "</u>")
+    }
+    Shortcut {
+        sequence: "Ctrl+1"
+        onActivated: noteWindow.formatSelection("<h1>", "</h1>")
+    }
+    Shortcut {
+        sequence: "Ctrl+2"
+        onActivated: noteWindow.formatSelection("<h2>", "</h2>")
+    }
+
+    FileDialog {
+        id: imageDialog
+        title: qsTr("Insert Image or GIF")
+        nameFilters: [
+            qsTr("Images and GIFs (*.png *.jpg *.jpeg *.gif *.webp *.svg)"),
+            qsTr("All files (*)")
+        ]
+        onAccepted: {
+            if (selectedFile) {
+                var localUrl = backend.attachImage(selectedFile.toString())
+                if (localUrl && localUrl.length > 0) {
+                    noteWindow.insertImageTag(localUrl)
+                }
+            }
+        }
+    }
+
     StickyNoteSettingsModal {
         id: settingsModal
         noteWindow: noteWindow
@@ -483,6 +590,180 @@ ApplicationWindow {
             }
         }
 
+        // Formatting & Media Toolbar
+        Rectangle {
+            id: formatToolbar
+            Layout.fillWidth: true
+            height: 28
+            radius: 6
+            color: theme.isDark ? Qt.rgba(1, 1, 1, 0.05) : Qt.rgba(0, 0, 0, 0.04)
+            border.width: 1
+            border.color: theme.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 4
+                anchors.rightMargin: 4
+                spacing: 2
+
+                // H1
+                UI.StyledButton {
+                    text: "H1"
+                    theme: noteWindow.theme
+                    variant: "ghost"
+                    implicitWidth: 26
+                    implicitHeight: 22
+                    padding: 0
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Heading 1 (Ctrl+1)")
+                    onClicked: noteWindow.formatSelection("<h1>", "</h1>")
+                }
+
+                // H2
+                UI.StyledButton {
+                    text: "H2"
+                    theme: noteWindow.theme
+                    variant: "ghost"
+                    implicitWidth: 26
+                    implicitHeight: 22
+                    padding: 0
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Heading 2 (Ctrl+2)")
+                    onClicked: noteWindow.formatSelection("<h2>", "</h2>")
+                }
+
+                Rectangle { width: 1; height: 14; color: theme.border }
+
+                // Bold
+                UI.StyledButton {
+                    iconName: "bold"
+                    iconSize: 13
+                    theme: noteWindow.theme
+                    variant: "ghost"
+                    implicitWidth: 24
+                    implicitHeight: 22
+                    padding: 0
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Bold (Ctrl+B)")
+                    onClicked: noteWindow.formatSelection("<b>", "</b>")
+                }
+
+                // Italic
+                UI.StyledButton {
+                    iconName: "italic"
+                    iconSize: 13
+                    theme: noteWindow.theme
+                    variant: "ghost"
+                    implicitWidth: 24
+                    implicitHeight: 22
+                    padding: 0
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Italic (Ctrl+I)")
+                    onClicked: noteWindow.formatSelection("<i>", "</i>")
+                }
+
+                // Underline
+                UI.StyledButton {
+                    iconName: "underline"
+                    iconSize: 13
+                    theme: noteWindow.theme
+                    variant: "ghost"
+                    implicitWidth: 24
+                    implicitHeight: 22
+                    padding: 0
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Underline (Ctrl+U)")
+                    onClicked: noteWindow.formatSelection("<u>", "</u>")
+                }
+
+                Rectangle { width: 1; height: 14; color: theme.border }
+
+                // Text Color Dropper
+                UI.StyledButton {
+                    id: textColorBtn
+                    iconName: "droplet"
+                    iconSize: 13
+                    theme: noteWindow.theme
+                    variant: textColorPopup.visible ? "accent" : "ghost"
+                    implicitWidth: 24
+                    implicitHeight: 22
+                    padding: 0
+                    ToolTip.visible: hovered && !textColorPopup.visible
+                    ToolTip.text: qsTr("Text Color")
+                    onClicked: textColorPopup.open()
+
+                    Popup {
+                        id: textColorPopup
+                        y: textColorBtn.height + 4
+                        x: -4
+                        width: 176
+                        height: 38
+                        padding: 5
+                        background: Rectangle {
+                            radius: 8
+                            color: theme.surfaceElevated
+                            border.width: 1
+                            border.color: theme.border
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            spacing: 4
+
+                            Repeater {
+                                model: [
+                                    { color: theme.noteText, name: qsTr("Default") },
+                                    { color: "#ef4444", name: qsTr("Red") },
+                                    { color: "#f97316", name: qsTr("Orange") },
+                                    { color: "#eab308", name: qsTr("Yellow") },
+                                    { color: "#22c55e", name: qsTr("Green") },
+                                    { color: "#06b6d4", name: qsTr("Cyan") },
+                                    { color: "#6366f1", name: qsTr("Indigo") },
+                                    { color: "#d946ef", name: qsTr("Fuchsia") }
+                                ]
+
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    width: 16
+                                    height: 16
+                                    radius: 8
+                                    color: modelData.color
+                                    border.width: 1
+                                    border.color: Qt.darker(modelData.color, 1.2)
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            noteWindow.formatSelection("<font color='" + modelData.color + "'>", "</font>")
+                                            textColorPopup.close()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Image / GIF Button
+                UI.StyledButton {
+                    iconName: "image"
+                    iconSize: 14
+                    theme: noteWindow.theme
+                    variant: "ghost"
+                    implicitWidth: 24
+                    implicitHeight: 22
+                    padding: 0
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Insert Image or GIF")
+                    onClicked: imageDialog.open()
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+        }
+
         ScrollView {
             id: contentScroll
             visible: !noteWindow.collapsed
@@ -497,12 +778,13 @@ ApplicationWindow {
                 objectName: "contentEditor"
                 width: Math.max(100, contentScroll.availableWidth)
                 text: backend.draftContent
-                textFormat: TextEdit.PlainText
+                textFormat: noteWindow.isRichText ? TextEdit.RichText : TextEdit.PlainText
                 placeholderText: qsTr("Write your note…")
                 Accessible.name: qsTr("Note content")
                 wrapMode: TextEdit.Wrap
                 selectByMouse: true
-                font.pixelSize: 13
+                font.family: (noteFontFamily === "default" || noteFontFamily === "") ? "" : noteFontFamily
+                font.pixelSize: noteFontSize > 0 ? noteFontSize : 13
                 color: theme.noteText
                 placeholderTextColor: theme.noteTextSecondary
                 selectionColor: theme.accent

@@ -14,12 +14,14 @@ Window {
     title: qsTr("Note Settings") + (backend.draftTitle.length ? " — " + backend.draftTitle : "")
     flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     modality: Qt.NonModal
-    width: 440
-    height: 520
-    minimumWidth: 380
-    minimumHeight: 460
+    width: 460
+    height: 580
+    minimumWidth: 400
+    minimumHeight: 500
     color: "transparent"
     visible: false
+
+    property int currentTab: 0 // 0: Appearance, 1: Window, 2: Actions
 
     Shortcut {
         sequence: "Escape"
@@ -47,7 +49,7 @@ Window {
         id: container
         anchors.fill: parent
         anchors.margins: 6
-        radius: theme.radiusLg
+        radius: 16
         color: theme.surface
         border.width: 1
         border.color: theme.border
@@ -56,19 +58,20 @@ Window {
             anchors.fill: parent
             spacing: 0
 
-            // Header Bar
+            // ==========================================
+            // HEADER BAR
+            // ==========================================
             Rectangle {
                 Layout.fillWidth: true
-                height: 48
+                height: 52
                 color: theme.surfaceElevated
-                radius: theme.radiusLg
+                radius: 16
 
-                // Square off bottom corners so only top is rounded
                 Rectangle {
                     anchors.bottom: parent.bottom
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    height: theme.radiusLg
+                    height: 16
                     color: parent.color
                 }
 
@@ -94,13 +97,14 @@ Window {
                     anchors.fill: parent
                     anchors.leftMargin: 16
                     anchors.rightMargin: 12
-                    spacing: 10
+                    spacing: 12
 
                     Rectangle {
-                        width: 28
-                        height: 28
-                        radius: theme.radiusSm
+                        width: 32
+                        height: 32
+                        radius: 8
                         color: theme.accentSubtle
+
                         UI.AppIcon {
                             anchors.centerIn: parent
                             name: "settings"
@@ -110,8 +114,9 @@ Window {
                     }
 
                     ColumnLayout {
-                        spacing: 0
+                        spacing: 1
                         Layout.fillWidth: true
+
                         Label {
                             text: qsTr("Note Settings")
                             font.pixelSize: 13
@@ -129,18 +134,146 @@ Window {
 
                     UI.StyledButton {
                         iconName: "x"
-                        iconSize: 14
+                        iconSize: 15
                         theme: modalRoot.theme
                         variant: "ghost"
-                        implicitWidth: 28
-                        implicitHeight: 28
+                        implicitWidth: 30
+                        implicitHeight: 30
                         padding: 0
                         onClicked: modalRoot.close()
                     }
                 }
             }
 
-            // Scrollable Settings Content
+            // ==========================================
+            // SEGMENTED TAB BAR
+            // ==========================================
+            Rectangle {
+                Layout.fillWidth: true
+                height: 44
+                color: theme.surface
+                border.width: 0
+
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 1
+                    color: theme.border
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 6
+                    spacing: 6
+
+                    // TAB 0: Appearance
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 8
+                        color: modalRoot.currentTab === 0 ? theme.surfaceElevated : (tab0Hover.hovered ? theme.surfaceHover : "transparent")
+                        border.width: modalRoot.currentTab === 0 ? 1 : 0
+                        border.color: theme.border
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            UI.AppIcon {
+                                name: "palette"
+                                size: 14
+                                color: modalRoot.currentTab === 0 ? theme.accent : theme.textSecondary
+                            }
+                            Label {
+                                text: qsTr("Appearance")
+                                font.pixelSize: 12
+                                font.weight: modalRoot.currentTab === 0 ? Font.DemiBold : Font.Normal
+                                color: modalRoot.currentTab === 0 ? theme.textPrimary : theme.textSecondary
+                            }
+                        }
+
+                        MouseArea {
+                            id: tab0Hover
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: modalRoot.currentTab = 0
+                        }
+                    }
+
+                    // TAB 1: Window
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 8
+                        color: modalRoot.currentTab === 1 ? theme.surfaceElevated : (tab1Hover.hovered ? theme.surfaceHover : "transparent")
+                        border.width: modalRoot.currentTab === 1 ? 1 : 0
+                        border.color: theme.border
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            UI.AppIcon {
+                                name: "pin"
+                                size: 14
+                                color: modalRoot.currentTab === 1 ? theme.accent : theme.textSecondary
+                            }
+                            Label {
+                                text: qsTr("Window")
+                                font.pixelSize: 12
+                                font.weight: modalRoot.currentTab === 1 ? Font.DemiBold : Font.Normal
+                                color: modalRoot.currentTab === 1 ? theme.textPrimary : theme.textSecondary
+                            }
+                        }
+
+                        MouseArea {
+                            id: tab1Hover
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: modalRoot.currentTab = 1
+                        }
+                    }
+
+                    // TAB 2: Actions
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 8
+                        color: modalRoot.currentTab === 2 ? theme.surfaceElevated : (tab2Hover.hovered ? theme.surfaceHover : "transparent")
+                        border.width: modalRoot.currentTab === 2 ? 1 : 0
+                        border.color: theme.border
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            UI.AppIcon {
+                                name: "sliders"
+                                size: 14
+                                color: modalRoot.currentTab === 2 ? theme.accent : theme.textSecondary
+                            }
+                            Label {
+                                text: qsTr("Actions")
+                                font.pixelSize: 12
+                                font.weight: modalRoot.currentTab === 2 ? Font.DemiBold : Font.Normal
+                                color: modalRoot.currentTab === 2 ? theme.textPrimary : theme.textSecondary
+                            }
+                        }
+
+                        MouseArea {
+                            id: tab2Hover
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: modalRoot.currentTab = 2
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // TAB CONTENT AREA
+            // ==========================================
             ScrollView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -156,81 +289,416 @@ Window {
 
                     Item { height: 2 }
 
-                    // SECTION 1: Color Themes
+                    // ==========================================
+                    // TAB 0: APPEARANCE (Color Palette & Fonts)
+                    // ==========================================
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 16
+                        visible: modalRoot.currentTab === 0
 
-                        Label {
-                            text: qsTr("NOTE COLOR")
-                            font.pixelSize: 11
-                            font.weight: Font.Bold
-                            color: theme.textSecondary
-                        }
-
-                        RowLayout {
+                        // --- 1. COLOR PRESETS ---
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 10
+                            spacing: 8
 
-                            Repeater {
-                                model: [
-                                    { key: "yellow", name: qsTr("Yellow"), color: "#eab308", border: "#ca8a04" },
-                                    { key: "green",  name: qsTr("Green"),  color: "#22c55e", border: "#16a34a" },
-                                    { key: "pink",   name: qsTr("Pink"),   color: "#ec4899", border: "#db2777" },
-                                    { key: "blue",   name: qsTr("Blue"),   color: "#0ea5e9", border: "#0284c7" },
-                                    { key: "purple", name: qsTr("Purple"), color: "#a855f7", border: "#9333ea" }
-                                ]
+                            Label {
+                                text: qsTr("COLOR PRESETS")
+                                font.pixelSize: 11
+                                font.weight: Font.Bold
+                                color: theme.textSecondary
+                            }
 
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    Layout.fillWidth: true
-                                    height: 58
-                                    radius: theme.radiusMd
-                                    color: colorArea.hovered ? theme.surfaceHover : theme.surfaceElevated
-                                    border.width: (noteWindow.noteTint === modelData.key) ? 2 : 1
-                                    border.color: (noteWindow.noteTint === modelData.key) ? theme.accent : theme.border
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
 
-                                    ColumnLayout {
-                                        anchors.centerIn: parent
-                                        spacing: 4
+                                Repeater {
+                                    model: [
+                                        { key: "yellow", name: qsTr("Yellow"), color: "#eab308" },
+                                        { key: "green",  name: qsTr("Green"),  color: "#22c55e" },
+                                        { key: "pink",   name: qsTr("Pink"),   color: "#ec4899" },
+                                        { key: "blue",   name: qsTr("Blue"),   color: "#0ea5e9" },
+                                        { key: "purple", name: qsTr("Purple"), color: "#a855f7" }
+                                    ]
 
-                                        Rectangle {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            width: 26
-                                            height: 26
-                                            radius: 13
-                                            color: modelData.color
-                                            border.width: 1
-                                            border.color: Qt.darker(modelData.color, 1.2)
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        height: 48
+                                        radius: 10
+                                        color: cpArea.hovered ? theme.surfaceHover : theme.surfaceElevated
+                                        border.width: (noteWindow.noteTint === modelData.key) ? 2 : 1
+                                        border.color: (noteWindow.noteTint === modelData.key) ? theme.accent : theme.border
 
-                                            UI.AppIcon {
-                                                anchors.centerIn: parent
-                                                name: "check"
-                                                size: 14
-                                                color: "#ffffff"
-                                                strokeWidth: 2.4
-                                                visible: noteWindow.noteTint === modelData.key
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 6
+
+                                            Rectangle {
+                                                width: 22
+                                                height: 22
+                                                radius: 11
+                                                color: modelData.color
+                                                border.width: 1
+                                                border.color: Qt.darker(modelData.color, 1.2)
+
+                                                UI.AppIcon {
+                                                    anchors.centerIn: parent
+                                                    name: "check"
+                                                    size: 13
+                                                    color: "#ffffff"
+                                                    strokeWidth: 2.5
+                                                    visible: noteWindow.noteTint === modelData.key
+                                                }
+                                            }
+
+                                            Label {
+                                                text: modelData.name
+                                                font.pixelSize: 11
+                                                font.weight: (noteWindow.noteTint === modelData.key) ? Font.Bold : Font.Normal
+                                                color: (noteWindow.noteTint === modelData.key) ? theme.textPrimary : theme.textSecondary
                                             }
                                         }
 
-                                        Label {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            text: modelData.name
-                                            font.pixelSize: 10
-                                            font.weight: (noteWindow.noteTint === modelData.key) ? Font.Bold : Font.Normal
-                                            color: (noteWindow.noteTint === modelData.key) ? theme.textPrimary : theme.textSecondary
+                                        MouseArea {
+                                            id: cpArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                noteWindow.noteTint = modelData.key
+                                                backend.setNoteColor(modelData.key)
+                                                noteWindow.persist(true)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // --- 2. EXTENDED PALETTE & CUSTOM COLOR PICKER ---
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Label {
+                                text: qsTr("CUSTOM COLOR & EXTENDED PALETTE")
+                                font.pixelSize: 11
+                                font.weight: Font.Bold
+                                color: theme.textSecondary
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: 12
+                                color: theme.surfaceElevated
+                                border.width: 1
+                                border.color: theme.border
+                                implicitHeight: customColLayout.implicitHeight + 24
+
+                                ColumnLayout {
+                                    id: customColLayout
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 12
+
+                                    // 12 Curated Pastel & Accent Swatches
+                                    GridLayout {
+                                        Layout.fillWidth: true
+                                        columns: 6
+                                        rowSpacing: 8
+                                        columnSpacing: 8
+
+                                        Repeater {
+                                            model: [
+                                                "#f43f5e", "#f97316", "#eab308", "#84cc16", "#10b981", "#06b6d4",
+                                                "#3b82f6", "#6366f1", "#8b5cf6", "#d946ef", "#64748b", "#334155"
+                                            ]
+
+                                            delegate: Rectangle {
+                                                required property string modelData
+                                                Layout.fillWidth: true
+                                                height: 32
+                                                radius: 8
+                                                color: modelData
+                                                border.width: (noteWindow.noteTint.toLowerCase() === modelData.toLowerCase()) ? 2 : 1
+                                                border.color: (noteWindow.noteTint.toLowerCase() === modelData.toLowerCase()) ? "#ffffff" : Qt.darker(modelData, 1.3)
+
+                                                UI.AppIcon {
+                                                    anchors.centerIn: parent
+                                                    name: "check"
+                                                    size: 14
+                                                    color: "#ffffff"
+                                                    strokeWidth: 2.5
+                                                    visible: noteWindow.noteTint.toLowerCase() === modelData.toLowerCase()
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        noteWindow.noteTint = modelData
+                                                        backend.setNoteColor(modelData)
+                                                        hexField.text = modelData
+                                                        noteWindow.persist(true)
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
 
-                                    MouseArea {
-                                        id: colorArea
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            noteWindow.noteTint = modelData.key
-                                            backend.setNoteColor(modelData.key)
-                                            noteWindow.persist(true)
+                                    // Custom Hex Color Input Row
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 10
+
+                                        Rectangle {
+                                            width: 32
+                                            height: 32
+                                            radius: 16
+                                            color: (noteWindow.noteTint.startsWith("#")) ? noteWindow.noteTint : "#eab308"
+                                            border.width: 1
+                                            border.color: theme.border
+                                        }
+
+                                        TextField {
+                                            id: hexField
+                                            Layout.fillWidth: true
+                                            placeholderText: "#RRGGBB (e.g. #8B5CF6)"
+                                            text: noteWindow.noteTint.startsWith("#") ? noteWindow.noteTint : ""
+                                            font.pixelSize: 12
+                                            color: theme.textPrimary
+                                            placeholderTextColor: theme.textSecondary
+                                            selectByMouse: true
+                                            background: Rectangle {
+                                                color: theme.surface
+                                                border.width: hexField.activeFocus ? 1.5 : 1
+                                                border.color: hexField.activeFocus ? theme.accent : theme.border
+                                                radius: 8
+                                            }
+                                            onTextChanged: {
+                                                var val = text.trim()
+                                                if (!val.startsWith("#") && val.length > 0) val = "#" + val
+                                                if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                                                    noteWindow.noteTint = val
+                                                    backend.setNoteColor(val)
+                                                    noteWindow.persist(true)
+                                                }
+                                            }
+                                        }
+
+                                        UI.StyledButton {
+                                            text: qsTr("Apply")
+                                            theme: modalRoot.theme
+                                            variant: "accent"
+                                            implicitHeight: 32
+                                            onClicked: {
+                                                var val = hexField.text.trim()
+                                                if (!val.startsWith("#") && val.length > 0) val = "#" + val
+                                                if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                                                    noteWindow.noteTint = val
+                                                    backend.setNoteColor(val)
+                                                    noteWindow.persist(true)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // --- 3. TYPOGRAPHY (FONT FAMILY & FONT SIZE) ---
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Label {
+                                text: qsTr("TYPOGRAPHY (FONT & SIZE)")
+                                font.pixelSize: 11
+                                font.weight: Font.Bold
+                                color: theme.textSecondary
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: 12
+                                color: theme.surfaceElevated
+                                border.width: 1
+                                border.color: theme.border
+                                implicitHeight: typoLayout.implicitHeight + 24
+
+                                ColumnLayout {
+                                    id: typoLayout
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 12
+
+                                    // Font Family Selector Cards
+                                    Label {
+                                        text: qsTr("Font Family")
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                        color: theme.textSecondary
+                                    }
+
+                                    GridLayout {
+                                        Layout.fillWidth: true
+                                        columns: 2
+                                        rowSpacing: 8
+                                        columnSpacing: 8
+
+                                        Repeater {
+                                            model: [
+                                                { name: qsTr("System (Default)"), family: "default", fontSample: "Sans" },
+                                                { name: qsTr("Sans-Serif (Inter)"), family: "Inter", fontSample: "Inter" },
+                                                { name: qsTr("Monospace (Code)"),  family: "Monospace", fontSample: "Monospace" },
+                                                { name: qsTr("Serif (Classic)"),    family: "Serif", fontSample: "Serif" }
+                                            ]
+
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                height: 38
+                                                radius: 8
+                                                color: ffArea.hovered ? theme.surfaceHover : theme.surface
+                                                border.width: (noteWindow.noteFontFamily === modelData.family) ? 2 : 1
+                                                border.color: (noteWindow.noteFontFamily === modelData.family) ? theme.accent : theme.border
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 8
+                                                    spacing: 6
+
+                                                    Label {
+                                                        text: modelData.name
+                                                        font.family: (modelData.family === "default") ? "" : modelData.family
+                                                        font.pixelSize: 11
+                                                        font.weight: (noteWindow.noteFontFamily === modelData.family) ? Font.Bold : Font.Normal
+                                                        color: (noteWindow.noteFontFamily === modelData.family) ? theme.textPrimary : theme.textSecondary
+                                                        Layout.fillWidth: true
+                                                    }
+
+                                                    UI.AppIcon {
+                                                        name: "check"
+                                                        size: 13
+                                                        color: theme.accent
+                                                        strokeWidth: 2.4
+                                                        visible: noteWindow.noteFontFamily === modelData.family
+                                                    }
+                                                }
+
+                                                MouseArea {
+                                                    id: ffArea
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        noteWindow.noteFontFamily = modelData.family
+                                                        backend.setNoteFontFamily(modelData.family)
+                                                        noteWindow.persist(true)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Font Size Stepper & Slider
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 10
+
+                                        Label {
+                                            text: qsTr("Font Size:")
+                                            font.pixelSize: 12
+                                            font.weight: Font.DemiBold
+                                            color: theme.textPrimary
+                                        }
+
+                                        UI.StyledButton {
+                                            iconName: "minus"
+                                            iconSize: 13
+                                            theme: modalRoot.theme
+                                            variant: "ghost"
+                                            implicitWidth: 28
+                                            implicitHeight: 28
+                                            padding: 0
+                                            onClicked: {
+                                                if (noteWindow.noteFontSize > 11) {
+                                                    noteWindow.noteFontSize -= 1
+                                                    backend.setNoteFontSize(noteWindow.noteFontSize)
+                                                    noteWindow.persist(true)
+                                                }
+                                            }
+                                        }
+
+                                        Slider {
+                                            id: sizeSlider
+                                            Layout.fillWidth: true
+                                            from: 11
+                                            to: 22
+                                            stepSize: 1
+                                            value: noteWindow.noteFontSize > 0 ? noteWindow.noteFontSize : 13
+                                            onMoved: {
+                                                noteWindow.noteFontSize = Math.round(value)
+                                                backend.setNoteFontSize(noteWindow.noteFontSize)
+                                                noteWindow.persist(true)
+                                            }
+                                        }
+
+                                        UI.StyledButton {
+                                            iconName: "plus"
+                                            iconSize: 13
+                                            theme: modalRoot.theme
+                                            variant: "ghost"
+                                            implicitWidth: 28
+                                            implicitHeight: 28
+                                            padding: 0
+                                            onClicked: {
+                                                if (noteWindow.noteFontSize < 22) {
+                                                    noteWindow.noteFontSize += 1
+                                                    backend.setNoteFontSize(noteWindow.noteFontSize)
+                                                    noteWindow.persist(true)
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            width: 42
+                                            height: 26
+                                            radius: 6
+                                            color: theme.surface
+                                            border.width: 1
+                                            border.color: theme.border
+                                            Label {
+                                                anchors.centerIn: parent
+                                                text: (noteWindow.noteFontSize > 0 ? noteWindow.noteFontSize : 13) + "px"
+                                                font.pixelSize: 11
+                                                font.weight: Font.Bold
+                                                color: theme.textPrimary
+                                            }
+                                        }
+                                    }
+
+                                    // Live Typography Preview Box
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 52
+                                        radius: 8
+                                        color: noteWindow.activeBg
+                                        border.width: 1
+                                        border.color: noteWindow.activeBorder
+
+                                        Label {
+                                            anchors.centerIn: parent
+                                            width: parent.width - 24
+                                            text: qsTr("The quick brown fox jumps over the lazy dog.")
+                                            font.family: (noteWindow.noteFontFamily === "default" || noteWindow.noteFontFamily === "") ? "" : noteWindow.noteFontFamily
+                                            font.pixelSize: noteWindow.noteFontSize > 0 ? noteWindow.noteFontSize : 13
+                                            color: theme.noteText
+                                            elide: Text.ElideRight
+                                            horizontalAlignment: Text.AlignHCenter
                                         }
                                     }
                                 }
@@ -238,13 +706,16 @@ Window {
                         }
                     }
 
-                    // SECTION 2: Window Behavior
+                    // ==========================================
+                    // TAB 1: WINDOW BEHAVIOR
+                    // ==========================================
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 12
+                        visible: modalRoot.currentTab === 1
 
                         Label {
-                            text: qsTr("WINDOW & DESKTOP BEHAVIOR")
+                            text: qsTr("WINDOW BEHAVIOR")
                             font.pixelSize: 11
                             font.weight: Font.Bold
                             color: theme.textSecondary
@@ -253,22 +724,21 @@ Window {
                         // Always on Top Card
                         Rectangle {
                             Layout.fillWidth: true
-                            height: 52
-                            radius: theme.radiusMd
+                            height: 58
+                            radius: 12
                             color: topHover.hovered ? theme.surfaceHover : theme.surfaceElevated
                             border.width: 1
                             border.color: noteWindow.alwaysOnTop ? theme.accent : theme.border
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
+                                anchors.margins: 12
                                 spacing: 12
 
                                 Rectangle {
                                     width: 32
                                     height: 32
-                                    radius: theme.radiusSm
+                                    radius: 8
                                     color: noteWindow.alwaysOnTop ? theme.accentSubtle : theme.surface
                                     UI.AppIcon {
                                         anchors.centerIn: parent
@@ -279,7 +749,7 @@ Window {
                                 }
 
                                 ColumnLayout {
-                                    spacing: 1
+                                    spacing: 2
                                     Layout.fillWidth: true
                                     Label {
                                         text: qsTr("Always on Top")
@@ -294,20 +764,11 @@ Window {
                                     }
                                 }
 
-                                // Interactive toggle switch
-                                Rectangle {
-                                    width: 36
-                                    height: 20
-                                    radius: 10
-                                    color: noteWindow.alwaysOnTop ? theme.accent : theme.border
-                                    Rectangle {
-                                        x: noteWindow.alwaysOnTop ? 18 : 2
-                                        y: 2
-                                        width: 16
-                                        height: 16
-                                        radius: 8
-                                        color: "#ffffff"
-                                        Behavior on x { NumberAnimation { duration: 150 } }
+                                Switch {
+                                    checked: noteWindow.alwaysOnTop
+                                    onToggled: {
+                                        noteWindow.alwaysOnTop = checked
+                                        noteWindow.persist(true)
                                     }
                                 }
                             }
@@ -317,40 +778,42 @@ Window {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: noteWindow.alwaysOnTop = !noteWindow.alwaysOnTop
+                                onClicked: {
+                                    noteWindow.alwaysOnTop = !noteWindow.alwaysOnTop
+                                    noteWindow.persist(true)
+                                }
                             }
                         }
 
                         // Compact Mode Card
                         Rectangle {
                             Layout.fillWidth: true
-                            height: 52
-                            radius: theme.radiusMd
-                            color: collapseHover.hovered ? theme.surfaceHover : theme.surfaceElevated
+                            height: 58
+                            radius: 12
+                            color: colHover.hovered ? theme.surfaceHover : theme.surfaceElevated
                             border.width: 1
                             border.color: noteWindow.collapsed ? theme.accent : theme.border
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
+                                anchors.margins: 12
                                 spacing: 12
 
                                 Rectangle {
                                     width: 32
                                     height: 32
-                                    radius: theme.radiusSm
+                                    radius: 8
                                     color: noteWindow.collapsed ? theme.accentSubtle : theme.surface
                                     UI.AppIcon {
                                         anchors.centerIn: parent
-                                        name: noteWindow.collapsed ? "chevron-up" : "chevron-down"
+                                        name: noteWindow.collapsed ? "chevron-down" : "chevron-up"
                                         size: 16
                                         color: noteWindow.collapsed ? theme.accent : theme.textSecondary
                                     }
                                 }
 
                                 ColumnLayout {
-                                    spacing: 1
+                                    spacing: 2
                                     Layout.fillWidth: true
                                     Label {
                                         text: qsTr("Compact Header Mode")
@@ -359,161 +822,214 @@ Window {
                                         color: theme.textPrimary
                                     }
                                     Label {
-                                        text: noteWindow.collapsed ? qsTr("Collapsed to title bar only") : qsTr("Full note editor visible")
+                                        text: noteWindow.collapsed ? qsTr("Note is collapsed to a minimal titlebar") : qsTr("Full note editor is visible")
                                         font.pixelSize: 10
                                         color: theme.textSecondary
                                     }
                                 }
 
-                                Rectangle {
-                                    width: 36
-                                    height: 20
-                                    radius: 10
-                                    color: noteWindow.collapsed ? theme.accent : theme.border
-                                    Rectangle {
-                                        x: noteWindow.collapsed ? 18 : 2
-                                        y: 2
-                                        width: 16
-                                        height: 16
-                                        radius: 8
-                                        color: "#ffffff"
-                                        Behavior on x { NumberAnimation { duration: 150 } }
-                                    }
+                                Switch {
+                                    checked: noteWindow.collapsed
+                                    onToggled: noteWindow.toggleCollapsed()
                                 }
                             }
 
                             MouseArea {
-                                id: collapseHover
+                                id: colHover
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: noteWindow.toggleCollapsed()
                             }
                         }
+
+                        // Window Info Card
+                        Rectangle {
+                            Layout.fillWidth: true
+                            radius: 12
+                            color: theme.surfaceElevated
+                            border.width: 1
+                            border.color: theme.border
+                            implicitHeight: winInfoLayout.implicitHeight + 24
+
+                            ColumnLayout {
+                                id: winInfoLayout
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 8
+
+                                Label {
+                                    text: qsTr("Window Metrics")
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    color: theme.textSecondary
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Label { text: qsTr("Size:"); font.pixelSize: 11; color: theme.textSecondary }
+                                    Label { text: Math.round(noteWindow.width) + " × " + Math.round(noteWindow.height) + " px"; font.pixelSize: 11; font.weight: Font.Bold; color: theme.textPrimary }
+                                    Item { Layout.fillWidth: true }
+                                    Label { text: qsTr("Position:"); font.pixelSize: 11; color: theme.textSecondary }
+                                    Label { text: "(" + Math.round(noteWindow.x) + ", " + Math.round(noteWindow.y) + ")"; font.pixelSize: 11; font.weight: Font.Bold; color: theme.textPrimary }
+                                }
+                            }
+                        }
                     }
 
-                    // SECTION 3: Quick Actions
+                    // ==========================================
+                    // TAB 2: ACTIONS & METRICS
+                    // ==========================================
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 12
+                        visible: modalRoot.currentTab === 2
 
                         Label {
-                            text: qsTr("ACTIONS")
+                            text: qsTr("NOTE STATISTICS")
                             font.pixelSize: 11
                             font.weight: Font.Bold
                             color: theme.textSecondary
                         }
 
-                        RowLayout {
+                        Rectangle {
                             Layout.fillWidth: true
-                            spacing: 8
+                            radius: 12
+                            color: theme.surfaceElevated
+                            border.width: 1
+                            border.color: theme.border
+                            implicitHeight: statsLayout.implicitHeight + 24
 
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 44
-                                radius: theme.radiusMd
-                                color: copyCardArea.hovered ? theme.surfaceHover : theme.surfaceElevated
-                                border.width: 1
-                                border.color: theme.border
+                            RowLayout {
+                                id: statsLayout
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 12
 
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 10
-                                    spacing: 8
-                                    UI.AppIcon { name: "copy"; size: 16; color: theme.accent }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Label { text: qsTr("Characters"); font.pixelSize: 10; color: theme.textSecondary }
                                     Label {
-                                        text: qsTr("Copy Text")
-                                        font.pixelSize: 11
-                                        font.weight: Font.DemiBold
+                                        text: (backend.draftContent ? backend.draftContent.length : 0).toString()
+                                        font.pixelSize: 16
+                                        font.weight: Font.Bold
                                         color: theme.textPrimary
                                     }
                                 }
 
-                                MouseArea {
-                                    id: copyCardArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        backend.copyToClipboard(backend.draftContent)
-                                        backend.sendNotification(qsTr("Copied to clipboard"), backend.draftTitle || qsTr("Note content copied"))
-                                    }
-                                }
-                            }
+                                Rectangle { width: 1; height: 32; color: theme.border }
 
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 44
-                                radius: theme.radiusMd
-                                color: libCardArea.hovered ? theme.surfaceHover : theme.surfaceElevated
-                                border.width: 1
-                                border.color: theme.border
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 10
-                                    spacing: 8
-                                    UI.AppIcon { name: "library"; size: 16; color: theme.accent }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Label { text: qsTr("Words"); font.pixelSize: 10; color: theme.textSecondary }
                                     Label {
-                                        text: qsTr("All Notes")
-                                        font.pixelSize: 11
-                                        font.weight: Font.DemiBold
+                                        text: {
+                                            var text = backend.draftContent ? backend.draftContent.trim() : ""
+                                            if (text.length === 0) return "0"
+                                            var words = text.split(/\s+/)
+                                            return words.length.toString()
+                                        }
+                                        font.pixelSize: 16
+                                        font.weight: Font.Bold
                                         color: theme.textPrimary
                                     }
                                 }
 
-                                MouseArea {
-                                    id: libCardArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        modalRoot.close()
-                                        noteWindow.libraryRequested()
-                                    }
-                                }
-                            }
+                                Rectangle { width: 1; height: 32; color: theme.border }
 
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 44
-                                radius: theme.radiusMd
-                                color: remindCardArea.hovered ? theme.surfaceHover : theme.surfaceElevated
-                                border.width: 1
-                                border.color: theme.border
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 10
-                                    spacing: 8
-                                    UI.AppIcon { name: "clock"; size: 16; color: theme.accent }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Label { text: qsTr("Tags"); font.pixelSize: 10; color: theme.textSecondary }
                                     Label {
-                                        text: qsTr("Remind +1h")
-                                        font.pixelSize: 11
-                                        font.weight: Font.DemiBold
+                                        text: (backend.tags ? backend.tags.length : 0).toString()
+                                        font.pixelSize: 16
+                                        font.weight: Font.Bold
                                         color: theme.textPrimary
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: remindCardArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        backend.setQuickReminder(3600)
-                                        backend.sendNotification(qsTr("Reminder Set"), qsTr("BetterNotes will remind you in 1 hour"))
                                     }
                                 }
                             }
                         }
-                    }
 
-                    // SECTION 4: Danger Zone
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
+                        Label {
+                            text: qsTr("QUICK ACTIONS")
+                            font.pixelSize: 11
+                            font.weight: Font.Bold
+                            color: theme.textSecondary
+                        }
 
+                        // Copy Note Content
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 44
+                            radius: 10
+                            color: copyHover.hovered ? theme.surfaceHover : theme.surfaceElevated
+                            border.width: 1
+                            border.color: theme.border
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 10
+
+                                UI.AppIcon { name: "copy"; size: 15; color: theme.accent }
+                                Label {
+                                    text: qsTr("Copy Note Content to Clipboard")
+                                    font.pixelSize: 12
+                                    color: theme.textPrimary
+                                    Layout.fillWidth: true
+                                }
+                            }
+
+                            MouseArea {
+                                id: copyHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    backend.copyToClipboard(backend.draftContent)
+                                }
+                            }
+                        }
+
+                        // Open in Library
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 44
+                            radius: 10
+                            color: libHover.hovered ? theme.surfaceHover : theme.surfaceElevated
+                            border.width: 1
+                            border.color: theme.border
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 10
+
+                                UI.AppIcon { name: "library"; size: 15; color: theme.accent }
+                                Label {
+                                    text: qsTr("Open in Main Library Window")
+                                    font.pixelSize: 12
+                                    color: theme.textPrimary
+                                    Layout.fillWidth: true
+                                }
+                            }
+
+                            MouseArea {
+                                id: libHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    modalRoot.close()
+                                    noteWindow.libraryRequested()
+                                }
+                            }
+                        }
+
+                        // Danger Zone: Delete
                         Label {
                             text: qsTr("DANGER ZONE")
                             font.pixelSize: 11
@@ -523,43 +1039,29 @@ Window {
 
                         Rectangle {
                             Layout.fillWidth: true
-                            height: 46
-                            radius: theme.radiusMd
-                            color: deleteCardArea.hovered ? theme.dangerHover : theme.dangerSubtle
+                            height: 44
+                            radius: 10
+                            color: delHover.hovered ? Qt.rgba(0.9, 0.2, 0.2, 0.15) : Qt.rgba(0.9, 0.2, 0.2, 0.08)
                             border.width: 1
-                            border.color: theme.danger
+                            border.color: Qt.rgba(0.9, 0.2, 0.2, 0.3)
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
+                                anchors.margins: 10
                                 spacing: 10
 
-                                UI.AppIcon {
-                                    name: "trash"
-                                    size: 16
-                                    color: deleteCardArea.hovered ? theme.dangerText : theme.danger
-                                }
-
-                                ColumnLayout {
-                                    spacing: 0
+                                UI.AppIcon { name: "trash"; size: 15; color: theme.danger }
+                                Label {
+                                    text: qsTr("Delete Note Permanently")
+                                    font.pixelSize: 12
+                                    font.weight: Font.DemiBold
+                                    color: theme.danger
                                     Layout.fillWidth: true
-                                    Label {
-                                        text: qsTr("Delete Note")
-                                        font.pixelSize: 11
-                                        font.weight: Font.Bold
-                                        color: deleteCardArea.hovered ? theme.dangerText : theme.danger
-                                    }
-                                    Label {
-                                        text: qsTr("Permanently delete this note and close its window")
-                                        font.pixelSize: 9
-                                        color: deleteCardArea.hovered ? theme.dangerText : theme.textSecondary
-                                    }
                                 }
                             }
 
                             MouseArea {
-                                id: deleteCardArea
+                                id: delHover
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
@@ -571,56 +1073,7 @@ Window {
                         }
                     }
 
-                    Item { height: 6 }
-                }
-            }
-
-            // Footer Bar
-            Rectangle {
-                Layout.fillWidth: true
-                height: 48
-                color: theme.surfaceElevated
-                radius: theme.radiusLg
-
-                Rectangle {
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: theme.radiusLg
-                    color: parent.color
-                }
-
-                Rectangle {
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: 1
-                    color: theme.border
-                }
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    spacing: 12
-
-                    Label {
-                        Layout.fillWidth: true
-                        property int wordCount: backend.draftContent.trim().length ? backend.draftContent.trim().split(/\s+/).length : 0
-                        property int charCount: backend.draftContent.length
-                        text: wordCount + " " + qsTr("words") + " • " + charCount + " " + qsTr("characters")
-                        font.pixelSize: 11
-                        color: theme.textSecondary
-                    }
-
-                    UI.StyledButton {
-                        text: qsTr("Done")
-                        variant: "accent"
-                        theme: modalRoot.theme
-                        implicitWidth: 80
-                        implicitHeight: 32
-                        onClicked: modalRoot.close()
-                    }
+                    Item { height: 10 }
                 }
             }
         }

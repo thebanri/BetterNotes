@@ -84,3 +84,32 @@ fn theme_preference_parsing_and_formatting() {
     assert_eq!(ThemePreference::Light.as_str(), "light");
     assert_eq!(ThemePreference::Dark.as_str(), "dark");
 }
+
+#[test]
+fn session_manages_note_appearance() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("notes.sqlite3");
+    let mut session = NotesSession::open(&path).unwrap();
+    session.create().unwrap();
+
+    // Default note appearance
+    assert_eq!(session.note_color(), "yellow");
+    assert_eq!(session.note_font_family(), "default");
+    assert_eq!(session.note_font_size(), 13);
+
+    // Update appearance
+    session.set_note_color("#8B5CF6").unwrap();
+    session.set_note_font_family("Monospace").unwrap();
+    session.set_note_font_size(16).unwrap();
+
+    assert_eq!(session.note_color(), "#8B5CF6");
+    assert_eq!(session.note_font_family(), "Monospace");
+    assert_eq!(session.note_font_size(), 16);
+
+    drop(session);
+
+    let reopened = NotesSession::open(&path).unwrap();
+    assert_eq!(reopened.note_color(), "#8B5CF6");
+    assert_eq!(reopened.note_font_family(), "Monospace");
+    assert_eq!(reopened.note_font_size(), 16);
+}

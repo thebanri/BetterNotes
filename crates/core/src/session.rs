@@ -327,4 +327,58 @@ impl NotesSession {
             Ok(())
         }
     }
+
+    pub fn note_font_family(&self) -> String {
+        if let Some(note) = &self.current {
+            self.store
+                .get_setting(&format!("note_font_family_{}", note.id))
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "default".to_string())
+        } else {
+            "default".to_string()
+        }
+    }
+
+    pub fn set_note_font_family(&self, font_family: &str) -> Result<()> {
+        if let Some(note) = &self.current {
+            self.store
+                .set_setting(&format!("note_font_family_{}", note.id), font_family)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn note_font_size(&self) -> i32 {
+        if let Some(note) = &self.current {
+            self.store
+                .get_setting(&format!("note_font_size_{}", note.id))
+                .ok()
+                .flatten()
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(13)
+        } else {
+            13
+        }
+    }
+
+    pub fn set_note_font_size(&self, font_size: i32) -> Result<()> {
+        if let Some(note) = &self.current {
+            self.store.set_setting(
+                &format!("note_font_size_{}", note.id),
+                &font_size.to_string(),
+            )
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn add_attachment_file(&self, source_path: &Path) -> Result<crate::Attachment> {
+        let note = self.current.as_ref().ok_or(Error::NoSelection)?;
+        let data_dir = crate::paths::data_directory(
+            std::env::var_os("XDG_DATA_HOME").as_deref(),
+            std::env::var_os("HOME").as_deref(),
+        )?;
+        self.add_attachment(&data_dir, note.id, source_path)
+    }
 }
