@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import QtQuick.Templates as T
 import "../themes"
 
@@ -7,6 +8,16 @@ T.Button {
 
     property string variant: "default"
     property Theme theme: null
+    property string iconName: ""
+    property real iconSize: 16
+    property real iconStrokeWidth: 2.0
+    property color iconColor: {
+        if (!control.theme) return control.palette.buttonText
+        if (control.variant === "accent") return control.theme.accentText
+        if (control.variant === "danger") return control.theme.dangerText
+        if (control.variant === "ghost") return control.hovered ? control.theme.textPrimary : control.theme.textSecondary
+        return control.theme.textPrimary
+    }
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
@@ -14,28 +25,43 @@ T.Button {
                              implicitContentHeight + topPadding + bottomPadding)
 
     padding: 6
-    leftPadding: 12
-    rightPadding: 12
+    leftPadding: (iconName.length > 0 && text.length === 0) ? 6 : 12
+    rightPadding: (iconName.length > 0 && text.length === 0) ? 6 : 12
     spacing: 6
 
-    contentItem: Text {
-        text: control.text
-        font: control.font
-        opacity: control.enabled ? 1.0 : 0.4
-        color: {
-            if (!control.theme) return control.palette.buttonText
-            if (control.variant === "accent") return control.theme.accentText
-            if (control.variant === "danger") return control.theme.dangerText
-            return control.theme.textPrimary
+    contentItem: RowLayout {
+        spacing: control.spacing
+        Item { Layout.fillWidth: true; visible: control.text.length > 0 }
+        AppIcon {
+            name: control.iconName
+            size: control.iconSize
+            color: control.iconColor
+            strokeWidth: control.iconStrokeWidth
+            visible: control.iconName.length > 0
+            Layout.alignment: Qt.AlignVCenter | Qt.AlignHCenter
         }
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
+        Text {
+            text: control.text
+            font: control.font
+            opacity: control.enabled ? 1.0 : 0.4
+            color: {
+                if (!control.theme) return control.palette.buttonText
+                if (control.variant === "accent") return control.theme.accentText
+                if (control.variant === "danger") return control.theme.dangerText
+                return control.theme.textPrimary
+            }
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            visible: control.text.length > 0
+            Layout.alignment: Qt.AlignVCenter
+        }
+        Item { Layout.fillWidth: true; visible: control.text.length > 0 }
     }
 
     background: Rectangle {
-        implicitWidth: 72
-        implicitHeight: 32
+        implicitWidth: (control.iconName.length > 0 && control.text.length === 0) ? 28 : 72
+        implicitHeight: (control.iconName.length > 0 && control.text.length === 0) ? 28 : 32
         radius: control.theme ? control.theme.radiusSm : 4
         opacity: control.enabled ? 1.0 : 0.5
         border.width: (control.variant === "ghost") ? 0 : 1

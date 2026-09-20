@@ -178,6 +178,7 @@ ApplicationWindow {
     }
 
     function deleteConfirmed() {
+        settingsModal.close()
         if (!backend.deleteNote()) return false
         retiring = true
         saved()
@@ -191,6 +192,7 @@ ApplicationWindow {
     onHeightChanged: captureGeometry()
     onScreenChanged: captureGeometry()
     onClosing: function(close) {
+        settingsModal.close()
         if (!retiring && (!flush() || !persist(false))) {
             close.accepted = false
             return
@@ -248,25 +250,28 @@ ApplicationWindow {
             z: 1
 
             UI.StyledButton {
-                text: "＋"
+                iconName: "plus"
+                iconSize: 14
                 theme: noteWindow.theme
                 variant: "ghost"
-                implicitHeight: 26
-                implicitWidth: 26
+                implicitHeight: 28
+                implicitWidth: 28
                 padding: 0
-                font.pixelSize: 14
-                font.weight: Font.Bold
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("New Note")
                 onClicked: noteWindow.newNoteRequested()
             }
 
             UI.StyledButton {
-                text: noteWindow.collapsed ? "▼" : "▲"
+                iconName: noteWindow.collapsed ? "chevron-down" : "chevron-up"
+                iconSize: 14
                 theme: noteWindow.theme
                 variant: "ghost"
-                implicitHeight: 26
-                implicitWidth: 26
+                implicitHeight: 28
+                implicitWidth: 28
                 padding: 0
-                font.pixelSize: 10
+                ToolTip.visible: hovered
+                ToolTip.text: noteWindow.collapsed ? qsTr("Expand Note") : qsTr("Collapse Note")
                 onClicked: noteWindow.toggleCollapsed()
             }
 
@@ -293,521 +298,62 @@ ApplicationWindow {
 
             UI.StyledButton {
                 id: pinBtn
+                iconName: "pin"
+                iconSize: 15
                 theme: noteWindow.theme
                 variant: noteWindow.alwaysOnTop ? "accent" : "ghost"
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
                 ToolTip.visible: hovered
-                ToolTip.text: noteWindow.alwaysOnTop ? qsTr("Always on Top (Active)") : qsTr("On Desktop (Always on Bottom)")
-                ToolTip.delay: 400
+                ToolTip.text: noteWindow.alwaysOnTop ? qsTr("Always on Top (Active) — Click to stay on Desktop") : qsTr("On Desktop (Always on Bottom) — Click to Pin on Top")
+                ToolTip.delay: 300
                 onClicked: {
                     noteWindow.alwaysOnTop = !noteWindow.alwaysOnTop
-                }
-
-                contentItem: Canvas {
-                    id: pinCanvas
-                    anchors.centerIn: parent
-                    width: 16
-                    height: 16
-                    renderTarget: Canvas.FramebufferObject
-                    property color iconColor: noteWindow.alwaysOnTop ? theme.accentText : (pinBtn.hovered ? theme.textPrimary : theme.textSecondary)
-                    property bool active: noteWindow.alwaysOnTop
-
-                    onIconColorChanged: requestPaint()
-                    onActiveChanged: requestPaint()
-                    Connections {
-                        target: noteWindow
-                        function onAlwaysOnTopChanged() { pinCanvas.requestPaint() }
-                    }
-
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.reset()
-                        ctx.fillStyle = iconColor
-                        ctx.strokeStyle = iconColor
-                        ctx.lineWidth = 1.6
-                        ctx.lineCap = "round"
-                        ctx.lineJoin = "round"
-
-                        // Top bar
-                        ctx.beginPath()
-                        ctx.moveTo(4, 3)
-                        ctx.lineTo(12, 3)
-                        ctx.stroke()
-
-                        // Pin head
-                        ctx.beginPath()
-                        ctx.moveTo(5, 3)
-                        ctx.lineTo(6, 8)
-                        ctx.lineTo(10, 8)
-                        ctx.lineTo(11, 3)
-                        ctx.closePath()
-                        if (active) ctx.fill()
-                        else ctx.stroke()
-
-                        // Ridge
-                        ctx.beginPath()
-                        ctx.moveTo(3, 8)
-                        ctx.lineTo(13, 8)
-                        ctx.stroke()
-
-                        // Needle
-                        ctx.beginPath()
-                        ctx.moveTo(8, 8)
-                        ctx.lineTo(8, 14)
-                        ctx.stroke()
-                    }
                 }
             }
 
             UI.StyledButton {
                 id: settingsBtn
+                iconName: "settings"
+                iconSize: 16
                 theme: noteWindow.theme
-                variant: noteSettingsPopup.visible ? "accent" : "ghost"
+                variant: settingsModal.visible ? "accent" : "ghost"
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered && !noteSettingsPopup.visible
+                ToolTip.visible: hovered && !settingsModal.visible
                 ToolTip.text: qsTr("Note Settings & Color")
-                ToolTip.delay: 400
+                ToolTip.delay: 300
                 onClicked: {
-                    if (noteWindow.collapsed) noteWindow.toggleCollapsed()
-                    if (noteSettingsPopup.visible) noteSettingsPopup.close()
-                    else noteSettingsPopup.open()
-                }
-
-                contentItem: Canvas {
-                    id: settingsCanvas
-                    anchors.centerIn: parent
-                    width: 18
-                    height: 18
-                    renderTarget: Canvas.FramebufferObject
-                    property color iconColor: noteSettingsPopup.visible ? theme.accentText : (settingsBtn.hovered ? theme.textPrimary : theme.textSecondary)
-
-                    onIconColorChanged: requestPaint()
-                    Connections {
-                        target: noteSettingsPopup
-                        function onVisibleChanged() { settingsCanvas.requestPaint() }
-                    }
-
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.reset()
-                        ctx.fillStyle = iconColor
-                        ctx.strokeStyle = iconColor
-                        ctx.lineWidth = 2.0
-                        ctx.lineCap = "round"
-
-                        // Top slider track + knob
-                        ctx.beginPath()
-                        ctx.moveTo(2, 5.5)
-                        ctx.lineTo(16, 5.5)
-                        ctx.stroke()
-                        ctx.beginPath()
-                        ctx.arc(6, 5.5, 3.0, 0, 2 * Math.PI)
-                        ctx.fill()
-
-                        // Bottom slider track + knob
-                        ctx.beginPath()
-                        ctx.moveTo(2, 12.5)
-                        ctx.lineTo(16, 12.5)
-                        ctx.stroke()
-                        ctx.beginPath()
-                        ctx.arc(12, 12.5, 3.0, 0, 2 * Math.PI)
-                        ctx.fill()
-                    }
+                    settingsModal.openCentered(noteWindow)
                 }
             }
 
             UI.StyledButton {
-                text: "✕"
+                iconName: "x"
+                iconSize: 14
                 theme: noteWindow.theme
                 variant: "ghost"
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                font.pixelSize: 12
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Close Note")
                 onClicked: noteWindow.close()
             }
         }
     }
 
-    Popup {
-        id: noteSettingsPopup
-        parent: noteWindow.contentItem
-        x: Math.max(8, noteWindow.width - width - 8)
-        y: 38
-        width: Math.min(270, noteWindow.width - 16)
-        height: Math.min(contentCol.implicitHeight + 20, Math.max(120, noteWindow.height - 46))
-        padding: 10
-        modal: false
-        focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent | Popup.CloseOnPressOutside
+    function requestDeleteNote() {
+        showDialog(deleteDialog)
+    }
 
-        background: Rectangle {
-            color: theme.surface
-            radius: theme.radiusMd
-            border.width: 1
-            border.color: theme.border
-        }
-
-        contentItem: ScrollView {
-            id: popupScroll
-            anchors.fill: parent
-            clip: true
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-            ScrollBar.vertical.policy: ScrollBar.AsNeeded
-            contentWidth: availableWidth
-
-            ColumnLayout {
-                id: contentCol
-                width: popupScroll.availableWidth
-                spacing: 10
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Label {
-                        text: qsTr("Note Settings")
-                        font.pixelSize: 13
-                        font.weight: Font.Bold
-                        color: theme.textPrimary
-                        Layout.fillWidth: true
-                    }
-                    Label {
-                        text: "✕"
-                        font.pixelSize: 12
-                        font.weight: Font.Bold
-                        color: closeHover.hovered ? theme.textPrimary : theme.textSecondary
-                        MouseArea {
-                            id: closeHover
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: noteSettingsPopup.close()
-                        }
-                    }
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
-
-                    Label {
-                        text: qsTr("Color Theme")
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
-                        color: theme.textSecondary
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        Repeater {
-                            model: [
-                                { key: "yellow", name: qsTr("Yellow"), color: "#eab308" },
-                                { key: "green",  name: qsTr("Green"),  color: "#22c55e" },
-                                { key: "pink",   name: qsTr("Pink"),   color: "#ec4899" },
-                                { key: "blue",   name: qsTr("Blue"),   color: "#0ea5e9" },
-                                { key: "purple", name: qsTr("Purple"), color: "#a855f7" }
-                            ]
-                            delegate: Rectangle {
-                                required property var modelData
-                                width: 32
-                                height: 32
-                                radius: 16
-                                color: modelData.color
-                                border.width: noteWindow.noteTint === modelData.key ? 3 : 1
-                                border.color: noteWindow.noteTint === modelData.key ? theme.textPrimary : (theme.isDark ? "#444" : "#ddd")
-                                scale: swatchHover.hovered ? 1.15 : 1.0
-                                Behavior on scale { NumberAnimation { duration: 100 } }
-
-                                Label {
-                                    anchors.centerIn: parent
-                                    text: "✓"
-                                    font.pixelSize: 14
-                                    font.weight: Font.Bold
-                                    color: modelData.key === "yellow" ? "#1e293b" : "#ffffff"
-                                    visible: noteWindow.noteTint === modelData.key
-                                }
-
-                                MouseArea {
-                                    id: swatchHover
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        noteWindow.noteTint = modelData.key
-                                        backend.setNoteColor(modelData.key)
-                                        autosave.restart()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: theme.border
-                }
-
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: 2
-                    columnSpacing: 8
-                    rowSpacing: 8
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 38
-                        radius: theme.radiusSm
-                        color: aotHover.hovered ? theme.surfaceHover : theme.surface
-                        border.width: 1
-                        border.color: noteWindow.alwaysOnTop ? theme.accent : theme.border
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 6
-                            spacing: 6
-                            Label { text: "📍"; font.pixelSize: 13 }
-                            ColumnLayout {
-                                spacing: 0
-                                Layout.fillWidth: true
-                                Label {
-                                    text: qsTr("Layer")
-                                    font.pixelSize: 10
-                                    color: theme.textSecondary
-                                }
-                                Label {
-                                    text: noteWindow.alwaysOnTop ? qsTr("On Top") : qsTr("On Desktop")
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    color: noteWindow.alwaysOnTop ? theme.accent : theme.textPrimary
-                                }
-                            }
-                        }
-                        MouseArea {
-                            id: aotHover
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: noteWindow.alwaysOnTop = !noteWindow.alwaysOnTop
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 38
-                        radius: theme.radiusSm
-                        color: pinFavHover.hovered ? theme.surfaceHover : theme.surface
-                        border.width: 1
-                        border.color: backend.isPinned ? theme.accent : theme.border
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 6
-                            spacing: 6
-                            Label { text: "📌"; font.pixelSize: 13 }
-                            ColumnLayout {
-                                spacing: 0
-                                Layout.fillWidth: true
-                                Label {
-                                    text: qsTr("Favorites")
-                                    font.pixelSize: 10
-                                    color: theme.textSecondary
-                                }
-                                Label {
-                                    text: backend.isPinned ? qsTr("Pinned") : qsTr("Unpinned")
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    color: backend.isPinned ? theme.accent : theme.textPrimary
-                                }
-                            }
-                        }
-                        MouseArea {
-                            id: pinFavHover
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                backend.setPinned(!backend.isPinned)
-                                autosave.restart()
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 38
-                        radius: theme.radiusSm
-                        color: remCardHover.hovered ? theme.surfaceHover : theme.surface
-                        border.width: 1
-                        border.color: theme.border
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 6
-                            spacing: 6
-                            Label { text: "⏰"; font.pixelSize: 13 }
-                            ColumnLayout {
-                                spacing: 0
-                                Layout.fillWidth: true
-                                Label {
-                                    text: qsTr("Reminder")
-                                    font.pixelSize: 10
-                                    color: theme.textSecondary
-                                }
-                                Label {
-                                    text: qsTr("+1 Hour")
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    color: theme.textPrimary
-                                }
-                            }
-                        }
-                        MouseArea {
-                            id: remCardHover
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                const nowSec = Math.round(Date.now() / 1000)
-                                backend.setReminder(nowSec + 3600, "none")
-                                backend.sendNotification(qsTr("Reminder set"), qsTr("We will remind you in 1 hour."))
-                                noteSettingsPopup.close()
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 38
-                        radius: theme.radiusSm
-                        color: copyCardHover.hovered ? theme.surfaceHover : theme.surface
-                        border.width: 1
-                        border.color: theme.border
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 6
-                            spacing: 6
-                            Label { text: "📋"; font.pixelSize: 13 }
-                            ColumnLayout {
-                                spacing: 0
-                                Layout.fillWidth: true
-                                Label {
-                                    text: qsTr("Clipboard")
-                                    font.pixelSize: 10
-                                    color: theme.textSecondary
-                                }
-                                Label {
-                                    text: qsTr("Copy Text")
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    color: theme.textPrimary
-                                }
-                            }
-                        }
-                        MouseArea {
-                            id: copyCardHover
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                backend.copyToClipboard(backend.draftContent)
-                                backend.sendNotification(qsTr("Copied to clipboard"), backend.draftTitle || qsTr("Note content copied"))
-                                noteSettingsPopup.close()
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 38
-                        radius: theme.radiusSm
-                        color: libCardHover.hovered ? theme.surfaceHover : theme.surface
-                        border.width: 1
-                        border.color: theme.border
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 6
-                            spacing: 6
-                            Label { text: "📚"; font.pixelSize: 13 }
-                            ColumnLayout {
-                                spacing: 0
-                                Layout.fillWidth: true
-                                Label {
-                                    text: qsTr("All Notes")
-                                    font.pixelSize: 10
-                                    color: theme.textSecondary
-                                }
-                                Label {
-                                    text: qsTr("Library")
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    color: theme.textPrimary
-                                }
-                            }
-                        }
-                        MouseArea {
-                            id: libCardHover
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                noteSettingsPopup.close()
-                                noteWindow.libraryRequested()
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 38
-                        radius: theme.radiusSm
-                        color: delCardHover.hovered ? theme.dangerHover : theme.dangerSubtle
-                        border.width: 1
-                        border.color: theme.danger
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 6
-                            spacing: 6
-                            Label { text: "🗑️"; font.pixelSize: 13 }
-                            ColumnLayout {
-                                spacing: 0
-                                Layout.fillWidth: true
-                                Label {
-                                    text: qsTr("Delete")
-                                    font.pixelSize: 10
-                                    color: delCardHover.hovered ? theme.dangerText : theme.danger
-                                }
-                                Label {
-                                    text: qsTr("Remove")
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    color: delCardHover.hovered ? theme.dangerText : theme.danger
-                                }
-                            }
-                        }
-                        MouseArea {
-                            id: delCardHover
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                noteSettingsPopup.close()
-                                noteWindow.showDialog(deleteDialog)
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    StickyNoteSettingsModal {
+        id: settingsModal
+        noteWindow: noteWindow
+        backend: backend
+        theme: noteWindow.theme
     }
 
     ColumnLayout {

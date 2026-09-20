@@ -13,6 +13,7 @@ QtObject {
     // Core Canvas & Surface
     readonly property color windowBackground: isDark ? "#18181b" : "#f8fafc"
     readonly property color surface: isDark ? "#27272a" : "#ffffff"
+    readonly property color surfaceElevated: isDark ? "#202024" : "#f8fafc"
     readonly property color surfaceHover: isDark ? "#3f3f46" : "#f1f5f9"
     readonly property color surfaceActive: isDark ? "#52525b" : "#e2e8f0"
     readonly property color border: isDark ? "#3f3f46" : "#e2e8f0"
