@@ -233,6 +233,31 @@ ApplicationWindow {
         requestActivate()
     }
 
+    // Client-driven resize for the edges that keep the window's origin fixed.
+    //
+    // Handing the drag to the compositor with startSystemResize() smears stale
+    // frames across the desktop on Wayland/KWin: a quick drag leaves copies of
+    // every intermediate size behind. Setting width/height ourselves repaints
+    // cleanly. Each step is measured from the geometry and pointer position
+    // captured on press, never accumulated, so the window cannot drift or
+    // oscillate as the anchored handle moves underneath the pointer.
+    function beginEdgeResize(handle, mouse) {
+        handle.pressOrigin = handle.mapToGlobal(mouse.x, mouse.y)
+        handle.startWidth = width
+        handle.startHeight = height
+    }
+
+    function applyEdgeResize(handle, mouse, horizontal, vertical) {
+        const here = handle.mapToGlobal(mouse.x, mouse.y)
+        if (horizontal) {
+            width = Math.max(minimumWidth, handle.startWidth + (here.x - handle.pressOrigin.x))
+        }
+        if (vertical) {
+            height = Math.max(minimumHeight,
+                Math.min(maximumHeight, handle.startHeight + (here.y - handle.pressOrigin.y)))
+        }
+    }
+
     function captureGeometry() {
         if (!initialized || placing || retiring || visibility !== Window.Windowed) return
         expandedWidth = width
@@ -964,8 +989,27 @@ ApplicationWindow {
         Label { text: qsTr("Reload the saved note and discard this draft?"); wrapMode: Text.WordWrap; width: Math.min(300, noteWindow.width - 64) }
         onAccepted: backend.reloadNote()
     }
-    // Native system resize handles for frameless window
-    MouseArea {
+    // Right, bottom and bottom-right resize the window in place, so QML drives
+    // them. The left edges have to move the window as it grows, which a Wayland
+    // client cannot do for itself; those still ask the compositor and remain
+    // subject to its repaint behaviour.
+    component ResizeHandle: MouseArea {
+        id: handle
+        property point pressOrigin
+        property int startWidth
+        property int startHeight
+        property bool horizontal: false
+        property bool vertical: false
+        acceptedButtons: Qt.LeftButton
+        preventStealing: true
+        onPressed: function(mouse) { noteWindow.beginEdgeResize(handle, mouse) }
+        onPositionChanged: function(mouse) {
+            if (pressed) noteWindow.applyEdgeResize(handle, mouse, horizontal, vertical)
+        }
+        onReleased: noteWindow.persist(true)
+    }
+
+    ResizeHandle {
         id: rightResize
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -973,13 +1017,9 @@ ApplicationWindow {
         anchors.topMargin: 12
         anchors.bottomMargin: 16
         width: 8
+        horizontal: true
         cursorShape: Qt.SizeHorCursor
         z: 20
-        onPressed: function(mouse) {
-            if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.RightEdge)
-            }
-        }
     }
 
     MouseArea {
@@ -999,7 +1039,7 @@ ApplicationWindow {
         }
     }
 
-    MouseArea {
+    ResizeHandle {
         id: bottomResize
         anchors.left: parent.left
         anchors.right: parent.right
@@ -1007,30 +1047,24 @@ ApplicationWindow {
         anchors.leftMargin: 16
         anchors.rightMargin: 16
         height: 8
+        vertical: true
         cursorShape: Qt.SizeVerCursor
         z: 20
         enabled: !noteWindow.collapsed
-        onPressed: function(mouse) {
-            if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.BottomEdge)
-            }
-        }
     }
 
-    MouseArea {
+    ResizeHandle {
         id: bottomRightResize
+        objectName: "bottomRightResize"
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         width: 16
         height: 16
+        horizontal: true
+        vertical: true
         cursorShape: Qt.SizeFDiagCursor
         z: 21
         enabled: !noteWindow.collapsed
-        onPressed: function(mouse) {
-            if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
-            }
-        }
 
         Rectangle {
             anchors.right: parent.right

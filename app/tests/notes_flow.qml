@@ -80,6 +80,30 @@ Window {
         }
     }
 
+    // The bottom-right grip resizes the window in QML rather than handing the
+    // drag to the compositor. Each step must be measured from the press, so a
+    // pointer that returns to where it started must leave the original size.
+    function assertEdgeResize(window) {
+        const grip = findItem(window.contentItem, "bottomRightResize")
+        check(grip, "Missing resize grip")
+        const startWidth = window.width
+        const startHeight = window.height
+        const press = Qt.point(grip.width / 2, grip.height / 2)
+        window.beginEdgeResize(grip, {x: press.x, y: press.y})
+        window.applyEdgeResize(grip, {x: press.x + 60, y: press.y + 40}, true, true)
+        check(window.width === startWidth + 60, "Horizontal resize did not follow the pointer")
+        check(window.height === startHeight + 40, "Vertical resize did not follow the pointer")
+        // A second event at the same place must not move the window again.
+        window.applyEdgeResize(grip, {x: press.x + 60, y: press.y + 40}, true, true)
+        check(window.width === startWidth + 60 && window.height === startHeight + 40, "Resize accumulated instead of tracking the pointer")
+        window.applyEdgeResize(grip, {x: press.x, y: press.y}, true, true)
+        check(window.width === startWidth && window.height === startHeight, "Returning the pointer did not restore the size")
+        window.applyEdgeResize(grip, {x: press.x - 5000, y: press.y - 5000}, true, true)
+        check(window.width === window.minimumWidth && window.height === window.minimumHeight, "Resize ignored the minimum size")
+        window.width = startWidth
+        window.height = startHeight
+    }
+
     function clickTool(window, name) {
         const button = findItem(window.contentItem, name)
         check(button && button.enabled, "Formatting button unavailable: " + name)
@@ -250,6 +274,7 @@ Window {
                 harness.check(harness.first.transientParent === null && harness.second.transientParent === null, "Notes are transient windows")
                 harness.check(harness.library.openNote(harness.firstId) === harness.first, "Duplicate editor created")
                 harness.assertShowAllNotes(harness.library, [harness.firstId, harness.secondId])
+                harness.assertEdgeResize(harness.second)
                 harness.edit(harness.first, "Autosaved title", "Plain <b>text</b>\nİstanbul 🦀")
                 harness.edit(harness.second, "Second", "Independent draft")
                 harness.first.width = 420
