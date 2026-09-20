@@ -64,8 +64,9 @@ ApplicationWindow {
     readonly property color activeBorder: tintPalettes[noteTint] ? tintPalettes[noteTint].border : theme.noteBorder
 
     // QObject ownership belongs to the library; these remain independent windows.
+    // Qt.Tool ensures desktop sticky notes act as utility widgets and do not appear as separate application windows in the taskbar/dock.
     transientParent: null
-    flags: Qt.Window | Qt.FramelessWindowHint | (alwaysOnTop ? Qt.WindowStaysOnTopHint : 0)
+    flags: Qt.Tool | Qt.FramelessWindowHint | (alwaysOnTop ? Qt.WindowStaysOnTopHint : 0)
     title: (titleEditor.text.trim().length ? titleEditor.text : qsTr("Untitled note")) + " — BetterNotes"
     width: 380
     height: 360
@@ -302,83 +303,17 @@ ApplicationWindow {
             }
 
             UI.StyledButton {
-                text: "⋮"
+                id: settingsBtn
+                text: "⚙"
                 theme: noteWindow.theme
-                variant: "ghost"
+                variant: noteSettingsPopup.visible ? "accent" : "ghost"
                 implicitHeight: 26
                 implicitWidth: 26
                 padding: 0
-                font.pixelSize: 14
-                font.weight: Font.Bold
-                onClicked: noteMenu.open()
-
-                Menu {
-                    id: noteMenu
-                    Menu {
-                        title: qsTr("🎨 Note color")
-                        MenuItem { text: qsTr("🟡 Classic Yellow"); onTriggered: { noteWindow.noteTint = "yellow"; backend.setNoteColor("yellow") } }
-                        MenuItem { text: qsTr("🟢 Mint Green"); onTriggered: { noteWindow.noteTint = "green"; backend.setNoteColor("green") } }
-                        MenuItem { text: qsTr("🌸 Rose Pink"); onTriggered: { noteWindow.noteTint = "pink"; backend.setNoteColor("pink") } }
-                        MenuItem { text: qsTr("🔵 Sky Blue"); onTriggered: { noteWindow.noteTint = "blue"; backend.setNoteColor("blue") } }
-                        MenuItem { text: qsTr("🟣 Lavender Purple"); onTriggered: { noteWindow.noteTint = "purple"; backend.setNoteColor("purple") } }
-                    }
-                    MenuSeparator {}
-                    MenuItem { text: qsTr("All notes (Library)"); onTriggered: noteWindow.libraryRequested() }
-                    MenuItem {
-                        text: backend.isPinned ? qsTr("Unpin from favorites") : qsTr("Pin to favorites")
-                        onTriggered: { backend.setPinned(!backend.isPinned); autosave.restart() }
-                    }
-                    MenuItem {
-                        text: backend.isArchived ? qsTr("Unarchive note") : qsTr("Archive note")
-                        onTriggered: { backend.setArchived(!backend.isArchived); autosave.restart() }
-                    }
-                    MenuItem {
-                        text: noteWindow.alwaysOnTop ? qsTr("✓ Always on top") : qsTr("Always on top")
-                        onTriggered: noteWindow.alwaysOnTop = !noteWindow.alwaysOnTop
-                    }
-                    MenuItem {
-                        text: qsTr("⏰ Remind in 1 hour")
-                        onTriggered: {
-                            const nowSec = Math.round(Date.now() / 1000)
-                            backend.setReminder(nowSec + 3600, "none")
-                            backend.sendNotification(qsTr("Reminder set"), qsTr("We will remind you in 1 hour."))
-                        }
-                    }
-                    MenuItem {
-                        text: qsTr("⏰ Remind tomorrow (daily)")
-                        onTriggered: {
-                            const nowSec = Math.round(Date.now() / 1000)
-                            backend.setReminder(nowSec + 86400, "daily")
-                            backend.sendNotification(qsTr("Recurring reminder set"), qsTr("Daily reminder activated."))
-                        }
-                    }
-                    MenuItem {
-                        text: qsTr("Clear reminder")
-                        onTriggered: {
-                            backend.clearReminder()
-                            backend.sendNotification(qsTr("Reminder cleared"), qsTr("Active reminder removed."))
-                        }
-                    }
-                    MenuItem { text: qsTr("Save"); onTriggered: noteWindow.flush() && noteWindow.persist(true) }
-                    MenuItem {
-                        text: qsTr("Copy to clipboard")
-                        onTriggered: {
-                            backend.copyToClipboard(backend.draftContent)
-                            backend.sendNotification(qsTr("Copied to clipboard"), backend.draftTitle || qsTr("Note content copied"))
-                        }
-                    }
-                    MenuItem {
-                        text: qsTr("Reload saved note")
-                        onTriggered: { if (backend.dirty) noteWindow.showDialog(reloadDialog); else backend.reloadNote() }
-                    }
-                    MenuItem { text: qsTr("Delete note…"); onTriggered: noteWindow.showDialog(deleteDialog) }
-                    MenuItem { text: qsTr("Close note"); onTriggered: noteWindow.close() }
-                    MenuItem {
-                        text: qsTr("Discard changes and close…")
-                        enabled: backend.dirty || backend.errorMessage.length > 0 || backend.windowError.length > 0
-                        onTriggered: noteWindow.showDialog(discardDialog)
-                    }
-                    MenuItem { text: qsTr("Quit BetterNotes"); onTriggered: noteWindow.quitRequested() }
+                font.pixelSize: 13
+                onClicked: {
+                    if (noteSettingsPopup.visible) noteSettingsPopup.close()
+                    else noteSettingsPopup.open()
                 }
             }
 
@@ -391,6 +326,318 @@ ApplicationWindow {
                 padding: 0
                 font.pixelSize: 11
                 onClicked: noteWindow.close()
+            }
+        }
+    }
+
+    Popup {
+        id: noteSettingsPopup
+        parent: noteWindow.contentItem
+        x: Math.max(8, noteWindow.width - width - 8)
+        y: 36
+        width: Math.min(260, noteWindow.width - 16)
+        padding: 12
+        modal: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color: theme.surface
+            radius: theme.radiusMd
+            border.width: 1
+            border.color: theme.border
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 10
+
+            RowLayout {
+                Layout.fillWidth: true
+                Label {
+                    text: qsTr("Note Settings")
+                    font.pixelSize: 12
+                    font.weight: Font.Bold
+                    color: theme.textPrimary
+                    Layout.fillWidth: true
+                }
+                Label {
+                    text: "✕"
+                    font.pixelSize: 11
+                    color: theme.textSecondary
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: noteSettingsPopup.close()
+                    }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                Label {
+                    text: qsTr("Color Theme")
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
+                    color: theme.textSecondary
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Repeater {
+                        model: [
+                            { key: "yellow", name: qsTr("Yellow"), color: "#eab308" },
+                            { key: "green",  name: qsTr("Green"),  color: "#22c55e" },
+                            { key: "pink",   name: qsTr("Pink"),   color: "#ec4899" },
+                            { key: "blue",   name: qsTr("Blue"),   color: "#0ea5e9" },
+                            { key: "purple", name: qsTr("Purple"), color: "#a855f7" }
+                        ]
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: 30
+                            height: 30
+                            radius: 15
+                            color: modelData.color
+                            border.width: noteWindow.noteTint === modelData.key ? 2.5 : 1
+                            border.color: noteWindow.noteTint === modelData.key ? theme.textPrimary : "transparent"
+                            scale: swatchHover.hovered ? 1.12 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 100 } }
+
+                            Label {
+                                anchors.centerIn: parent
+                                text: "✓"
+                                font.pixelSize: 13
+                                font.weight: Font.Bold
+                                color: modelData.key === "yellow" ? "#1e293b" : "#ffffff"
+                                visible: noteWindow.noteTint === modelData.key
+                            }
+
+                            MouseArea {
+                                id: swatchHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    noteWindow.noteTint = modelData.key
+                                    backend.setNoteColor(modelData.key)
+                                    autosave.restart()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: theme.border
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 28
+                    radius: theme.radiusSm
+                    color: pinHover.hovered ? theme.surfaceHover : "transparent"
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        spacing: 8
+                        Label { text: "📌"; font.pixelSize: 12 }
+                        Label {
+                            text: backend.isPinned ? qsTr("Unpin from favorites") : qsTr("Pin to favorites")
+                            font.pixelSize: 12
+                            color: theme.textPrimary
+                            Layout.fillWidth: true
+                        }
+                        Rectangle {
+                            width: 8
+                            height: 8
+                            radius: 4
+                            color: backend.isPinned ? theme.accent : "transparent"
+                            border.width: 1
+                            border.color: theme.border
+                        }
+                    }
+                    MouseArea {
+                        id: pinHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            backend.setPinned(!backend.isPinned)
+                            autosave.restart()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 28
+                    radius: theme.radiusSm
+                    color: topHover.hovered ? theme.surfaceHover : "transparent"
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        spacing: 8
+                        Label { text: "📍"; font.pixelSize: 12 }
+                        Label {
+                            text: qsTr("Always on top")
+                            font.pixelSize: 12
+                            color: theme.textPrimary
+                            Layout.fillWidth: true
+                        }
+                        Rectangle {
+                            width: 8
+                            height: 8
+                            radius: 4
+                            color: noteWindow.alwaysOnTop ? theme.accent : "transparent"
+                            border.width: 1
+                            border.color: theme.border
+                        }
+                    }
+                    MouseArea {
+                        id: topHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            noteWindow.alwaysOnTop = !noteWindow.alwaysOnTop
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 28
+                    radius: theme.radiusSm
+                    color: remindHover.hovered ? theme.surfaceHover : "transparent"
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        spacing: 8
+                        Label { text: "⏰"; font.pixelSize: 12 }
+                        Label {
+                            text: qsTr("Remind in 1 hour")
+                            font.pixelSize: 12
+                            color: theme.textPrimary
+                            Layout.fillWidth: true
+                        }
+                    }
+                    MouseArea {
+                        id: remindHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            const nowSec = Math.round(Date.now() / 1000)
+                            backend.setReminder(nowSec + 3600, "none")
+                            backend.sendNotification(qsTr("Reminder set"), qsTr("We will remind you in 1 hour."))
+                            noteSettingsPopup.close()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 28
+                    radius: theme.radiusSm
+                    color: copyHover.hovered ? theme.surfaceHover : "transparent"
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        spacing: 8
+                        Label { text: "📋"; font.pixelSize: 12 }
+                        Label {
+                            text: qsTr("Copy to clipboard")
+                            font.pixelSize: 12
+                            color: theme.textPrimary
+                            Layout.fillWidth: true
+                        }
+                    }
+                    MouseArea {
+                        id: copyHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            backend.copyToClipboard(backend.draftContent)
+                            backend.sendNotification(qsTr("Copied to clipboard"), backend.draftTitle || qsTr("Note content copied"))
+                            noteSettingsPopup.close()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 28
+                    radius: theme.radiusSm
+                    color: libHover.hovered ? theme.surfaceHover : "transparent"
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        spacing: 8
+                        Label { text: "📚"; font.pixelSize: 12 }
+                        Label {
+                            text: qsTr("All notes (Library)")
+                            font.pixelSize: 12
+                            color: theme.textPrimary
+                            Layout.fillWidth: true
+                        }
+                    }
+                    MouseArea {
+                        id: libHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            noteSettingsPopup.close()
+                            noteWindow.libraryRequested()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 28
+                    radius: theme.radiusSm
+                    color: delHover.hovered ? theme.dangerSubtle : "transparent"
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        spacing: 8
+                        Label { text: "🗑️"; font.pixelSize: 12 }
+                        Label {
+                            text: qsTr("Delete note…")
+                            font.pixelSize: 12
+                            color: theme.danger
+                            Layout.fillWidth: true
+                        }
+                    }
+                    MouseArea {
+                        id: delHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            noteSettingsPopup.close()
+                            noteWindow.showDialog(deleteDialog)
+                        }
+                    }
+                }
             }
         }
     }

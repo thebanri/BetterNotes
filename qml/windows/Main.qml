@@ -52,15 +52,8 @@ ApplicationWindow {
         if (!backend.initialize()) return
         const ids = backend.restoreIds
         const errors = []
-        if (ids.length > 0) {
-            for (let i = 0; i < ids.length; ++i) {
-                if (!openNote(ids[i])) errors.push(windowError)
-            }
-        } else if (backend.noteIds.length > 0) {
-            // Restore existing notes directly as sticky notes on the desktop
-            for (let i = 0; i < backend.noteIds.length; ++i) {
-                if (!openNote(backend.noteIds[i])) errors.push(windowError)
-            }
+        for (let i = 0; i < ids.length; ++i) {
+            if (!openNote(ids[i])) errors.push(windowError)
         }
         windowError = errors.join("\n")
         if (applicationInfo.startQuickCapture()) {
