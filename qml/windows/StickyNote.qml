@@ -15,6 +15,7 @@ ApplicationWindow {
     property bool initialized: false
     property bool retiring: false
     property bool placing: false
+    property bool resizing: false
     property int expandedWidth: 380
     property int expandedHeight: 360
     property int normalX: 0
@@ -74,6 +75,12 @@ ApplicationWindow {
     visible: false
     color: activeBg
 
+    background: Rectangle {
+        color: noteWindow.activeBg
+        border.width: 1
+        border.color: noteWindow.activeBorder
+    }
+
     Themes.Theme { id: theme; themeMode: backend.themeMode }
     NotesBackend { id: backend; objectName: "notesBackend" }
     ApplicationInfo { id: platformInfo }
@@ -120,7 +127,7 @@ ApplicationWindow {
     }
 
     function captureGeometry() {
-        if (!initialized || placing || retiring || visibility !== Window.Windowed) return
+        if (!initialized || placing || retiring || resizing || visibility !== Window.Windowed) return
         expandedWidth = width
         if (!collapsed) expandedHeight = height
         if (x !== 0 || y !== 0) {
@@ -214,8 +221,14 @@ ApplicationWindow {
     header: Rectangle {
         height: 38
         color: activeHeader
-        border.width: 1
-        border.color: activeBorder
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 1
+            color: noteWindow.activeBorder
+        }
 
         MouseArea {
             anchors.fill: parent
@@ -387,6 +400,7 @@ ApplicationWindow {
         anchors.margins: 10
         spacing: 8
         visible: !noteWindow.collapsed
+        clip: true
 
         Label {
             visible: backend.errorMessage.length > 0 || backend.windowError.length > 0
@@ -481,7 +495,7 @@ ApplicationWindow {
             TextArea {
                 id: contentEditor
                 objectName: "contentEditor"
-                width: contentScroll.availableWidth
+                width: Math.max(100, contentScroll.availableWidth)
                 text: backend.draftContent
                 textFormat: TextEdit.PlainText
                 placeholderText: qsTr("Write your note…")
@@ -539,16 +553,7 @@ ApplicationWindow {
         Label { text: qsTr("Reload the saved note and discard this draft?"); wrapMode: Text.WordWrap; width: Math.min(300, noteWindow.width - 64) }
         onAccepted: backend.reloadNote()
     }
-    // Frameless window outer border
-    Rectangle {
-        anchors.fill: parent
-        color: "transparent"
-        border.width: 1
-        border.color: noteWindow.activeBorder
-        z: 8
-    }
-
-    // Native resize handles for frameless window
+    // Resize handles for frameless window
     MouseArea {
         id: rightResize
         anchors.top: parent.top
@@ -557,20 +562,29 @@ ApplicationWindow {
         anchors.bottomMargin: 16
         width: 8
         cursorShape: Qt.SizeHorCursor
-        z: 10
-        onPressed: noteWindow.startSystemResize(Qt.RightEdge)
+        z: 20
+        property int startW: 0
+        property real startClickX: 0
+
+        onPressed: function(mouse) {
+            noteWindow.resizing = true
+            startW = noteWindow.width
+            var p = mapToItem(null, mouse.x, mouse.y)
+            startClickX = p.x
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed) {
+                var p = mapToItem(null, mouse.x, mouse.y)
+                var newW = Math.round(Math.max(noteWindow.minimumWidth, startW + (p.x - startClickX)))
+                if (noteWindow.width !== newW) noteWindow.width = newW
+            }
+        }
+        onReleased: function() {
+            noteWindow.resizing = false
+            noteWindow.captureGeometry()
+        }
     }
-    MouseArea {
-        id: leftResize
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.bottomMargin: 16
-        width: 8
-        cursorShape: Qt.SizeHorCursor
-        z: 10
-        onPressed: noteWindow.startSystemResize(Qt.LeftEdge)
-    }
+
     MouseArea {
         id: bottomResize
         anchors.left: parent.left
@@ -580,9 +594,30 @@ ApplicationWindow {
         anchors.rightMargin: 16
         height: 8
         cursorShape: Qt.SizeVerCursor
-        z: 10
-        onPressed: noteWindow.startSystemResize(Qt.BottomEdge)
+        z: 20
+        enabled: !noteWindow.collapsed
+        property int startH: 0
+        property real startClickY: 0
+
+        onPressed: function(mouse) {
+            noteWindow.resizing = true
+            startH = noteWindow.height
+            var p = mapToItem(null, mouse.x, mouse.y)
+            startClickY = p.y
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed) {
+                var p = mapToItem(null, mouse.x, mouse.y)
+                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + (p.y - startClickY)))
+                if (noteWindow.height !== newH) noteWindow.height = newH
+            }
+        }
+        onReleased: function() {
+            noteWindow.resizing = false
+            noteWindow.captureGeometry()
+        }
     }
+
     MouseArea {
         id: bottomRightResize
         anchors.right: parent.right
@@ -590,8 +625,34 @@ ApplicationWindow {
         width: 16
         height: 16
         cursorShape: Qt.SizeFDiagCursor
-        z: 11
-        onPressed: noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
+        z: 21
+        enabled: !noteWindow.collapsed
+        property int startW: 0
+        property int startH: 0
+        property real startClickX: 0
+        property real startClickY: 0
+
+        onPressed: function(mouse) {
+            noteWindow.resizing = true
+            startW = noteWindow.width
+            startH = noteWindow.height
+            var p = mapToItem(null, mouse.x, mouse.y)
+            startClickX = p.x
+            startClickY = p.y
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed) {
+                var p = mapToItem(null, mouse.x, mouse.y)
+                var newW = Math.round(Math.max(noteWindow.minimumWidth, startW + (p.x - startClickX)))
+                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + (p.y - startClickY)))
+                if (noteWindow.width !== newW) noteWindow.width = newW
+                if (noteWindow.height !== newH) noteWindow.height = newH
+            }
+        }
+        onReleased: function() {
+            noteWindow.resizing = false
+            noteWindow.captureGeometry()
+        }
 
         Rectangle {
             anchors.right: parent.right
@@ -605,6 +666,49 @@ ApplicationWindow {
             opacity: 0.5
         }
     }
+
+    MouseArea {
+        id: leftResize
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.bottomMargin: 16
+        width: 8
+        cursorShape: Qt.SizeHorCursor
+        z: 20
+        property int startW: 0
+        property int startX: 0
+        property real startGlobalX: 0
+
+        onPressed: function(mouse) {
+            if (noteWindow.canPosition) {
+                noteWindow.resizing = true
+                startW = noteWindow.width
+                startX = noteWindow.x
+                startGlobalX = mapToGlobal(mouse.x, mouse.y).x
+            } else {
+                noteWindow.startSystemResize(Qt.LeftEdge)
+            }
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed && noteWindow.canPosition) {
+                var currentGlobalX = mapToGlobal(mouse.x, mouse.y).x
+                var dx = currentGlobalX - startGlobalX
+                var newW = Math.round(startW - dx)
+                if (newW >= noteWindow.minimumWidth) {
+                    noteWindow.width = newW
+                    noteWindow.x = Math.round(startX + dx)
+                }
+            }
+        }
+        onReleased: function() {
+            if (noteWindow.canPosition) {
+                noteWindow.resizing = false
+                noteWindow.captureGeometry()
+            }
+        }
+    }
+
     MouseArea {
         id: bottomLeftResize
         anchors.left: parent.left
@@ -612,8 +716,47 @@ ApplicationWindow {
         width: 16
         height: 16
         cursorShape: Qt.SizeBDiagCursor
-        z: 11
-        onPressed: noteWindow.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
+        z: 21
+        enabled: !noteWindow.collapsed
+        property int startW: 0
+        property int startH: 0
+        property int startX: 0
+        property real startGlobalX: 0
+        property real startClickY: 0
+
+        onPressed: function(mouse) {
+            if (noteWindow.canPosition) {
+                noteWindow.resizing = true
+                startW = noteWindow.width
+                startH = noteWindow.height
+                startX = noteWindow.x
+                startGlobalX = mapToGlobal(mouse.x, mouse.y).x
+                startClickY = mapToItem(null, mouse.x, mouse.y).y
+            } else {
+                noteWindow.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
+            }
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed && noteWindow.canPosition) {
+                var p = mapToItem(null, mouse.x, mouse.y)
+                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + (p.y - startClickY)))
+                if (noteWindow.height !== newH) noteWindow.height = newH
+
+                var currentGlobalX = mapToGlobal(mouse.x, mouse.y).x
+                var dx = currentGlobalX - startGlobalX
+                var newW = Math.round(startW - dx)
+                if (newW >= noteWindow.minimumWidth) {
+                    noteWindow.width = newW
+                    noteWindow.x = Math.round(startX + dx)
+                }
+            }
+        }
+        onReleased: function() {
+            if (noteWindow.canPosition) {
+                noteWindow.resizing = false
+                noteWindow.captureGeometry()
+            }
+        }
     }
 
     Shortcut { sequences: [StandardKey.Save]; context: Qt.WindowShortcut; onActivated: noteWindow.flush() && noteWindow.persist(true) }
