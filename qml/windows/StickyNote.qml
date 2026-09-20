@@ -64,7 +64,7 @@ ApplicationWindow {
 
     // QObject ownership belongs to the library; these remain independent windows.
     transientParent: null
-    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint | (alwaysOnTop ? Qt.WindowStaysOnTopHint : 0)
+    flags: Qt.Window | Qt.FramelessWindowHint | (alwaysOnTop ? Qt.WindowStaysOnTopHint : 0)
     title: (titleEditor.text.trim().length ? titleEditor.text : qsTr("Untitled note")) + " — BetterNotes"
     width: 380
     height: 360
@@ -102,12 +102,12 @@ ApplicationWindow {
         expandedHeight = fitted.height
         width = expandedWidth
         height = collapsed ? collapsedHeight : expandedHeight
-        if (canPosition && (state.positioned || recover)) {
+        if (state.positioned || recover || canPosition) {
             x = fitted.x
             y = fitted.y
         }
-        normalX = x
-        normalY = y
+        normalX = (x !== 0 || y !== 0) ? x : (state.x || fitted.x)
+        normalY = (x !== 0 || y !== 0) ? y : (state.y || fitted.y)
         normalScreen = screen.name
         placing = false
     }
@@ -123,16 +123,19 @@ ApplicationWindow {
         if (!initialized || placing || retiring || visibility !== Window.Windowed) return
         expandedWidth = width
         if (!collapsed) expandedHeight = height
-        normalX = x
-        normalY = y
+        if (x !== 0 || y !== 0) {
+            normalX = x
+            normalY = y
+        }
         normalScreen = screen ? screen.name : ""
         geometrySave.restart()
     }
 
     function persist(open) {
         geometrySave.stop()
+        const isPositioned = (normalX !== 0 || normalY !== 0)
         return backend.saveWindow(normalX, normalY, expandedWidth, expandedHeight,
-            normalScreen, collapsed, canPosition, open)
+            normalScreen, collapsed, isPositioned, open)
     }
 
     function flush() {
@@ -538,6 +541,89 @@ ApplicationWindow {
         Label { text: qsTr("Reload the saved note and discard this draft?"); wrapMode: Text.WordWrap; width: Math.min(300, noteWindow.width - 64) }
         onAccepted: backend.reloadNote()
     }
+    // Frameless window outer border
+    Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+        border.width: 1
+        border.color: noteWindow.activeBorder
+        z: 8
+    }
+
+    // Native resize handles for frameless window
+    MouseArea {
+        id: rightResize
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        anchors.bottomMargin: 12
+        anchors.topMargin: 38
+        width: 6
+        cursorShape: Qt.SizeHorCursor
+        z: 10
+        onPressed: noteWindow.startSystemResize(Qt.RightEdge)
+    }
+    MouseArea {
+        id: leftResize
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.bottomMargin: 12
+        anchors.topMargin: 38
+        width: 6
+        cursorShape: Qt.SizeHorCursor
+        z: 10
+        onPressed: noteWindow.startSystemResize(Qt.LeftEdge)
+    }
+    MouseArea {
+        id: bottomResize
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
+        height: 6
+        cursorShape: Qt.SizeVerCursor
+        z: 10
+        onPressed: noteWindow.startSystemResize(Qt.BottomEdge)
+    }
+    MouseArea {
+        id: bottomRightResize
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        width: 14
+        height: 14
+        cursorShape: Qt.SizeFDiagCursor
+        z: 11
+        onPressed: noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
+
+        Canvas {
+            anchors.fill: parent
+            onPaint: {
+                var ctx = getContext("2d")
+                ctx.clearRect(0, 0, width, height)
+                ctx.strokeStyle = noteWindow.activeBorder
+                ctx.lineWidth = 1
+                ctx.beginPath()
+                ctx.moveTo(width - 3, height - 9)
+                ctx.lineTo(width - 9, height - 3)
+                ctx.moveTo(width - 3, height - 5)
+                ctx.lineTo(width - 5, height - 3)
+                ctx.stroke()
+            }
+        }
+    }
+    MouseArea {
+        id: bottomLeftResize
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        width: 14
+        height: 14
+        cursorShape: Qt.SizeBDiagCursor
+        z: 11
+        onPressed: noteWindow.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
+    }
+
     Shortcut { sequences: [StandardKey.Save]; context: Qt.WindowShortcut; onActivated: noteWindow.flush() && noteWindow.persist(true) }
     Shortcut { sequences: [StandardKey.Close]; context: Qt.WindowShortcut; onActivated: noteWindow.close() }
     Shortcut { sequences: [StandardKey.Quit]; context: Qt.WindowShortcut; onActivated: noteWindow.quitRequested() }
