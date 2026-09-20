@@ -29,6 +29,26 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "startQuickCapture"]
         fn start_quick_capture(&self) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "desktopEnvironment"]
+        fn desktop_environment(&self) -> QString;
+
+        #[qinvokable]
+        #[cxx_name = "displayServer"]
+        fn display_server(&self) -> QString;
+
+        #[qinvokable]
+        #[cxx_name = "isTilingCompositor"]
+        fn is_tiling_compositor(&self) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "windowRuleHint"]
+        fn window_rule_hint(&self) -> QString;
+
+        #[qinvokable]
+        #[cxx_name = "diagnosticsReport"]
+        fn diagnostics_report(&self) -> QString;
     }
 }
 
@@ -54,5 +74,37 @@ impl ffi::ApplicationInfo {
 
     pub fn start_quick_capture(&self) -> bool {
         std::env::args().any(|arg| arg == "--quick-capture" || arg == "-q")
+    }
+
+    pub fn desktop_environment(&self) -> cxx_qt_lib::QString {
+        betternotes_core::DesktopEnvironment::detect()
+            .name()
+            .to_string()
+            .into()
+    }
+
+    pub fn display_server(&self) -> cxx_qt_lib::QString {
+        betternotes_core::DisplayServer::detect()
+            .name()
+            .to_string()
+            .into()
+    }
+
+    pub fn is_tiling_compositor(&self) -> bool {
+        betternotes_core::DesktopEnvironment::detect().is_tiling()
+    }
+
+    pub fn window_rule_hint(&self) -> cxx_qt_lib::QString {
+        betternotes_core::DesktopEnvironment::detect()
+            .window_rule_hint()
+            .unwrap_or("")
+            .to_string()
+            .into()
+    }
+
+    pub fn diagnostics_report(&self) -> cxx_qt_lib::QString {
+        betternotes_core::DesktopReport::current()
+            .format_report()
+            .into()
     }
 }

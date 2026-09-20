@@ -28,9 +28,11 @@ ApplicationWindow {
     signal quitRequested()
     signal libraryRequested()
 
+    property bool alwaysOnTop: false
+
     // QObject ownership belongs to the library; these remain independent windows.
     transientParent: null
-    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint
+    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint | (alwaysOnTop ? Qt.WindowStaysOnTopHint : 0)
     title: (titleEditor.text.trim().length ? titleEditor.text : qsTr("Untitled note")) + " — BetterNotes"
     width: 380
     height: 360
@@ -237,6 +239,10 @@ ApplicationWindow {
                     MenuItem {
                         text: backend.isArchived ? qsTr("Unarchive note") : qsTr("Archive note")
                         onTriggered: { backend.setArchived(!backend.isArchived); autosave.restart() }
+                    }
+                    MenuItem {
+                        text: noteWindow.alwaysOnTop ? qsTr("✓ Always on top") : qsTr("Always on top")
+                        onTriggered: noteWindow.alwaysOnTop = !noteWindow.alwaysOnTop
                     }
                     MenuItem { text: qsTr("Save"); onTriggered: noteWindow.flush() && noteWindow.persist(true) }
                     MenuItem {

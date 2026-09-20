@@ -1,6 +1,7 @@
 //! Qt-independent notes, persistence and editor state.
 
 pub mod autostart;
+pub mod desktop;
 mod notes;
 pub mod notifications;
 pub mod paths;
@@ -11,6 +12,7 @@ mod store;
 mod window_state;
 
 pub use autostart::{is_autostart_enabled, set_autostart};
+pub use desktop::{DesktopEnvironment, DesktopReport, DisplayServer};
 pub use notes::{Error, Note, NoteSummary, Result, SearchResult};
 pub use notifications::NotificationService;
 pub use session::NotesSession;

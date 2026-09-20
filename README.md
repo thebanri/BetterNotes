@@ -1,9 +1,10 @@
 # BetterNotes
 
-Linux-first desktop notes application, currently at **Phase 6 — Linux Integration**.
+Linux-first desktop notes application, currently at **Phase 7 — Wayland / X11**.
 BetterNotes is a working codename. Create, edit and delete plain-text notes in
 independent windows, with autosave, SQLite persistence, saved window state,
-light/dark/system themes, FTS5 search, system tray, quick capture, notifications, and autostart.
+light/dark/system themes, FTS5 search, system tray, quick capture, notifications,
+Wayland/X11 compositor compatibility, always-on-top, and desktop diagnostics.
 
 ## Architecture
 
@@ -187,15 +188,16 @@ means the event loop remained running until the timeout; it is not a graceful ex
 See [the Phase 5 validation report](docs/phase-5-validation.md) for commands and
 actual results. Earlier reports record [Phase 4](docs/phase-4-validation.md),
 [Phase 3](docs/phase-3-validation.md), [Phase 2](docs/phase-2-validation.md) and
-[Phase 1](docs/validation.md). See [the Phase 6 validation report](docs/phase-6-validation.md).
+[Phase 1](docs/validation.md). See [Phase 6 report](docs/phase-6-validation.md) and [Phase 7 report](docs/phase-7-validation.md).
+See also the [Wayland/X11 Compatibility Guide](docs/wayland-x11-compatibility.md).
 
 ## Scope and next phase
 
-Phase 6 implements Linux Desktop Integration: system tray icon and menu,
-XDG autostart, desktop notifications (Freedesktop specification), global shortcuts,
-Quick Capture scratchpad, and native clipboard integration.
+Phase 7 implements Wayland and X11 Compositor Compatibility across KDE Plasma,
+GNOME, XFCE, Cinnamon, MATE, Budgie, Hyprland, and Sway, including tiling window
+rules, always-on-top window management, and platform diagnostics (`betternotes --diagnostics`).
 
-Phase 7 will focus on Wayland / X11 Compositor Compatibility across KDE Plasma,
-GNOME, XFCE, Cinnamon, MATE, Budgie, Hyprland, and Sway, documenting protocol
-differences, window management behavior, and graceful fallbacks.
+Phase 8 will implement Productivity features: one-time and recurring reminders,
+desktop notification alerts, file and image attachments, JSON/Markdown import/export,
+and backup/recovery tooling.
 No later-phase features are included here. Project licensing remains undecided; no license was assigned.

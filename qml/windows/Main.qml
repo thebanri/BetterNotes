@@ -475,6 +475,7 @@ ApplicationWindow {
                 else if (backend.themeMode === "light") backend.setThemeMode("dark")
                 else backend.setThemeMode("system")
             }
+            else if (action === "diagnostics") diagnosticsDialog.open()
         }
     }
 
@@ -525,10 +526,46 @@ ApplicationWindow {
                     window.requestActivate()
                 }
             }
+            Platform.MenuItem {
+                text: qsTr("Desktop diagnostics")
+                onTriggered: {
+                    window.showNormal()
+                    window.requestActivate()
+                    diagnosticsDialog.open()
+                }
+            }
             Platform.MenuSeparator {}
             Platform.MenuItem {
                 text: qsTr("Quit")
                 onTriggered: window.close()
+            }
+        }
+    }
+
+    Dialog {
+        id: diagnosticsDialog
+        title: qsTr("Desktop Environment & Diagnostics")
+        modal: true
+        standardButtons: Dialog.Close
+        width: Math.min(520, window.width - 40)
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+
+        contentItem: ColumnLayout {
+            spacing: 8
+            TextArea {
+                text: applicationInfo.diagnosticsReport()
+                readOnly: true
+                font.family: "monospace"
+                font.pixelSize: 12
+                wrapMode: TextEdit.Wrap
+                color: window.theme.textPrimary
+                background: Rectangle {
+                    color: window.theme.surface
+                    border.width: 1
+                    border.color: window.theme.border
+                    radius: 6
+                }
             }
         }
     }

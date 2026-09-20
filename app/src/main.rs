@@ -32,6 +32,9 @@ fn print_help() {
         "  -b, --background     Start in background (restore notes and tray, hide main window)"
     );
     println!("  -q, --quick-capture  Open Quick Capture scratchpad immediately");
+    println!(
+        "  -d, --diagnostics    Print desktop, compositor and display server diagnostic report"
+    );
     println!("  -h, --help           Print this help message");
     println!("  -v, --version        Print version information");
 }
@@ -48,6 +51,11 @@ fn main() -> std::process::ExitCode {
             betternotes_core::APPLICATION_NAME,
             betternotes_core::APPLICATION_VERSION
         );
+        return std::process::ExitCode::SUCCESS;
+    }
+    if args.iter().any(|a| a == "-d" || a == "--diagnostics") {
+        let report = betternotes_core::DesktopReport::current();
+        println!("{}", report.format_report());
         return std::process::ExitCode::SUCCESS;
     }
 

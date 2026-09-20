@@ -54,6 +54,7 @@ Popup {
         { id: "toggle_theme", title: qsTr("🎨 Toggle theme mode"), subtitle: qsTr("Cycle through system, light, and dark"), shortcut: "" },
         { id: "toggle_pin", title: qsTr("📌 Toggle pin"), subtitle: qsTr("Pin or unpin active note"), shortcut: "" },
         { id: "toggle_archive", title: qsTr("📦 Toggle archive"), subtitle: qsTr("Archive or unarchive active note"), shortcut: "" },
+        { id: "diagnostics", title: qsTr("🖥️ Desktop diagnostics"), subtitle: qsTr("View display server, compositor and capabilities"), shortcut: "" },
         { id: "delete_note", title: qsTr("🗑️ Delete active note"), subtitle: qsTr("Remove note permanently"), shortcut: "" }
     ]
 
