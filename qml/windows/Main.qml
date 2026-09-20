@@ -599,4 +599,25 @@ ApplicationWindow {
             if (backend.ready) backend.checkReminders()
         }
     }
+
+    Timer {
+        id: ipcPollTimer
+        interval: 250
+        running: true
+        repeat: true
+        onTriggered: {
+            if (backend.ready) {
+                let action = backend.pollIpcAction()
+                if (action === "activate") {
+                    if (window.visibility === Window.Minimized) window.showNormal()
+                    window.requestActivate()
+                } else if (action === "quick_capture") {
+                    window.openQuickCapture()
+                } else if (action.startsWith("open:")) {
+                    let id = action.substring(5)
+                    window.openNote(id)
+                }
+            }
+        }
+    }
 }

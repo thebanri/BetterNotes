@@ -5,6 +5,7 @@ pub mod autostart;
 pub mod backup;
 pub mod desktop;
 pub mod export_import;
+pub mod ipc;
 mod notes;
 pub mod notifications;
 pub mod paths;
@@ -22,6 +23,10 @@ pub use desktop::{DesktopEnvironment, DesktopReport, DisplayServer};
 pub use export_import::{
     export_notes_json, export_notes_markdown_dir, import_note_markdown_file, import_notes_json,
     ExportArchive, ExportNote,
+};
+pub use ipc::{
+    global_ipc_queue, handle_domain_request, is_server_running, send_request, IpcAction,
+    IpcRequest, IpcResponse, IpcServer, SharedIpcQueue,
 };
 pub use notes::{Error, Note, NoteSummary, Result, SearchResult};
 pub use notifications::NotificationService;

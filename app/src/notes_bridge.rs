@@ -178,6 +178,10 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "importNoteMarkdown"]
         fn import_note_markdown(self: Pin<&mut Self>, file_path: QString) -> i32;
+
+        #[qinvokable]
+        #[cxx_name = "pollIpcAction"]
+        fn poll_ipc_action(self: Pin<&mut Self>) -> QString;
     }
 }
 
@@ -723,6 +727,26 @@ impl ffi::NotesBackend {
             count
         } else {
             -1
+        }
+    }
+
+    pub fn poll_ipc_action(mut self: Pin<&mut Self>) -> QString {
+        let action = betternotes_core::global_ipc_queue()
+            .lock()
+            .unwrap()
+            .pop_front();
+        match action {
+            Some(betternotes_core::IpcAction::Activate) => QString::from("activate"),
+            Some(betternotes_core::IpcAction::QuickCapture) => QString::from("quick_capture"),
+            Some(betternotes_core::IpcAction::OpenNote(id)) => {
+                self.as_mut().reload();
+                QString::from(&format!("open:{id}"))
+            }
+            Some(betternotes_core::IpcAction::Reload) => {
+                self.as_mut().reload();
+                QString::from("reload")
+            }
+            None => QString::from(""),
         }
     }
 }

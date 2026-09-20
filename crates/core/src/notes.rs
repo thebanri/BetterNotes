@@ -60,6 +60,10 @@ pub enum Error {
     RevisionOverflow,
     #[error("The saved window geometry is invalid. The note has not been changed.")]
     InvalidWindowState,
+    #[error("IPC communication error: {0}")]
+    Ipc(String),
+    #[error("Serialization error: {0}")]
+    Serialization(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

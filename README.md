@@ -1,12 +1,12 @@
 # BetterNotes
 
-Linux-first desktop notes application, currently at **Phase 8 — Productivity**.
+Linux-first desktop notes application, currently at **Phase 9 — CLI and IPC**.
 BetterNotes is a working codename. Create, edit and delete plain-text notes in
 independent windows, with autosave, SQLite persistence, saved window state,
 light/dark/system themes, FTS5 search, system tray, quick capture, notifications,
 Wayland/X11 compositor compatibility, always-on-top, desktop diagnostics,
 one-time & recurring reminders, safe file attachments, JSON/Markdown import/export,
-and crash-safe atomic backup & restore.
+crash-safe atomic backup & restore, unified CLI, and single-instance Unix socket IPC.
 
 ## Architecture
 
@@ -195,12 +195,11 @@ See also the [Wayland/X11 Compatibility Guide](docs/wayland-x11-compatibility.md
 
 ## Scope and next phase
  
-Phase 8 implements Productivity features: one-time and recurring reminders,
-desktop notification alerts, safe file/image attachments, JSON and Markdown
-import/export, and crash-safe atomic backup and restore tooling (`betternotes backup`,
-`betternotes restore`, `betternotes export`, `betternotes import`).
+Phase 9 implements CLI and IPC: unified CLI interface (`new`, `list`, `search`,
+`show`, `archive`, `backup`, `restore`, `export`, `import`), single-instance Unix
+domain socket IPC daemon, request verification, and live GUI command dispatch.
 
-Phase 9 will implement CLI and IPC: full CLI subcommands (`new`, `list`, `search`,
-`show`, `archive`), single-instance Unix domain socket IPC daemon, and command
-dispatch to running instances.
+Phase 10 will implement Linux Release Packaging: Flatpak packaging manifest,
+AppImage build and packaging recipes, Freedesktop metadata (`.desktop`, AppStream
+metainfo `.xml`), icons, release documentation, and Linux v1.0 readiness.
 No later-phase features are included here. Project licensing remains undecided; no license was assigned.

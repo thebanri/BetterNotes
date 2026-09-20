@@ -54,6 +54,31 @@ pub fn autostart_file_path() -> Result<PathBuf> {
     Ok(dir.join("betternotes.desktop"))
 }
 
+pub fn runtime_directory(
+    xdg_runtime_dir: Option<&OsStr>,
+    xdg_data_home: Option<&OsStr>,
+    home: Option<&OsStr>,
+) -> Result<PathBuf> {
+    let absolute = |value: &OsStr| {
+        let path = PathBuf::from(value);
+        path.is_absolute().then_some(path)
+    };
+    if let Some(runtime) = xdg_runtime_dir.and_then(absolute) {
+        return Ok(runtime.join("betternotes"));
+    }
+    data_directory(xdg_data_home, home)
+}
+
+pub fn ipc_socket_path() -> Result<PathBuf> {
+    let dir = runtime_directory(
+        env::var_os("XDG_RUNTIME_DIR").as_deref(),
+        env::var_os("XDG_DATA_HOME").as_deref(),
+        env::var_os("HOME").as_deref(),
+    )?;
+    DirBuilder::new().recursive(true).mode(0o700).create(&dir)?;
+    Ok(dir.join("ipc.sock"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,6 +96,10 @@ mod tests {
         assert_eq!(
             autostart_directory(Some(OsStr::new("/config")), None).unwrap(),
             PathBuf::from("/config/autostart")
+        );
+        assert_eq!(
+            runtime_directory(Some(OsStr::new("/run/user/1000")), None, None).unwrap(),
+            PathBuf::from("/run/user/1000/betternotes")
         );
     }
 
