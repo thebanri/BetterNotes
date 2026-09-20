@@ -27,6 +27,7 @@ fn main() {
     std::env::set_var("QT_FORCE_STDERR_LOGGING", "1");
     let directory = tempfile::tempdir().unwrap();
     std::env::set_var("XDG_DATA_HOME", directory.path());
+    std::env::set_var("XDG_CONFIG_HOME", directory.path().join("config"));
     let mut app = QGuiApplication::new();
     let engine = load_engine(MAIN_QML).expect("embedded QML window must load");
     drop(engine);

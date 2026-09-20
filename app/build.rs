@@ -5,6 +5,8 @@ fn main() {
         .file("src/bridge.rs")
         .file("src/notes_bridge.rs")
         .cpp_file("src/platform_helper.cpp")
+        .cpp_file("src/text_formatter.h")
+        .cpp_file("src/text_formatter.cpp")
         .qrc("../qml/qml.qrc")
         .qt_module("Gui")
         .qt_module("Quick")

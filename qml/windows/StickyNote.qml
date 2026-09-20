@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -16,14 +18,13 @@ ApplicationWindow {
     property bool initialized: false
     property bool retiring: false
     property bool placing: false
-    property bool resizing: false
     property int expandedWidth: 380
     property int expandedHeight: 360
     property int normalX: 0
     property int normalY: 0
     property string normalScreen: ""
     readonly property bool canPosition: platformInfo.canPositionWindows(Qt.platform.pluginName)
-    readonly property int collapsedHeight: 38
+    readonly property int collapsedHeight: 46
 
     signal saved()
     signal dismissed(string id)
@@ -37,55 +38,48 @@ ApplicationWindow {
     property int noteFontSize: 13
     property bool isRichText: false
 
-    property int savedSelectionStart: 0
-    property int savedSelectionEnd: 0
-    property string savedSelectedText: ""
+    property bool loadingContent: false
+    readonly property bool hasTextSelection: contentEditor.selectionStart !== contentEditor.selectionEnd
+    readonly property string plainContent: contentEditor.text.length ? contentEditor.getText(0, contentEditor.length).replace(/[\u2028\u2029]/g, "\n") : ""
+    property alias settingsWindow: settingsModal
 
-    function safeSelect(start, end) {
-        if (start >= 0 && end >= 0 && start <= contentEditor.length && end <= contentEditor.length) {
-            contentEditor.select(start, end)
-        }
-    }
-
-    function updateSavedSelection() {
-        if (contentEditor.selectionStart >= 0 && contentEditor.selectionEnd >= 0 &&
-            contentEditor.selectionStart !== contentEditor.selectionEnd) {
-            savedSelectionStart = contentEditor.selectionStart
-            savedSelectionEnd = contentEditor.selectionEnd
-            savedSelectedText = contentEditor.selectedText
-        }
+    // Read the backend only on external changes. A live text binding would feed
+    // serialized HTML back into the document and reset selection/undo history.
+    function loadContent() {
+        if (loadingContent || contentEditor.text === backend.draftContent) return
+        loadingContent = true
+        isRichText = checkRichText(backend.draftContent)
+        contentEditor.textFormat = isRichText ? TextEdit.RichText : TextEdit.PlainText
+        contentEditor.text = backend.draftContent
+        loadingContent = false
     }
 
     function ensureRichText() {
-        if (!isRichText) {
-            isRichText = true
-            contentEditor.textFormat = TextEdit.RichText
-            if (savedSelectionStart >= 0 && savedSelectionEnd >= 0 &&
-                savedSelectionStart !== savedSelectionEnd && savedSelectedText.length > 0) {
-                safeSelect(savedSelectionStart, savedSelectionEnd)
-            }
-        }
+        if (isRichText) return
+        const start = contentEditor.selectionStart
+        const end = contentEditor.selectionEnd
+        // Switching textFormat reinterprets its input. Escape plain text once
+        // so literal tags, ampersands, whitespace and line breaks survive.
+        const plain = contentEditor.getText(0, contentEditor.length)
+        const escaped = plain.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        const paragraphs = escaped.split("\n").map(function(line) {
+            return '<p style="white-space: pre-wrap; margin: 0;">' + (line || "<br>") + '</p>'
+        }).join("")
+        loadingContent = true
+        isRichText = true
+        contentEditor.textFormat = TextEdit.RichText
+        contentEditor.text = "<html><body>" + paragraphs + "</body></html>"
+        loadingContent = false
+        contentEditor.select(start, end)
+        backend.editContent(contentEditor.text)
+        autosave.restart()
     }
 
-    function getActiveSelection() {
-        var s = contentEditor.selectionStart
-        var e = contentEditor.selectionEnd
-        var t = contentEditor.selectedText
-        if (s === e && savedSelectionStart >= 0 && savedSelectionEnd >= 0 &&
-            savedSelectionStart !== savedSelectionEnd && savedSelectedText.length > 0) {
-            s = savedSelectionStart
-            e = savedSelectionEnd
-            t = savedSelectedText
-            safeSelect(s, e)
-        }
-        s = Math.max(0, Math.min(s, contentEditor.length))
-        e = Math.max(0, Math.min(e, contentEditor.length))
-        return {
-            start: Math.min(s, e),
-            end: Math.max(s, e),
-            text: t,
-            hasSelection: (s !== e && t.length > 0)
-        }
+    function prepareSelection() {
+        if (!hasTextSelection) return false
+        ensureRichText()
+        contentEditor.forceActiveFocus()
+        return true
     }
 
     function checkRichText(content) {
@@ -156,10 +150,12 @@ ApplicationWindow {
     minimumHeight: collapsed ? collapsedHeight : 180
     maximumHeight: collapsed ? collapsedHeight : 16384
     visible: false
-    color: noteWindow.activeBg
+    color: "transparent"
 
     background: Rectangle {
         id: windowCard
+        radius: 16
+        antialiasing: true
         color: noteWindow.activeBg
         border.width: 1
         border.color: noteWindow.activeBorder
@@ -167,7 +163,12 @@ ApplicationWindow {
 
     Themes.Theme { id: theme; themeMode: backend.themeMode }
     NotesBackend { id: backend; objectName: "notesBackend" }
+    Connections {
+        target: backend
+        function onDraftContentChanged() { noteWindow.loadContent() }
+    }
     ApplicationInfo { id: platformInfo }
+    TextFormatter { id: formatter }
 
     function present(fallbackScreen) {
         if (!backend.initializeNote(noteId)) return false
@@ -178,8 +179,7 @@ ApplicationWindow {
         if (savedFont && savedFont.length > 0) noteFontFamily = savedFont
         const savedSize = backend.noteFontSize()
         if (savedSize > 0) noteFontSize = savedSize
-        isRichText = checkRichText(backend.draftContent)
-        contentEditor.textFormat = isRichText ? TextEdit.RichText : TextEdit.PlainText
+        loadContent()
         place({x: backend.savedX(), y: backend.savedY(), width: backend.savedWidth(),
             height: backend.savedHeight(), screen: backend.savedScreen(),
             positioned: backend.savedPositioned()}, fallbackScreen, false)
@@ -217,7 +217,7 @@ ApplicationWindow {
     }
 
     function captureGeometry() {
-        if (!initialized || placing || retiring || resizing || visibility !== Window.Windowed) return
+        if (!initialized || placing || retiring || visibility !== Window.Windowed) return
         expandedWidth = width
         if (!collapsed) expandedHeight = height
         if (x !== 0 || y !== 0) {
@@ -310,20 +310,17 @@ ApplicationWindow {
         onTriggered: { if (backend.save()) noteWindow.saved() }
     }
 
-    header: Rectangle {
+    header: Item {
         id: headerContainer
-        height: 38
-        color: noteWindow.activeBg
+        height: noteWindow.collapsedHeight
 
         Rectangle {
             id: headerBar
             anchors.fill: parent
-            anchors.leftMargin: 4
-            anchors.rightMargin: 4
-            anchors.topMargin: 3
-            anchors.bottomMargin: 3
-            color: activeHeader
-            radius: 8
+            anchors.margins: 5
+            color: noteWindow.activeHeader
+            radius: height / 2
+            antialiasing: true
             border.width: 1
             border.color: noteWindow.activeBorder
         }
@@ -350,9 +347,9 @@ ApplicationWindow {
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 6
-            anchors.rightMargin: 6
-            spacing: 6
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            spacing: 3
             z: 1
 
             UI.StyledButton {
@@ -382,6 +379,7 @@ ApplicationWindow {
             }
 
             UI.StatusBadge {
+                visible: noteWindow.width >= 320 && !noteWindow.collapsed
                 dirty: backend.dirty
                 theme: noteWindow.theme
                 Layout.alignment: Qt.AlignVCenter
@@ -456,196 +454,29 @@ ApplicationWindow {
     }
 
     function applyTextColor(colorHex, isDefault) {
-        contentEditor.forceActiveFocus()
-        ensureRichText()
-        var sel = getActiveSelection()
-        if (sel.hasSelection) {
-            contentEditor.remove(sel.start, sel.end)
-            if (isDefault) {
-                contentEditor.insert(sel.start, sel.text)
-            } else {
-                contentEditor.insert(sel.start, "<font color='" + colorHex + "'>" + sel.text + "</font>")
-            }
-            safeSelect(sel.start, sel.start + sel.text.length)
-            savedSelectionStart = sel.start
-            savedSelectionEnd = sel.start + sel.text.length
-            savedSelectedText = sel.text
-        } else {
-            var pos = contentEditor.cursorPosition
-            var word = qsTr("text")
-            if (isDefault) {
-                contentEditor.insert(pos, word)
-            } else {
-                contentEditor.insert(pos, "<font color='" + colorHex + "'>" + word + "</font>")
-            }
-            safeSelect(pos, pos + word.length)
-        }
-        backend.editContent(contentEditor.text)
-        autosave.restart()
+        if (!prepareSelection()) return
+        formatter.color(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd, colorHex, isDefault)
     }
 
     function toggleHeading(level) {
-        contentEditor.forceActiveFocus()
-        ensureRichText()
-        var sel = getActiveSelection()
-        var s = sel.start
-        var e = sel.end
-
-        var plain = contentEditor.getText(0, contentEditor.length)
-        var paragraphs = plain.split(/\u2029|\r?\n/)
-        var charCount = 0
-        var startBlock = -1
-        var endBlock = -1
-
-        for (var i = 0; i < paragraphs.length; i++) {
-            var pLen = paragraphs[i].length
-            var pEnd = charCount + pLen
-            charCount += pLen + 1
-
-            if (startBlock === -1 && s <= pEnd) {
-                startBlock = i
-            }
-            if (e <= pEnd || i === paragraphs.length - 1) {
-                endBlock = i
-                break
-            }
-        }
-        if (startBlock === -1) startBlock = 0
-        if (endBlock === -1) endBlock = startBlock
-
-        var html = contentEditor.text
-        var bodyStart = html.indexOf("<body")
-        if (bodyStart === -1) return
-        var bodyTagEnd = html.indexOf(">", bodyStart) + 1
-        var bodyEnd = html.indexOf("</body>", bodyTagEnd)
-        if (bodyEnd === -1) return
-
-        var header = html.substring(0, bodyTagEnd)
-        var body = html.substring(bodyTagEnd, bodyEnd)
-        var footer = html.substring(bodyEnd)
-
-        var blockRegex = /<(p|h1|h2)[^>]*>([\s\S]*?)<\/\1>/gi
-        var blocks = []
-        var match
-        while ((match = blockRegex.exec(body)) !== null) {
-            blocks.push({
-                full: match[0],
-                tag: match[1].toLowerCase(),
-                content: match[2]
-            })
-        }
-
-        var allSame = true
-        var targetTag = "h" + level
-        for (var b = startBlock; b <= endBlock && b < blocks.length; b++) {
-            if (blocks[b].tag !== targetTag) {
-                allSame = false
-                break
-            }
-        }
-
-        var newTag = allSame ? "p" : targetTag
-
-        var newBody = ""
-        var lastIdx = 0
-        blockRegex.lastIndex = 0
-        var bIdx = 0
-
-        while ((match = blockRegex.exec(body)) !== null) {
-            newBody += body.substring(lastIdx, match.index)
-            if (bIdx >= startBlock && bIdx <= endBlock) {
-                var content = match[2]
-                content = content.replace(/font-size:(xx-large|x-large);/gi, "")
-                content = content.replace(/font-weight:700;/gi, "")
-
-                if (newTag === "h1") {
-                    newBody += "<h1 style=' margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;'><span style=' font-size:xx-large; font-weight:700;'>" + content + "</span></h1>"
-                } else if (newTag === "h2") {
-                    newBody += "<h2 style=' margin-top:16px; margin-bottom:10px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;'><span style=' font-size:x-large; font-weight:700;'>" + content + "</span></h2>"
-                } else {
-                    newBody += "<p style=' margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;'>" + content + "</p>"
-                }
-            } else {
-                newBody += match[0]
-            }
-            lastIdx = blockRegex.lastIndex
-            bIdx++
-        }
-        newBody += body.substring(lastIdx)
-
-        contentEditor.text = header + newBody + footer
-        safeSelect(s, e)
-        savedSelectionStart = s
-        savedSelectionEnd = e
-        savedSelectedText = sel.text
-        backend.editContent(contentEditor.text)
-        autosave.restart()
+        if (!prepareSelection()) return
+        // Heading presets apply to precisely the selected text, including a
+        // partial line, without replacing paragraphs or adjacent formatting.
+        const size = Math.round(noteFontSize * (level === 1 ? 2 : 1.5))
+        const active = formatter.sizeActive(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd, size)
+        formatter.heading(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd,
+            active ? noteFontSize : size, !active)
     }
 
-    function isStyleActive(tag, text) {
-        var html = contentEditor.text
-        var escaped = text.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
-        if (tag === "b") {
-            var boldRegex = new RegExp("<(b|strong)>[^<]*" + escaped + "[^<]*<\\/\\1>|<span[^>]*font-weight:700[^>]*>[^<]*" + escaped + "[^<]*<\\/span>", "i")
-            return boldRegex.test(html)
-        }
-        if (tag === "i") {
-            var italicRegex = new RegExp("<(i|em)>[^<]*" + escaped + "[^<]*<\\/\\1>|<span[^>]*font-style:italic[^>]*>[^<]*" + escaped + "[^<]*<\\/span>", "i")
-            return italicRegex.test(html)
-        }
-        if (tag === "u") {
-            var underlineRegex = new RegExp("<u>[^<]*" + escaped + "[^<]*<\\/u>|<span[^>]*text-decoration: underline[^>]*>[^<]*" + escaped + "[^<]*<\\/span>", "i")
-            return underlineRegex.test(html)
-        }
-        return false
+    function inlineStyleActive(tag) {
+        // Reading text makes toolbar state follow format changes as well as selection.
+        if (!contentEditor.text.length) return false
+        return formatter.styleActive(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd, tag)
     }
 
     function toggleInlineStyle(tag) {
-        contentEditor.forceActiveFocus()
-        ensureRichText()
-        var sel = getActiveSelection()
-        if (sel.hasSelection) {
-            var s = sel.start
-            var e = sel.end
-            var text = sel.text
-            var active = isStyleActive(tag, text)
-            contentEditor.remove(s, e)
-            if (active) {
-                contentEditor.insert(s, text)
-            } else {
-                contentEditor.insert(s, "<" + tag + ">" + text + "</" + tag + ">")
-            }
-            safeSelect(s, s + text.length)
-            savedSelectionStart = s
-            savedSelectionEnd = s + text.length
-            savedSelectedText = text
-        } else {
-            var pos = contentEditor.cursorPosition
-            var word = qsTr("text")
-            contentEditor.insert(pos, "<" + tag + ">" + word + "</" + tag + ">")
-            safeSelect(pos, pos + word.length)
-        }
-        backend.editContent(contentEditor.text)
-        autosave.restart()
-    }
-
-    function formatSelection(prefix, suffix) {
-        contentEditor.forceActiveFocus()
-        ensureRichText()
-        var sel = getActiveSelection()
-        if (sel.hasSelection) {
-            contentEditor.remove(sel.start, sel.end)
-            contentEditor.insert(sel.start, prefix + sel.text + suffix)
-            safeSelect(sel.start, sel.start + sel.text.length)
-            savedSelectionStart = sel.start
-            savedSelectionEnd = sel.start + sel.text.length
-            savedSelectedText = sel.text
-        } else {
-            var pos = contentEditor.cursorPosition
-            contentEditor.insert(pos, prefix + qsTr("text") + suffix)
-        }
-        backend.editContent(contentEditor.text)
-        autosave.restart()
+        if (!prepareSelection()) return
+        formatter.toggleStyle(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd, tag)
     }
 
     function insertImageTag(imageUrl) {
@@ -661,22 +492,27 @@ ApplicationWindow {
 
     Shortcut {
         sequence: "Ctrl+B"
+        enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
         onActivated: noteWindow.toggleInlineStyle("b")
     }
     Shortcut {
         sequence: "Ctrl+I"
+        enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
         onActivated: noteWindow.toggleInlineStyle("i")
     }
     Shortcut {
         sequence: "Ctrl+U"
+        enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
         onActivated: noteWindow.toggleInlineStyle("u")
     }
     Shortcut {
         sequence: "Ctrl+1"
+        enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
         onActivated: noteWindow.toggleHeading(1)
     }
     Shortcut {
         sequence: "Ctrl+2"
+        enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
         onActivated: noteWindow.toggleHeading(2)
     }
 
@@ -706,8 +542,10 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 10
-        spacing: 8
+        anchors.margins: 12
+        anchors.topMargin: noteWindow.height < 240 ? 4 : 12
+        anchors.bottomMargin: noteWindow.height < 240 ? 6 : 12
+        spacing: noteWindow.height < 240 ? 4 : 8
         visible: !noteWindow.collapsed
         clip: true
 
@@ -723,6 +561,7 @@ ApplicationWindow {
 
         TextField {
             id: titleEditor
+            Layout.preferredHeight: 28
             objectName: "titleEditor"
             visible: !noteWindow.collapsed
             Layout.fillWidth: true
@@ -752,6 +591,8 @@ ApplicationWindow {
 
             TextField {
                 id: tagsEditor
+                Layout.preferredHeight: 24
+                Layout.minimumWidth: 0
                 Layout.fillWidth: true
                 placeholderText: qsTr("Tags (e.g. work, rust)...")
                 Accessible.name: qsTr("Note tags")
@@ -796,9 +637,11 @@ ApplicationWindow {
         // Formatting & Media Toolbar
         Rectangle {
             id: formatToolbar
+            objectName: "formatToolbar"
             Layout.fillWidth: true
-            height: 28
-            radius: 6
+            Layout.minimumHeight: 32
+            Layout.preferredHeight: 32
+            radius: height / 2
             color: theme.isDark ? Qt.rgba(1, 1, 1, 0.05) : Qt.rgba(0, 0, 0, 0.04)
             border.width: 1
             border.color: theme.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
@@ -811,12 +654,15 @@ ApplicationWindow {
 
                 // H1
                 UI.StyledButton {
+                    objectName: "heading1Button"
+                    enabled: noteWindow.hasTextSelection
                     iconName: "heading-1"
                     iconSize: 14
                     theme: noteWindow.theme
                     variant: "ghost"
-                    implicitWidth: 26
+                    implicitWidth: 24
                     implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
                     padding: 0
                     leftPadding: 0
                     rightPadding: 0
@@ -828,12 +674,15 @@ ApplicationWindow {
 
                 // H2
                 UI.StyledButton {
+                    objectName: "heading2Button"
+                    enabled: noteWindow.hasTextSelection
                     iconName: "heading-2"
                     iconSize: 14
                     theme: noteWindow.theme
                     variant: "ghost"
-                    implicitWidth: 26
+                    implicitWidth: 24
                     implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
                     padding: 0
                     leftPadding: 0
                     rightPadding: 0
@@ -844,20 +693,23 @@ ApplicationWindow {
                 }
 
                 Rectangle {
-                    width: 1
-                    height: 14
+                    implicitWidth: 1
+                    implicitHeight: 14
                     color: theme.border
                     Layout.alignment: Qt.AlignVCenter
                 }
 
                 // Bold
                 UI.StyledButton {
+                    objectName: "boldButton"
+                    enabled: noteWindow.hasTextSelection
                     iconName: "bold"
                     iconSize: 13
                     theme: noteWindow.theme
-                    variant: "ghost"
-                    implicitWidth: 26
+                    variant: noteWindow.inlineStyleActive("b") ? "accent" : "ghost"
+                    implicitWidth: 24
                     implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
                     padding: 0
                     leftPadding: 0
                     rightPadding: 0
@@ -869,12 +721,15 @@ ApplicationWindow {
 
                 // Italic
                 UI.StyledButton {
+                    objectName: "italicButton"
+                    enabled: noteWindow.hasTextSelection
                     iconName: "italic"
                     iconSize: 13
                     theme: noteWindow.theme
-                    variant: "ghost"
-                    implicitWidth: 26
+                    variant: noteWindow.inlineStyleActive("i") ? "accent" : "ghost"
+                    implicitWidth: 24
                     implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
                     padding: 0
                     leftPadding: 0
                     rightPadding: 0
@@ -886,12 +741,15 @@ ApplicationWindow {
 
                 // Underline
                 UI.StyledButton {
+                    objectName: "underlineButton"
+                    enabled: noteWindow.hasTextSelection
                     iconName: "underline"
                     iconSize: 13
                     theme: noteWindow.theme
-                    variant: "ghost"
-                    implicitWidth: 26
+                    variant: noteWindow.inlineStyleActive("u") ? "accent" : "ghost"
+                    implicitWidth: 24
                     implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
                     padding: 0
                     leftPadding: 0
                     rightPadding: 0
@@ -902,8 +760,8 @@ ApplicationWindow {
                 }
 
                 Rectangle {
-                    width: 1
-                    height: 14
+                    implicitWidth: 1
+                    implicitHeight: 14
                     color: theme.border
                     Layout.alignment: Qt.AlignVCenter
                 }
@@ -911,12 +769,14 @@ ApplicationWindow {
                 // Text Color Dropper
                 UI.StyledButton {
                     id: textColorBtn
+                    enabled: noteWindow.hasTextSelection
                     iconName: "droplet"
                     iconSize: 13
                     theme: noteWindow.theme
                     variant: textColorPopup.visible ? "accent" : "ghost"
-                    implicitWidth: 26
+                    implicitWidth: 24
                     implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
                     padding: 0
                     leftPadding: 0
                     rightPadding: 0
@@ -924,14 +784,13 @@ ApplicationWindow {
                     ToolTip.visible: hovered && !textColorPopup.visible
                     ToolTip.text: qsTr("Text Color")
                     onClicked: {
-                        noteWindow.updateSavedSelection()
                         textColorPopup.open()
                     }
 
                     Popup {
                         id: textColorPopup
                         y: textColorBtn.height + 4
-                        x: -4
+                        x: Math.min(0, formatToolbar.width - textColorBtn.x - width)
                         width: 196
                         height: 38
                         padding: 5
@@ -966,7 +825,7 @@ ApplicationWindow {
                                     radius: 9
                                     color: modelData.color
                                     border.width: modelData.isDefault ? 1.5 : 1
-                                    border.color: modelData.isDefault ? theme.border : Qt.darker(modelData.color, 1.2)
+                                    border.color: modelData.isDefault ? noteWindow.theme.border : Qt.darker(modelData.color, 1.2)
 
                                     ToolTip.visible: colorSwatchArea.containsMouse
                                     ToolTip.text: modelData.name
@@ -977,7 +836,7 @@ ApplicationWindow {
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
-                                            noteWindow.applyTextColor(modelData.color, modelData.isDefault)
+                                            noteWindow.applyTextColor(colorSwatch.modelData.color, colorSwatch.modelData.isDefault)
                                             textColorPopup.close()
                                         }
                                     }
@@ -989,12 +848,14 @@ ApplicationWindow {
 
                 // Image / GIF Button
                 UI.StyledButton {
+                    objectName: "imageButton"
                     iconName: "image"
                     iconSize: 14
                     theme: noteWindow.theme
                     variant: "ghost"
-                    implicitWidth: 26
+                    implicitWidth: 24
                     implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
                     padding: 0
                     leftPadding: 0
                     rightPadding: 0
@@ -1010,9 +871,12 @@ ApplicationWindow {
 
         ScrollView {
             id: contentScroll
+            objectName: "contentScroll"
+            contentWidth: availableWidth
             visible: !noteWindow.collapsed
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.minimumHeight: 24
             clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
             ScrollBar.vertical.policy: ScrollBar.AsNeeded
@@ -1020,35 +884,22 @@ ApplicationWindow {
             TextArea {
                 id: contentEditor
                 objectName: "contentEditor"
-                width: Math.max(100, contentScroll.availableWidth)
-                text: backend.draftContent
+                width: contentScroll.availableWidth
                 textFormat: TextEdit.PlainText
                 placeholderText: qsTr("Write your note…")
                 Accessible.name: qsTr("Note content")
                 wrapMode: TextEdit.Wrap
                 selectByMouse: true
-                font.family: (noteFontFamily === "default" || noteFontFamily === "") ? "" : noteFontFamily
-                font.pixelSize: noteFontSize > 0 ? noteFontSize : 13
+                persistentSelection: true
+                font.family: (noteWindow.noteFontFamily === "default" || noteWindow.noteFontFamily === "") ? "" : noteWindow.noteFontFamily
+                font.pixelSize: noteWindow.noteFontSize > 0 ? noteWindow.noteFontSize : 13
                 color: theme.noteText
                 placeholderTextColor: theme.noteTextSecondary
                 selectionColor: theme.accent
                 selectedTextColor: theme.accentText
                 background: null
-                onSelectionStartChanged: noteWindow.updateSavedSelection()
-                onSelectionEndChanged: noteWindow.updateSavedSelection()
-                onSelectedTextChanged: noteWindow.updateSavedSelection()
                 onTextChanged: {
-                    if (length === 0) {
-                        savedSelectionStart = 0
-                        savedSelectionEnd = 0
-                        savedSelectedText = ""
-                        if (noteWindow.isRichText) {
-                            noteWindow.isRichText = false
-                            textFormat = TextEdit.PlainText
-                            text = ""
-                        }
-                    }
-                    if (text !== backend.draftContent) {
+                    if (!noteWindow.loadingContent && text !== backend.draftContent) {
                         backend.editContent(text)
                         autosave.restart()
                     }

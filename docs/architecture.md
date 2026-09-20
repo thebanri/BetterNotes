@@ -151,3 +151,12 @@ to create and destroy Qt objects on the process main thread. The shared engine
 loader retains Phase 1's resource-error handling. The test uses real embedded
 QML windows and isolated temporary storage; it does not certify real compositor
 interaction or native decoration drag/resize behavior.
+
+## Sticky editor formatting and settings maintenance
+
+Selection formatting uses the small `app/src/text_formatter` Qt presentation
+adapter. It merges individual `QTextCharFormat` properties through `QTextCursor`,
+retaining mixed styles and undo history. QML owns selection, layout, palette
+choices and interaction; Rust still owns saving notes and appearance preferences.
+See [editor/UI validation](editor-ui-validation.md) for the selection semantics,
+file list, regression coverage and remaining compositor validation.

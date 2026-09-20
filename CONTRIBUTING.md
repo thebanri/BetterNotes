@@ -19,6 +19,8 @@ Thank you for your interest in contributing to BetterNotes! BetterNotes is an op
 - **C++ Compiler:** GCC or Clang supporting C++17.
 - **Qt 6:** Core, Gui, Qml, Quick, QuickControls2, and Wayland plugins.
 - **SQLite 3:** Development headers and pkg-config.
+- **GUI tests:** The QtTest QML module (on Debian/Ubuntu: `qml6-module-qttest`).
+  The editor assertions read selection formatting through Qt 6.7+ test APIs.
 
 ```bash
 # Arch Linux / CachyOS

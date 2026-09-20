@@ -1,4 +1,5 @@
 import QtQuick
+import QtTest
 import BetterNotes.App
 import "qrc:/betternotes/windows" as UI
 import "qrc:/betternotes/windows/WindowPlacement.js" as Placement
@@ -18,6 +19,7 @@ Window {
     Component { id: mainWindow; UI.Main {} }
     NotesBackend { id: competingEditor }
     ApplicationInfo { id: platformInfo }
+    TestCase { id: input; name: "EditorInteraction"; when: false }
 
     function findItem(item, name) {
         if (item.objectName === name) return item
@@ -53,6 +55,143 @@ Window {
         check(!platformInfo.canPositionWindows("wayland") && !platformInfo.canPositionWindows("wayland-egl"), "Wayland must not restore absolute positions")
         check(!platformInfo.canPositionWindows("unknown"), "Unknown platforms must degrade safely")
         check(platformInfo.canPositionWindows("xcb"), "X11 placement unavailable")
+    }
+
+    function clickTool(window, name) {
+        const button = findItem(window.contentItem, name)
+        check(button && button.enabled, "Formatting button unavailable: " + name)
+        input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton)
+    }
+
+    function assertEditorFormatting(window) {
+        const body = findItem(window.contentItem, "contentEditor")
+        const original = "repeat repeat <b>literal</b> & İstanbul 🦀\nSecond line"
+        body.text = original
+        window.requestActivate()
+        body.forceActiveFocus()
+        input.wait(30)
+        body.select(7, 13)
+        clickTool(window, "boldButton")
+        check(body.cursorSelection.font.bold, "Bold button did not format selected text")
+        check(body.selectedText === "repeat", "Toolbar click lost selection")
+        check(window.plainContent === original, "Formatting changed literal HTML or Unicode: " + JSON.stringify(body.getText(0, body.length)))
+        body.select(0, 6)
+        check(!body.cursorSelection.font.bold, "Formatting leaked into a repeated word")
+        body.select(7, 13)
+        input.keyClick(Qt.Key_B, Qt.ControlModifier)
+        check(!body.cursorSelection.font.bold, "Ctrl+B did not toggle bold")
+        input.keyClick(Qt.Key_B, Qt.ControlModifier)
+        check(body.cursorSelection.font.bold, "Ctrl+B did not restore bold")
+        clickTool(window, "italicButton")
+        check(body.cursorSelection.font.bold && body.cursorSelection.font.italic, "Italic discarded bold")
+        body.undo()
+        check(body.cursorSelection.font.bold && !body.cursorSelection.font.italic, "Undo failed to preserve bold")
+        body.redo()
+        check(body.cursorSelection.font.italic, "Redo failed")
+        body.select(7, 13)
+        clickTool(window, "boldButton")
+        check(!body.cursorSelection.font.bold && body.cursorSelection.font.italic, "Bold toggle cleared italic")
+        clickTool(window, "underlineButton")
+        window.applyTextColor("#ef4444", false)
+        check(body.cursorSelection.font.underline && body.cursorSelection.font.italic, "Color cleared existing styles")
+        check(body.cursorSelection.color.toString() === "#ef4444", "Text color not applied")
+        window.applyTextColor("#000000", true)
+        check(body.cursorSelection.font.underline && body.cursorSelection.font.italic, "Reset color cleared font styles")
+        body.undo()
+        check(body.cursorSelection.color.toString() === "#ef4444", "Reset color was not undoable")
+        body.select(7, 13)
+        clickTool(window, "heading1Button")
+        check(body.cursorSelection.font.pixelSize === 26 && body.cursorSelection.font.bold, "H1 did not style selection: " + body.cursorSelection.font.pixelSize + " / " + body.cursorSelection.font.bold + " / " + body.selectedText)
+        clickTool(window, "heading2Button")
+        check(body.cursorSelection.font.pixelSize === 20, "H2 did not style selection")
+        clickTool(window, "heading2Button")
+        check(body.cursorSelection.font.pixelSize === 13, "H2 did not toggle back to body size")
+        body.select(0, 6)
+        check(body.cursorSelection.font.pixelSize === 13 && !body.cursorSelection.font.bold, "Heading changed adjacent text")
+        body.deselect()
+        const before = body.text
+        window.toggleInlineStyle("b")
+        window.toggleHeading(1)
+        check(body.text === before, "No selection reused an old selection or inserted placeholder text")
+        body.select(7, original.length)
+        clickTool(window, "italicButton")
+        check(window.plainContent === original, "Multiline formatting changed content")
+        check(window.flush(), "Formatted note failed to save")
+        const id = window.noteId
+        window.close()
+        window = library.openNote(id)
+        const restored = findItem(window.contentItem, "contentEditor")
+        check(window.plainContent === original, "Reopen lost rich text content")
+        restored.select(7, 13)
+        check(restored.cursorSelection.font.underline, "Reopen lost inline formatting")
+
+        if (Qt.application.arguments.indexOf("--capture-ui") !== -1) {
+            input.wait(30)
+            input.grabImage(window.contentItem.parent).save("/tmp/betternotes-note.png")
+        }
+        const settings = window.settingsWindow
+        settings.openCentered(window)
+        settings.height = 680
+        input.wait(30)
+        const customButton = findItem(settings.contentItem, "customColorButton")
+        input.mouseClick(customButton, customButton.width / 2, customButton.height / 2, Qt.LeftButton)
+        input.wait(20)
+        input.keyClick(Qt.Key_Escape)
+        check(settings.visible, "Closing color picker closed settings")
+        check(settings.chooseColor("#628c7a"), "Custom color save failed")
+        check(window.noteTint === "#628c7a", "Custom color not reflected in note")
+        settings.paletteIndex = 1
+        input.wait(30)
+        const swatch = findItem(settings.contentItem, "colorSwatch_#3b82f6")
+        check(swatch, "Palette swatches missing")
+        input.mouseClick(swatch, swatch.width / 2, swatch.height / 2, Qt.LeftButton)
+        check(window.noteTint === "#3b82f6", "Palette click did not select color")
+        const hex = findItem(settings.contentItem, "hexColorField")
+        hex.text = "not-a-color"
+        settings.applyHex()
+        check(window.noteTint === "#3b82f6" && settings.appearanceError.length > 0, "Invalid custom color was accepted")
+        hex.text = "8B5CF6"
+        settings.applyHex()
+        check(window.noteTint === "#8b5cf6" && settings.appearanceError.length === 0, "Valid custom color rejected")
+        if (Qt.application.arguments.indexOf("--capture-ui") !== -1) {
+            settings.width = 480
+            settings.height = 680
+            input.wait(30)
+            input.grabImage(settings.contentItem).save("/tmp/betternotes-settings.png")
+            const originalTheme = window.editorBackend.themeMode
+            check(window.editorBackend.setThemeMode("dark"), "Dark preview failed")
+            input.wait(30)
+            input.grabImage(settings.contentItem).save("/tmp/betternotes-settings-dark.png")
+            check(window.editorBackend.setThemeMode(originalTheme), "Restoring theme failed")
+        }
+        settings.width = settings.minimumWidth
+        settings.height = settings.minimumHeight
+        input.wait(30)
+        const scroll = findItem(settings.contentItem, "settingsScroll")
+        check(scroll.leftPadding >= 20 && scroll.contentWidth === scroll.availableWidth, "Settings content lost padding or overflows")
+        settings.close()
+        for (const size of [[240, 180], [800, 600], [260, 220], [380, 360]]) {
+            window.width = size[0]
+            window.height = size[1]
+            input.wait(30)
+            const toolbar = findItem(window.contentItem, "formatToolbar")
+            const editorScroll = findItem(window.contentItem, "contentScroll")
+            const imageButton = findItem(window.contentItem, "imageButton")
+            const imageRight = imageButton.mapToItem(toolbar, imageButton.width, 0).x
+            check(toolbar.width <= window.width - 20 && imageRight <= toolbar.width, "Toolbar overflow after resize")
+            const editorBottom = editorScroll.mapToItem(window.contentItem, 0, editorScroll.height).y
+            check(editorBottom <= window.contentItem.height, "Editor extends below window after resize")
+            check(editorScroll.width > 0 && editorScroll.height >= 24, "Editor collapsed during resize")
+            check(Math.abs(restored.width - editorScroll.availableWidth) < 1, "Editor width diverged from viewport")
+        }
+        window.toggleCollapsed()
+        input.wait(20)
+        window.toggleCollapsed()
+        check(window.height === 360, "Collapse/expand lost resized height")
+        window.close()
+        window = library.openNote(id)
+        check(window.noteTint === "#8b5cf6", "Selected palette color did not persist")
+        check(window.deleteConfirmed(), "Formatting test cleanup failed")
     }
 
     Timer {
@@ -135,7 +274,7 @@ Window {
                 harness.check(!harness.library.noteWindows[harness.secondId], "Closed window stayed registered")
                 harness.check(harness.library.libraryBackend.titles.length === 2, "Close deleted the note")
                 const disposable = harness.library.createNote()
-                harness.check(disposable.deleteConfirmed(), "Confirmed delete failed")
+                harness.assertEditorFormatting(disposable)
                 harness.check(harness.library.libraryBackend.titles.length === 2, "Delete failed to update library")
                 harness.first.toggleCollapsed()
                 harness.check(harness.first.collapsed && harness.first.height === harness.first.collapsedHeight, "Collapse failed")
