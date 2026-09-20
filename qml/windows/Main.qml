@@ -525,20 +525,26 @@ ApplicationWindow {
 
     Platform.SystemTrayIcon {
         id: systemTray
-        visible: systemTray.available
+        visible: false
         icon.name: "accessories-notes"
         tooltip: applicationInfo.name()
 
         onActivated: function(reason) {
-            if (window.visible) {
-                window.hide()
-            } else {
-                window.showNormal()
-                window.requestActivate()
+            if (reason === Platform.SystemTrayIcon.Trigger) {
+                if (window.visible) {
+                    window.hide()
+                } else {
+                    window.showNormal()
+                    window.requestActivate()
+                }
+            } else if (reason === Platform.SystemTrayIcon.Context) {
+                trayMenu.open()
             }
         }
 
         menu: Platform.Menu {
+            id: trayMenu
+            visible: false
             Platform.MenuItem {
                 text: qsTr("New note")
                 enabled: backend.ready
@@ -642,6 +648,15 @@ ApplicationWindow {
         repeat: true
         onTriggered: {
             if (backend.ready) backend.checkReminders()
+        }
+    }
+    Timer {
+        id: trayTimer
+        interval: 300
+        running: true
+        repeat: false
+        onTriggered: {
+            systemTray.visible = systemTray.available
         }
     }
 
