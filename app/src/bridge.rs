@@ -21,6 +21,14 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "canPositionWindows"]
         fn can_position_windows(&self, plugin: QString) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "startInBackground"]
+        fn start_in_background(&self) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "startQuickCapture"]
+        fn start_quick_capture(&self) -> bool;
     }
 }
 
@@ -38,5 +46,13 @@ impl ffi::ApplicationInfo {
 
     pub fn version(&self) -> cxx_qt_lib::QString {
         betternotes_core::APPLICATION_VERSION.into()
+    }
+
+    pub fn start_in_background(&self) -> bool {
+        std::env::args().any(|arg| arg == "--background" || arg == "-b")
+    }
+
+    pub fn start_quick_capture(&self) -> bool {
+        std::env::args().any(|arg| arg == "--quick-capture" || arg == "-q")
     }
 }

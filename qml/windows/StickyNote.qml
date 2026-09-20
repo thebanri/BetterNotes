@@ -240,6 +240,13 @@ ApplicationWindow {
                     }
                     MenuItem { text: qsTr("Save"); onTriggered: noteWindow.flush() && noteWindow.persist(true) }
                     MenuItem {
+                        text: qsTr("Copy to clipboard")
+                        onTriggered: {
+                            backend.copyToClipboard(backend.draftContent)
+                            backend.sendNotification(qsTr("Copied to clipboard"), backend.draftTitle || qsTr("Note content copied"))
+                        }
+                    }
+                    MenuItem {
                         text: qsTr("Reload saved note")
                         onTriggered: { if (backend.dirty) noteWindow.showDialog(reloadDialog); else backend.reloadNote() }
                     }

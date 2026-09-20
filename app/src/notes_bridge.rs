@@ -12,6 +12,9 @@ pub mod ffi {
         type QString = cxx_qt_lib::QString;
         include!("cxx-qt-lib/qstringlist.h");
         type QStringList = cxx_qt_lib::QStringList;
+        include!("platform_helper.h");
+        fn platformCopyToClipboard(text: &QString);
+        fn platformGetClipboardText() -> QString;
     }
     extern "RustQt" {
         #[qobject]
@@ -41,6 +44,7 @@ pub mod ffi {
         #[qproperty(QString, error_message, READ, NOTIFY = status_changed, cxx_name = "errorMessage")]
         #[qproperty(QString, window_error, READ, NOTIFY = status_changed, cxx_name = "windowError")]
         #[qproperty(QString, theme_mode, READ, NOTIFY = theme_changed, cxx_name = "themeMode")]
+        #[qproperty(bool, autostart_enabled, READ, NOTIFY = autostart_changed, cxx_name = "autostartEnabled")]
         type NotesBackend = super::NotesBackendRust;
 
         #[qsignal]
@@ -53,6 +57,8 @@ pub mod ffi {
         fn theme_changed(self: Pin<&mut Self>);
         #[qsignal]
         fn search_changed(self: Pin<&mut Self>);
+        #[qsignal]
+        fn autostart_changed(self: Pin<&mut Self>);
 
         #[qinvokable]
         fn initialize(self: Pin<&mut Self>) -> bool;
@@ -132,6 +138,18 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "setTags"]
         fn set_tags(self: Pin<&mut Self>, tags: QString) -> bool;
+        #[qinvokable]
+        #[cxx_name = "setAutostart"]
+        fn set_autostart(self: Pin<&mut Self>, enabled: bool) -> bool;
+        #[qinvokable]
+        #[cxx_name = "copyToClipboard"]
+        fn copy_to_clipboard(self: Pin<&mut Self>, text: QString) -> bool;
+        #[qinvokable]
+        #[cxx_name = "getClipboardText"]
+        fn get_clipboard_text(&self) -> QString;
+        #[qinvokable]
+        #[cxx_name = "sendNotification"]
+        fn send_notification(self: Pin<&mut Self>, title: QString, body: QString) -> bool;
     }
 }
 
@@ -163,6 +181,7 @@ pub struct NotesBackendRust {
     window_error: QString,
     window_state: WindowState,
     theme_mode: QString,
+    autostart_enabled: bool,
 }
 
 impl Default for NotesBackendRust {
@@ -195,6 +214,7 @@ impl Default for NotesBackendRust {
             window_error: QString::default(),
             window_state: WindowState::default(),
             theme_mode: QString::from("system"),
+            autostart_enabled: false,
         }
     }
 }
@@ -407,6 +427,7 @@ impl ffi::NotesBackend {
                     .unwrap_or_default();
                 let dirty = session.dirty();
                 let theme = session.theme().unwrap_or_default();
+                let autostart_enabled = session.is_autostart_enabled().unwrap_or(false);
                 state.titles = titles;
                 state.note_ids = note_ids;
                 state.snippets = snippets;
@@ -425,6 +446,7 @@ impl ffi::NotesBackend {
                 state.tags_text = tags_text;
                 state.dirty = dirty;
                 state.theme_mode = QString::from(theme.as_str());
+                state.autostart_enabled = autostart_enabled;
             }
         }
         self.as_mut().list_changed();
@@ -432,6 +454,7 @@ impl ffi::NotesBackend {
             self.as_mut().selection_changed();
         }
         self.as_mut().theme_changed();
+        self.as_mut().autostart_changed();
         self.status_changed();
         success
     }
@@ -566,5 +589,30 @@ impl ffi::NotesBackend {
             .filter(|s| !s.is_empty())
             .collect();
         self.perform(true, |session| session.set_tags(rust_tags))
+    }
+
+    pub fn set_autostart(mut self: Pin<&mut Self>, enabled: bool) -> bool {
+        let result = betternotes_core::set_autostart(enabled, None);
+        let success = result.is_ok();
+        if success {
+            self.as_mut().rust_mut().autostart_enabled = enabled;
+            self.as_mut().autostart_changed();
+        }
+        success
+    }
+
+    pub fn copy_to_clipboard(self: Pin<&mut Self>, text: QString) -> bool {
+        ffi::platformCopyToClipboard(&text);
+        true
+    }
+
+    pub fn get_clipboard_text(&self) -> QString {
+        ffi::platformGetClipboardText()
+    }
+
+    pub fn send_notification(self: Pin<&mut Self>, title: QString, body: QString) -> bool {
+        let _ =
+            betternotes_core::NotificationService::notify(&title.to_string(), &body.to_string());
+        true
     }
 }

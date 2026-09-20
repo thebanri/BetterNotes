@@ -4,7 +4,9 @@ fn main() {
     CxxQtBuilder::new_qml_module(QmlModule::new("BetterNotes.App"))
         .file("src/bridge.rs")
         .file("src/notes_bridge.rs")
+        .cpp_file("src/platform_helper.cpp")
         .qrc("../qml/qml.qrc")
+        .qt_module("Gui")
         .qt_module("Quick")
         .build();
 }

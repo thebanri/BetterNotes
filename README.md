@@ -1,9 +1,9 @@
 # BetterNotes
 
-Linux-first desktop notes application, currently at **Phase 4 — Modern UI**.
+Linux-first desktop notes application, currently at **Phase 6 — Linux Integration**.
 BetterNotes is a working codename. Create, edit and delete plain-text notes in
 independent windows, with autosave, SQLite persistence, saved window state,
-and light/dark/system themes with polished QML components.
+light/dark/system themes, FTS5 search, system tray, quick capture, notifications, and autostart.
 
 ## Architecture
 
@@ -187,15 +187,15 @@ means the event loop remained running until the timeout; it is not a graceful ex
 See [the Phase 5 validation report](docs/phase-5-validation.md) for commands and
 actual results. Earlier reports record [Phase 4](docs/phase-4-validation.md),
 [Phase 3](docs/phase-3-validation.md), [Phase 2](docs/phase-2-validation.md) and
-[Phase 1](docs/validation.md).
+[Phase 1](docs/validation.md). See [the Phase 6 validation report](docs/phase-6-validation.md).
 
 ## Scope and next phase
 
-Phase 5 adds SQLite FTS5 full-text search with automatic synchronization, tags,
-priorities, archiving, pinned notes, an instant Command Palette (`Ctrl+K`/`Ctrl+Shift+P`),
-and search/filter views in the library window.
-
-Phase 6 will implement Linux Desktop Integration: system tray icon and menu,
+Phase 6 implements Linux Desktop Integration: system tray icon and menu,
 XDG autostart, desktop notifications (Freedesktop specification), global shortcuts,
-and clipboard integration.
+Quick Capture scratchpad, and native clipboard integration.
+
+Phase 7 will focus on Wayland / X11 Compositor Compatibility across KDE Plasma,
+GNOME, XFCE, Cinnamon, MATE, Budgie, Hyprland, and Sway, documenting protocol
+differences, window management behavior, and graceful fallbacks.
 No later-phase features are included here. Project licensing remains undecided; no license was assigned.

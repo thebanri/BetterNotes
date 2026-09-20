@@ -19,7 +19,38 @@ fn run() -> Result<i32, &'static str> {
     Ok(app.exec())
 }
 
+fn print_help() {
+    println!(
+        "{} v{}",
+        betternotes_core::APPLICATION_NAME,
+        betternotes_core::APPLICATION_VERSION
+    );
+    println!("Linux-first sticky notes and desktop workspace application.\n");
+    println!("Usage: betternotes [OPTIONS]\n");
+    println!("Options:");
+    println!(
+        "  -b, --background     Start in background (restore notes and tray, hide main window)"
+    );
+    println!("  -q, --quick-capture  Open Quick Capture scratchpad immediately");
+    println!("  -h, --help           Print this help message");
+    println!("  -v, --version        Print version information");
+}
+
 fn main() -> std::process::ExitCode {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_help();
+        return std::process::ExitCode::SUCCESS;
+    }
+    if args.iter().any(|a| a == "-v" || a == "--version") {
+        println!(
+            "{} {}",
+            betternotes_core::APPLICATION_NAME,
+            betternotes_core::APPLICATION_VERSION
+        );
+        return std::process::ExitCode::SUCCESS;
+    }
+
     match run() {
         Ok(0) => std::process::ExitCode::SUCCESS,
         Ok(code) => {

@@ -8,6 +8,7 @@
         <file>components/StyledTextField.qml</file>
         <file>components/StatusBadge.qml</file>
         <file>components/NoteCard.qml</file>
+        <file>windows/QuickCapture.qml</file>
         <file>components/CommandPalette.qml</file>
     </qresource>
 </RCC>

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt.labs.platform as Platform
 import BetterNotes.App
 import "../themes" as Themes
 import "../components" as UI
@@ -13,7 +14,7 @@ ApplicationWindow {
     height: 480
     minimumWidth: 400
     minimumHeight: 300
-    visible: true
+    visible: !applicationInfo.startInBackground()
     title: applicationInfo.name() + qsTr(" — All notes")
     color: theme.windowBackground
     property alias libraryBackend: backend
@@ -22,6 +23,7 @@ ApplicationWindow {
     property string windowError: ""
     property string filterTab: "all"
     property string searchFilter: ""
+    property var quickCaptureWindow: null
 
     Themes.Theme { id: theme; themeMode: backend.themeMode }
     ApplicationInfo { id: applicationInfo }
@@ -35,6 +37,15 @@ ApplicationWindow {
             onLibraryRequested: { window.showNormal(); window.requestActivate() }
         }
     }
+    Component {
+        id: quickCaptureComponent
+        QuickCapture {
+            onNoteCreated: function(id) {
+                backend.reload()
+                window.openNote(id)
+            }
+        }
+    }
 
     function initialize() {
         if (!backend.initialize()) return
@@ -44,6 +55,9 @@ ApplicationWindow {
             if (!openNote(ids[i])) errors.push(windowError)
         }
         windowError = errors.join("\n")
+        if (applicationInfo.startQuickCapture()) {
+            openQuickCapture()
+        }
     }
     Component.onCompleted: initialize()
 
@@ -80,6 +94,34 @@ ApplicationWindow {
         const sticky = noteWindows[id]
         delete noteWindows[id]
         if (sticky) sticky.destroy()
+    }
+
+    function showAllNotes() {
+        const ids = Object.keys(noteWindows)
+        for (let i = 0; i < ids.length; ++i) {
+            const sticky = noteWindows[ids[i]]
+            if (sticky.visibility === Window.Minimized) sticky.showNormal()
+            sticky.requestActivate()
+        }
+        window.showNormal()
+        window.requestActivate()
+    }
+
+    function hideAllNotes() {
+        const ids = Object.keys(noteWindows)
+        for (let i = 0; i < ids.length; ++i) {
+            noteWindows[ids[i]].showMinimized()
+        }
+    }
+
+    function openQuickCapture() {
+        if (!quickCaptureWindow) {
+            quickCaptureWindow = quickCaptureComponent.createObject(window, {theme: window.theme})
+        }
+        if (quickCaptureWindow) {
+            quickCaptureWindow.showNormal()
+            quickCaptureWindow.requestActivate()
+        }
     }
 
     onClosing: function(close) {
@@ -425,6 +467,9 @@ ApplicationWindow {
         onNoteSelected: function(id) { window.openNote(id) }
         onActionTriggered: function(action) {
             if (action === "new_note") window.createNote()
+            else if (action === "quick_capture") window.openQuickCapture()
+            else if (action === "show_all") window.showAllNotes()
+            else if (action === "hide_all") window.hideAllNotes()
             else if (action === "toggle_theme") {
                 if (backend.themeMode === "system") backend.setThemeMode("light")
                 else if (backend.themeMode === "light") backend.setThemeMode("dark")
@@ -433,7 +478,63 @@ ApplicationWindow {
         }
     }
 
+    Platform.SystemTrayIcon {
+        id: systemTray
+        visible: systemTray.available
+        icon.name: "accessories-notes"
+        tooltip: applicationInfo.name()
+
+        menu: Platform.Menu {
+            Platform.MenuItem {
+                text: qsTr("New note")
+                enabled: backend.ready
+                onTriggered: window.createNote()
+            }
+            Platform.MenuItem {
+                text: qsTr("Quick capture")
+                onTriggered: window.openQuickCapture()
+            }
+            Platform.MenuItem {
+                text: qsTr("Search notes")
+                onTriggered: {
+                    window.showNormal()
+                    window.requestActivate()
+                    commandPalette.open()
+                }
+            }
+            Platform.MenuSeparator {}
+            Platform.MenuItem {
+                text: qsTr("Show all notes")
+                onTriggered: window.showAllNotes()
+            }
+            Platform.MenuItem {
+                text: qsTr("Hide all notes")
+                onTriggered: window.hideAllNotes()
+            }
+            Platform.MenuSeparator {}
+            Platform.MenuItem {
+                text: qsTr("Start at login")
+                checkable: true
+                checked: backend.autostartEnabled
+                onTriggered: backend.setAutostart(!checked)
+            }
+            Platform.MenuItem {
+                text: qsTr("Open library")
+                onTriggered: {
+                    window.showNormal()
+                    window.requestActivate()
+                }
+            }
+            Platform.MenuSeparator {}
+            Platform.MenuItem {
+                text: qsTr("Quit")
+                onTriggered: window.close()
+            }
+        }
+    }
+
     Shortcut { sequences: [StandardKey.New]; context: Qt.WindowShortcut; enabled: backend.ready; onActivated: window.createNote() }
     Shortcut { sequences: [StandardKey.Quit]; context: Qt.WindowShortcut; onActivated: window.close() }
     Shortcut { sequences: ["Ctrl+K", "Ctrl+Shift+P"]; context: Qt.WindowShortcut; onActivated: commandPalette.open() }
+    Shortcut { sequences: ["Ctrl+Alt+Space"]; onActivated: window.openQuickCapture() }
 }

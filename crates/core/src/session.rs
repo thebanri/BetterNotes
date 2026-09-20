@@ -88,6 +88,14 @@ impl NotesSession {
         self.store.set_theme(theme)
     }
 
+    pub fn is_autostart_enabled(&self) -> Result<bool> {
+        crate::autostart::is_autostart_enabled()
+    }
+
+    pub fn set_autostart(&mut self, enabled: bool) -> Result<()> {
+        crate::autostart::set_autostart(enabled, None)
+    }
+
     /// Sticky reload must never silently switch to a different note after deletion.
     pub fn reload_note(&mut self) -> Result<()> {
         let id = self.current.as_ref().ok_or(Error::NoSelection)?.id;
