@@ -1,0 +1,43 @@
+app-id: org.betternotes.BetterNotes
+runtime: org.kde.Platform
+runtime-version: '6.7'
+sdk: org.kde.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: betternotes
+
+finish-args:
+  # Display servers
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+
+  # Desktop notifications & autostart
+  - --socket=session-bus
+  - --talk-name=org.freedesktop.Notifications
+  - --filesystem=xdg-config/autostart:create
+
+  # Storage and private runtime directories
+  - --filesystem=xdg-data/betternotes:create
+  - --filesystem=xdg-config/betternotes:create
+  - --filesystem=xdg-run/betternotes:create
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/betternotes/cargo
+
+modules:
+  - name: betternotes
+    buildsystem: simple
+    build-commands:
+      - cargo --version
+      - cargo build --release --locked
+      - install -Dm755 target/release/betternotes /app/bin/betternotes
+      - install -Dm644 packaging/linux/org.betternotes.BetterNotes.desktop /app/share/applications/org.betternotes.BetterNotes.desktop
+      - install -Dm644 packaging/linux/org.betternotes.BetterNotes.metainfo.xml /app/share/metainfo/org.betternotes.BetterNotes.metainfo.xml
+      - install -Dm644 assets/icons/org.betternotes.BetterNotes.svg /app/share/icons/hicolor/scalable/apps/org.betternotes.BetterNotes.svg
+    sources:
+      - type: dir
+        path: ../../../

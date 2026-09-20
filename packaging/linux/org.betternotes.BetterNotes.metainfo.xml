@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.betternotes.BetterNotes</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>BetterNotes</name>
+  <summary>Native, lightweight, Linux-first sticky notes and desktop workspace</summary>
+
+  <description>
+    <p>
+      BetterNotes is a production-quality, open-source, Linux-first sticky notes and desktop workspace application built with Rust and Qt 6. Designed for performance, data privacy, and keyboard-first productivity, it provides independent floating note windows with persistent geometry, full-text search, and desktop integration across modern Linux environments.
+    </p>
+    <p>Key Features:</p>
+    <ul>
+      <li>Native Wayland and X11 support with compositor compatibility policies for KDE Plasma, GNOME, XFCE, Hyprland, and Sway</li>
+      <li>Instant offline SQLite storage with FTS5 full-text search and tagging</li>
+      <li>Independent, resizable sticky notes with always-on-top window pin support</li>
+      <li>Global Quick Capture scratchpad (Ctrl+Alt+Space) and Command Palette (Ctrl+K)</li>
+      <li>One-time and recurring desktop reminders (Daily, Weekly, Monthly, Yearly)</li>
+      <li>Safe file and image attachments stored isolated in XDG data directories</li>
+      <li>Data sovereignty: JSON and Markdown import/export, atomic crash-safe backup and recovery</li>
+      <li>Single-instance Unix domain socket IPC and unified CLI interface</li>
+      <li>Modern dark, light, and system-adaptive visual themes</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">org.betternotes.BetterNotes.desktop</launchable>
+
+  <provides>
+    <binary>betternotes</binary>
+  </provides>
+
+  <categories>
+    <category>Utility</category>
+    <category>Office</category>
+    <category>TextEditor</category>
+  </categories>
+
+  <keywords>
+    <keyword>notes</keyword>
+    <keyword>sticky</keyword>
+    <keyword>workspace</keyword>
+    <keyword>markdown</keyword>
+    <keyword>reminders</keyword>
+    <keyword>todo</keyword>
+  </keywords>
+
+  <releases>
+    <release version="1.0.0" date="2026-09-20">
+      <description>
+        <p>Initial release of BetterNotes for Linux desktop environments.</p>
+      </description>
+    </release>
+  </releases>
+</component>

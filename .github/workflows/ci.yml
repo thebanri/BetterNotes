@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Build & Test (Linux)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            libsqlite3-dev \
+            qt6-base-dev \
+            qt6-base-dev-tools \
+            qt6-declarative-dev \
+            qt6-declarative-dev-tools \
+            libqt6core6 \
+            libqt6gui6 \
+            libqt6qml6 \
+            libqt6quick6 \
+            qml6-module-qtquick-controls \
+            qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates \
+            qml6-module-qt-labs-platform
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
+        run: cargo test --locked
+
+      - name: Build release binary
+        run: cargo build --release --locked
