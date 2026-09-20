@@ -137,6 +137,175 @@ impl DesktopEnvironment {
             _ => "StatusNotifierItem (Freedesktop SNI) supported natively.",
         }
     }
+
+    /// Automatically registers window manager rules and scripts to ensure sticky notes
+    /// do not appear as windows in the taskbar or switcher.
+    pub fn setup_window_manager_integration(&self) {
+        if matches!(self, Self::KdePlasma) {
+            setup_kde_plasma_taskbar_integration();
+        }
+    }
+}
+
+fn setup_kde_plasma_taskbar_integration() {
+    let script_content = r#"
+function checkAndHide(win) {
+    if (!win) return;
+    var cls = (win.resourceClass || "").toLowerCase();
+    var name = (win.resourceName || "").toLowerCase();
+    if (cls !== "betternotes" && name !== "betternotes") return;
+    var cap = win.caption || "";
+    if (cap.indexOf("All notes") === -1 && cap.indexOf("Quick Capture") === -1) {
+        win.skipTaskbar = true;
+        win.skipPager = true;
+        win.skipSwitcher = true;
+    }
+}
+
+function onWindowAdded(win) {
+    if (!win) return;
+    checkAndHide(win);
+    if (win.captionChanged) {
+        win.captionChanged.connect(function() {
+            checkAndHide(win);
+        });
+    }
+}
+
+workspace.windowAdded.connect(onWindowAdded);
+var existing = workspace.windowList();
+for (var i = 0; i < existing.length; i++) {
+    onWindowAdded(existing[i]);
+}
+"#;
+
+    if let Ok(data_dir) = crate::paths::data_directory(
+        std::env::var_os("XDG_DATA_HOME").as_deref(),
+        std::env::var_os("HOME").as_deref(),
+    ) {
+        let script_path = data_dir.join("kwin_skip_taskbar.js");
+        if std::fs::write(&script_path, script_content).is_ok() {
+            if let Ok(out) = std::process::Command::new("busctl")
+                .args([
+                    "--user",
+                    "call",
+                    "org.kde.KWin",
+                    "/Scripting",
+                    "org.kde.kwin.Scripting",
+                    "loadScript",
+                    "s",
+                    script_path.to_str().unwrap_or_default(),
+                ])
+                .output()
+            {
+                if out.status.success() {
+                    let out_str = String::from_utf8_lossy(&out.stdout);
+                    if let Some(id_str) = out_str.split_whitespace().last() {
+                        let script_obj = format!("/Scripting/Script{id_str}");
+                        let _ = std::process::Command::new("busctl")
+                            .args([
+                                "--user",
+                                "call",
+                                "org.kde.KWin",
+                                &script_obj,
+                                "org.kde.kwin.Script",
+                                "run",
+                            ])
+                            .status();
+                    }
+                }
+            }
+        }
+    }
+
+    let kread = std::process::Command::new("kreadconfig6")
+        .args([
+            "--file",
+            "kwinrulesrc",
+            "--group",
+            "General",
+            "--key",
+            "rules",
+        ])
+        .output();
+
+    if let Ok(out) = kread {
+        let existing_rules = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        let mut rules: Vec<String> = existing_rules
+            .split(',')
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim().to_string())
+            .collect();
+
+        if !rules.iter().any(|r| r == "betternotes-stickies") {
+            rules.push("betternotes-stickies".into());
+            let count = rules.len().to_string();
+            let rules_joined = rules.join(",");
+
+            let _ = std::process::Command::new("kwriteconfig6")
+                .args([
+                    "--file",
+                    "kwinrulesrc",
+                    "--group",
+                    "General",
+                    "--key",
+                    "rules",
+                    &rules_joined,
+                ])
+                .status();
+            let _ = std::process::Command::new("kwriteconfig6")
+                .args([
+                    "--file",
+                    "kwinrulesrc",
+                    "--group",
+                    "General",
+                    "--key",
+                    "count",
+                    &count,
+                ])
+                .status();
+        }
+
+        let keys = [
+            ("Description", "BetterNotes Sticky Notes (Skip Taskbar)"),
+            ("wmclass", "betternotes"),
+            ("wmclassmatch", "1"),
+            ("wmclasscomplete", "false"),
+            ("types", "512"),
+            ("typesrule", "2"),
+            ("skiptaskbar", "true"),
+            ("skiptaskbarrule", "2"),
+            ("skippager", "true"),
+            ("skippagerrule", "2"),
+            ("skipswitcher", "true"),
+            ("skipswitcherrule", "2"),
+        ];
+
+        for (k, v) in keys {
+            let _ = std::process::Command::new("kwriteconfig6")
+                .args([
+                    "--file",
+                    "kwinrulesrc",
+                    "--group",
+                    "betternotes-stickies",
+                    "--key",
+                    k,
+                    v,
+                ])
+                .status();
+        }
+
+        let _ = std::process::Command::new("busctl")
+            .args([
+                "--user",
+                "call",
+                "org.kde.KWin",
+                "/KWin",
+                "org.kde.KWin",
+                "reconfigure",
+            ])
+            .status();
+    }
 }
 
 pub struct DesktopReport {

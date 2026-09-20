@@ -26,6 +26,10 @@ fn run() -> Result<i32, &'static str> {
         .set_application_name(&betternotes_core::APPLICATION_NAME.into());
     app.as_mut()
         .set_application_version(&betternotes_core::APPLICATION_VERSION.into());
+
+    // Configure Linux desktop window manager rules/scripts (e.g. skip taskbar on KDE Plasma)
+    betternotes_core::DesktopEnvironment::detect().setup_window_manager_integration();
+
     // Keep the engine alive until the event loop ends and drop it before Qt.
     let _engine = load_engine(MAIN_QML)?;
     eprintln!("BetterNotes: application window loaded");

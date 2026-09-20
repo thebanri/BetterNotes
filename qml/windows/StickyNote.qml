@@ -37,12 +37,19 @@ ApplicationWindow {
     property int noteFontSize: 13
     property bool isRichText: false
 
-    property int savedSelectionStart: -1
-    property int savedSelectionEnd: -1
+    property int savedSelectionStart: 0
+    property int savedSelectionEnd: 0
     property string savedSelectedText: ""
 
+    function safeSelect(start, end) {
+        if (start >= 0 && end >= 0 && start <= contentEditor.length && end <= contentEditor.length) {
+            contentEditor.select(start, end)
+        }
+    }
+
     function updateSavedSelection() {
-        if (contentEditor.selectionStart !== contentEditor.selectionEnd) {
+        if (contentEditor.selectionStart >= 0 && contentEditor.selectionEnd >= 0 &&
+            contentEditor.selectionStart !== contentEditor.selectionEnd) {
             savedSelectionStart = contentEditor.selectionStart
             savedSelectionEnd = contentEditor.selectionEnd
             savedSelectedText = contentEditor.selectedText
@@ -53,8 +60,9 @@ ApplicationWindow {
         if (!isRichText) {
             isRichText = true
             contentEditor.textFormat = TextEdit.RichText
-            if (savedSelectionStart !== savedSelectionEnd && savedSelectedText.length > 0) {
-                contentEditor.select(savedSelectionStart, savedSelectionEnd)
+            if (savedSelectionStart >= 0 && savedSelectionEnd >= 0 &&
+                savedSelectionStart !== savedSelectionEnd && savedSelectedText.length > 0) {
+                safeSelect(savedSelectionStart, savedSelectionEnd)
             }
         }
     }
@@ -63,12 +71,15 @@ ApplicationWindow {
         var s = contentEditor.selectionStart
         var e = contentEditor.selectionEnd
         var t = contentEditor.selectedText
-        if (s === e && savedSelectionStart !== savedSelectionEnd && savedSelectedText.length > 0) {
+        if (s === e && savedSelectionStart >= 0 && savedSelectionEnd >= 0 &&
+            savedSelectionStart !== savedSelectionEnd && savedSelectedText.length > 0) {
             s = savedSelectionStart
             e = savedSelectionEnd
             t = savedSelectedText
-            contentEditor.select(s, e)
+            safeSelect(s, e)
         }
+        s = Math.max(0, Math.min(s, contentEditor.length))
+        e = Math.max(0, Math.min(e, contentEditor.length))
         return {
             start: Math.min(s, e),
             end: Math.max(s, e),
@@ -168,6 +179,7 @@ ApplicationWindow {
         const savedSize = backend.noteFontSize()
         if (savedSize > 0) noteFontSize = savedSize
         isRichText = checkRichText(backend.draftContent)
+        contentEditor.textFormat = isRichText ? TextEdit.RichText : TextEdit.PlainText
         place({x: backend.savedX(), y: backend.savedY(), width: backend.savedWidth(),
             height: backend.savedHeight(), screen: backend.savedScreen(),
             positioned: backend.savedPositioned()}, fallbackScreen, false)
@@ -454,7 +466,7 @@ ApplicationWindow {
             } else {
                 contentEditor.insert(sel.start, "<font color='" + colorHex + "'>" + sel.text + "</font>")
             }
-            contentEditor.select(sel.start, sel.start + sel.text.length)
+            safeSelect(sel.start, sel.start + sel.text.length)
             savedSelectionStart = sel.start
             savedSelectionEnd = sel.start + sel.text.length
             savedSelectedText = sel.text
@@ -466,7 +478,7 @@ ApplicationWindow {
             } else {
                 contentEditor.insert(pos, "<font color='" + colorHex + "'>" + word + "</font>")
             }
-            contentEditor.select(pos, pos + word.length)
+            safeSelect(pos, pos + word.length)
         }
         backend.editContent(contentEditor.text)
         autosave.restart()
@@ -562,7 +574,7 @@ ApplicationWindow {
         newBody += body.substring(lastIdx)
 
         contentEditor.text = header + newBody + footer
-        contentEditor.select(s, e)
+        safeSelect(s, e)
         savedSelectionStart = s
         savedSelectionEnd = e
         savedSelectedText = sel.text
@@ -603,7 +615,7 @@ ApplicationWindow {
             } else {
                 contentEditor.insert(s, "<" + tag + ">" + text + "</" + tag + ">")
             }
-            contentEditor.select(s, s + text.length)
+            safeSelect(s, s + text.length)
             savedSelectionStart = s
             savedSelectionEnd = s + text.length
             savedSelectedText = text
@@ -611,7 +623,7 @@ ApplicationWindow {
             var pos = contentEditor.cursorPosition
             var word = qsTr("text")
             contentEditor.insert(pos, "<" + tag + ">" + word + "</" + tag + ">")
-            contentEditor.select(pos, pos + word.length)
+            safeSelect(pos, pos + word.length)
         }
         backend.editContent(contentEditor.text)
         autosave.restart()
@@ -624,7 +636,7 @@ ApplicationWindow {
         if (sel.hasSelection) {
             contentEditor.remove(sel.start, sel.end)
             contentEditor.insert(sel.start, prefix + sel.text + suffix)
-            contentEditor.select(sel.start, sel.start + sel.text.length)
+            safeSelect(sel.start, sel.start + sel.text.length)
             savedSelectionStart = sel.start
             savedSelectionEnd = sel.start + sel.text.length
             savedSelectedText = sel.text
@@ -1010,7 +1022,7 @@ ApplicationWindow {
                 objectName: "contentEditor"
                 width: Math.max(100, contentScroll.availableWidth)
                 text: backend.draftContent
-                textFormat: noteWindow.isRichText ? TextEdit.RichText : TextEdit.PlainText
+                textFormat: TextEdit.PlainText
                 placeholderText: qsTr("Write your note…")
                 Accessible.name: qsTr("Note content")
                 wrapMode: TextEdit.Wrap
@@ -1026,6 +1038,16 @@ ApplicationWindow {
                 onSelectionEndChanged: noteWindow.updateSavedSelection()
                 onSelectedTextChanged: noteWindow.updateSavedSelection()
                 onTextChanged: {
+                    if (length === 0) {
+                        savedSelectionStart = 0
+                        savedSelectionEnd = 0
+                        savedSelectedText = ""
+                        if (noteWindow.isRichText) {
+                            noteWindow.isRichText = false
+                            textFormat = TextEdit.PlainText
+                            text = ""
+                        }
+                    }
                     if (text !== backend.draftContent) {
                         backend.editContent(text)
                         autosave.restart()
