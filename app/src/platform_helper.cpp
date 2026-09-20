@@ -1,6 +1,7 @@
 #include "platform_helper.h"
 #include <QGuiApplication>
 #include <QClipboard>
+#include <QCursor>
 #include <QtWidgets/QApplication>
 #include "cxx-qt-lib/qguiapplication.h"
 #include "cxx-qt-lib/qcoreapplication.h"
@@ -38,4 +39,12 @@ QString platformGetClipboardText() {
         }
     }
     return QString();
+}
+
+int platformCursorGlobalX() {
+    return QCursor::pos().x();
+}
+
+int platformCursorGlobalY() {
+    return QCursor::pos().y();
 }

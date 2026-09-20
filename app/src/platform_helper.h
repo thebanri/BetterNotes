@@ -3,3 +3,5 @@
 
 void platformCopyToClipboard(const QString& text);
 QString platformGetClipboardText();
+int platformCursorGlobalX();
+int platformCursorGlobalY();

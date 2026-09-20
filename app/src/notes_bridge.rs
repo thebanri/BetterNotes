@@ -15,6 +15,8 @@ pub mod ffi {
         include!("platform_helper.h");
         fn platformCopyToClipboard(text: &QString);
         fn platformGetClipboardText() -> QString;
+        fn platformCursorGlobalX() -> i32;
+        fn platformCursorGlobalY() -> i32;
     }
     extern "RustQt" {
         #[qobject]
@@ -153,6 +155,12 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "getClipboardText"]
         fn get_clipboard_text(&self) -> QString;
+        #[qinvokable]
+        #[cxx_name = "cursorGlobalX"]
+        fn cursor_global_x(&self) -> i32;
+        #[qinvokable]
+        #[cxx_name = "cursorGlobalY"]
+        fn cursor_global_y(&self) -> i32;
         #[qinvokable]
         #[cxx_name = "sendNotification"]
         fn send_notification(self: Pin<&mut Self>, title: QString, body: QString) -> bool;
@@ -667,6 +675,14 @@ impl ffi::NotesBackend {
 
     pub fn get_clipboard_text(&self) -> QString {
         ffi::platformGetClipboardText()
+    }
+
+    pub fn cursor_global_x(&self) -> i32 {
+        ffi::platformCursorGlobalX()
+    }
+
+    pub fn cursor_global_y(&self) -> i32 {
+        ffi::platformCursorGlobalY()
     }
 
     pub fn send_notification(self: Pin<&mut Self>, title: QString, body: QString) -> bool {
