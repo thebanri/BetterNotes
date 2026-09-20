@@ -27,8 +27,40 @@ ApplicationWindow {
     signal dismissed(string id)
     signal quitRequested()
     signal libraryRequested()
+    signal newNoteRequested()
 
     property bool alwaysOnTop: false
+    property string noteTint: "yellow"
+    readonly property var tintPalettes: ({
+        "yellow": {
+            bg: theme.isDark ? "#28231a" : "#fefce8",
+            header: theme.isDark ? "#362f23" : "#fef08a",
+            border: theme.isDark ? "#4f4230" : "#fde047"
+        },
+        "green": {
+            bg: theme.isDark ? "#17271c" : "#f0fdf4",
+            header: theme.isDark ? "#1e3727" : "#dcfce7",
+            border: theme.isDark ? "#2e573c" : "#86efac"
+        },
+        "pink": {
+            bg: theme.isDark ? "#2d161d" : "#fff1f2",
+            header: theme.isDark ? "#3d1c26" : "#ffe4e6",
+            border: theme.isDark ? "#5c2738" : "#fda4af"
+        },
+        "blue": {
+            bg: theme.isDark ? "#142436" : "#f0f9ff",
+            header: theme.isDark ? "#1a324b" : "#e0f2fe",
+            border: theme.isDark ? "#254e77" : "#7dd3fc"
+        },
+        "purple": {
+            bg: theme.isDark ? "#241834" : "#faf5ff",
+            header: theme.isDark ? "#32204a" : "#f3e8ff",
+            border: theme.isDark ? "#4c2f70" : "#d8b4fe"
+        }
+    })
+    readonly property color activeBg: tintPalettes[noteTint] ? tintPalettes[noteTint].bg : theme.noteBackground
+    readonly property color activeHeader: tintPalettes[noteTint] ? tintPalettes[noteTint].header : theme.noteHeader
+    readonly property color activeBorder: tintPalettes[noteTint] ? tintPalettes[noteTint].border : theme.noteBorder
 
     // QObject ownership belongs to the library; these remain independent windows.
     transientParent: null
@@ -40,7 +72,7 @@ ApplicationWindow {
     minimumHeight: collapsed ? collapsedHeight : 180
     maximumHeight: collapsed ? collapsedHeight : 16384
     visible: false
-    color: theme.noteBackground
+    color: activeBg
 
     Themes.Theme { id: theme; themeMode: backend.themeMode }
     NotesBackend { id: backend; objectName: "notesBackend" }
@@ -49,6 +81,8 @@ ApplicationWindow {
     function present(fallbackScreen) {
         if (!backend.initializeNote(noteId)) return false
         collapsed = backend.savedCollapsed()
+        const savedColor = backend.noteColor()
+        if (savedColor && savedColor.length > 0) noteTint = savedColor
         place({x: backend.savedX(), y: backend.savedY(), width: backend.savedWidth(),
             height: backend.savedHeight(), screen: backend.savedScreen(),
             positioned: backend.savedPositioned()}, fallbackScreen, false)
@@ -175,25 +209,46 @@ ApplicationWindow {
     }
 
     header: Rectangle {
-        height: 40
-        color: theme.noteHeader
+        height: 38
+        color: activeHeader
         border.width: 1
-        border.color: theme.noteBorder
+        border.color: activeBorder
+
+        MouseArea {
+            anchors.fill: parent
+            z: 0
+            acceptedButtons: Qt.LeftButton
+            onPressed: noteWindow.startSystemMove()
+            onDoubleClicked: noteWindow.toggleCollapsed()
+        }
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            spacing: 8
+            anchors.leftMargin: 6
+            anchors.rightMargin: 6
+            spacing: 6
+            z: 1
 
             UI.StyledButton {
-                text: noteWindow.collapsed ? qsTr("Expand") : qsTr("Collapse")
+                text: "＋"
                 theme: noteWindow.theme
                 variant: "ghost"
-                implicitHeight: 28
-                padding: 4
-                leftPadding: 8
-                rightPadding: 8
+                implicitHeight: 26
+                implicitWidth: 26
+                padding: 0
+                font.pixelSize: 14
+                font.weight: Font.Bold
+                onClicked: noteWindow.newNoteRequested()
+            }
+
+            UI.StyledButton {
+                text: noteWindow.collapsed ? "▼" : "▲"
+                theme: noteWindow.theme
+                variant: "ghost"
+                implicitHeight: 26
+                implicitWidth: 26
+                padding: 0
+                font.pixelSize: 10
                 onClicked: noteWindow.toggleCollapsed()
             }
 
@@ -203,37 +258,58 @@ ApplicationWindow {
                 Layout.alignment: Qt.AlignVCenter
             }
 
-            Item { Layout.fillWidth: true }
+            Label {
+                Layout.fillWidth: true
+                text: noteWindow.collapsed ? (titleEditor.text.trim() || qsTr("Untitled note")) : ""
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                color: theme.noteText
+                elide: Text.ElideRight
+                visible: noteWindow.collapsed
+            }
+
+            Item {
+                Layout.fillWidth: true
+                visible: !noteWindow.collapsed
+            }
 
             UI.StyledButton {
-                text: backend.isPinned ? "📌" : "📍"
+                text: noteWindow.alwaysOnTop ? "📌" : "📍"
                 theme: noteWindow.theme
-                variant: backend.isPinned ? "accent" : "ghost"
-                implicitHeight: 28
-                padding: 4
-                leftPadding: 6
-                rightPadding: 6
+                variant: noteWindow.alwaysOnTop ? "accent" : "ghost"
+                implicitHeight: 26
+                implicitWidth: 26
+                padding: 0
                 onClicked: {
-                    backend.setPinned(!backend.isPinned)
-                    autosave.restart()
+                    noteWindow.alwaysOnTop = !noteWindow.alwaysOnTop
                 }
             }
 
             UI.StyledButton {
-                text: qsTr("Menu")
+                text: "⋮"
                 theme: noteWindow.theme
                 variant: "ghost"
-                implicitHeight: 28
-                padding: 4
-                leftPadding: 8
-                rightPadding: 8
+                implicitHeight: 26
+                implicitWidth: 26
+                padding: 0
+                font.pixelSize: 14
+                font.weight: Font.Bold
                 onClicked: noteMenu.open()
 
                 Menu {
                     id: noteMenu
-                    MenuItem { text: qsTr("All notes"); onTriggered: noteWindow.libraryRequested() }
+                    Menu {
+                        title: qsTr("🎨 Note color")
+                        MenuItem { text: qsTr("🟡 Classic Yellow"); onTriggered: { noteWindow.noteTint = "yellow"; backend.setNoteColor("yellow") } }
+                        MenuItem { text: qsTr("🟢 Mint Green"); onTriggered: { noteWindow.noteTint = "green"; backend.setNoteColor("green") } }
+                        MenuItem { text: qsTr("🌸 Rose Pink"); onTriggered: { noteWindow.noteTint = "pink"; backend.setNoteColor("pink") } }
+                        MenuItem { text: qsTr("🔵 Sky Blue"); onTriggered: { noteWindow.noteTint = "blue"; backend.setNoteColor("blue") } }
+                        MenuItem { text: qsTr("🟣 Lavender Purple"); onTriggered: { noteWindow.noteTint = "purple"; backend.setNoteColor("purple") } }
+                    }
+                    MenuSeparator {}
+                    MenuItem { text: qsTr("All notes (Library)"); onTriggered: noteWindow.libraryRequested() }
                     MenuItem {
-                        text: backend.isPinned ? qsTr("Unpin note") : qsTr("Pin note")
+                        text: backend.isPinned ? qsTr("Unpin from favorites") : qsTr("Pin to favorites")
                         onTriggered: { backend.setPinned(!backend.isPinned); autosave.restart() }
                     }
                     MenuItem {
@@ -288,6 +364,17 @@ ApplicationWindow {
                     }
                     MenuItem { text: qsTr("Quit BetterNotes"); onTriggered: noteWindow.quitRequested() }
                 }
+            }
+
+            UI.StyledButton {
+                text: "✕"
+                theme: noteWindow.theme
+                variant: "ghost"
+                implicitHeight: 26
+                implicitWidth: 26
+                padding: 0
+                font.pixelSize: 11
+                onClicked: noteWindow.close()
             }
         }
     }

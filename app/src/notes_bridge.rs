@@ -139,6 +139,12 @@ pub mod ffi {
         #[cxx_name = "setTags"]
         fn set_tags(self: Pin<&mut Self>, tags: QString) -> bool;
         #[qinvokable]
+        #[cxx_name = "noteColor"]
+        fn note_color(&self) -> QString;
+        #[qinvokable]
+        #[cxx_name = "setNoteColor"]
+        fn set_note_color(self: Pin<&mut Self>, color: QString) -> bool;
+        #[qinvokable]
         #[cxx_name = "setAutostart"]
         fn set_autostart(self: Pin<&mut Self>, enabled: bool) -> bool;
         #[qinvokable]
@@ -621,6 +627,27 @@ impl ffi::NotesBackend {
             .filter(|s| !s.is_empty())
             .collect();
         self.perform(true, |session| session.set_tags(rust_tags))
+    }
+
+    pub fn note_color(&self) -> QString {
+        let color = self
+            .session
+            .as_ref()
+            .map(|s| s.note_color())
+            .unwrap_or_else(|| "yellow".to_string());
+        QString::from(&color)
+    }
+
+    pub fn set_note_color(mut self: Pin<&mut Self>, color: QString) -> bool {
+        let color_str = color.to_string();
+        let result = self
+            .as_mut()
+            .rust_mut()
+            .session
+            .as_mut()
+            .ok_or(Error::NoSelection)
+            .and_then(|session| session.set_note_color(&color_str));
+        result.is_ok()
     }
 
     pub fn set_autostart(mut self: Pin<&mut Self>, enabled: bool) -> bool {

@@ -306,4 +306,25 @@ impl NotesSession {
         self.reload()?;
         Ok(count)
     }
+
+    pub fn note_color(&self) -> String {
+        if let Some(note) = &self.current {
+            self.store
+                .get_setting(&format!("note_color_{}", note.id))
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "yellow".to_string())
+        } else {
+            "yellow".to_string()
+        }
+    }
+
+    pub fn set_note_color(&self, color: &str) -> Result<()> {
+        if let Some(note) = &self.current {
+            self.store
+                .set_setting(&format!("note_color_{}", note.id), color)
+        } else {
+            Ok(())
+        }
+    }
 }

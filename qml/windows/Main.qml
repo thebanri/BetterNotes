@@ -33,8 +33,9 @@ ApplicationWindow {
         StickyNote {
             onSaved: backend.reload()
             onDismissed: function(id) { window.releaseWindow(id) }
-            onQuitRequested: window.close()
+            onQuitRequested: window.quitApplication()
             onLibraryRequested: { window.showNormal(); window.requestActivate() }
+            onNewNoteRequested: window.createNote()
         }
     }
     Component {
@@ -97,14 +98,16 @@ ApplicationWindow {
     }
 
     function showAllNotes() {
+        const allIds = backend.noteIds
+        for (let i = 0; i < allIds.length; ++i) {
+            openNote(allIds[i])
+        }
         const ids = Object.keys(noteWindows)
         for (let i = 0; i < ids.length; ++i) {
             const sticky = noteWindows[ids[i]]
             if (sticky.visibility === Window.Minimized) sticky.showNormal()
             sticky.requestActivate()
         }
-        window.showNormal()
-        window.requestActivate()
     }
 
     function hideAllNotes() {
@@ -122,6 +125,25 @@ ApplicationWindow {
             quickCaptureWindow.showNormal()
             quickCaptureWindow.requestActivate()
         }
+    }
+
+    function quitApplication() {
+        const ids = Object.keys(noteWindows)
+        // Save every editor before closing any window. A failure keeps all drafts.
+        for (let i = 0; i < ids.length; ++i) {
+            if (!noteWindows[ids[i]].prepareQuit()) {
+                openNote(ids[i])
+                windowError = qsTr("A note could not be saved. Resolve its error before quitting.")
+                return false
+            }
+        }
+        for (let i = 0; i < ids.length; ++i) {
+            const sticky = noteWindows[ids[i]]
+            sticky.retiring = true
+            sticky.close()
+        }
+        Qt.quit()
+        return true
     }
 
     onClosing: function(close) {
@@ -175,6 +197,14 @@ ApplicationWindow {
                 variant: "accent"
                 enabled: backend.ready
                 onClicked: window.createNote()
+            }
+
+            UI.StyledButton {
+                text: qsTr("📌 Open all stickies")
+                theme: window.theme
+                variant: "secondary"
+                enabled: backend.ready && backend.noteIds.length > 0
+                onClicked: window.showAllNotes()
             }
 
             UI.StyledButton {
@@ -552,7 +582,7 @@ ApplicationWindow {
             Platform.MenuSeparator {}
             Platform.MenuItem {
                 text: qsTr("Quit")
-                onTriggered: window.close()
+                onTriggered: window.quitApplication()
             }
         }
     }
