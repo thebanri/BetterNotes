@@ -16,6 +16,10 @@ ApplicationWindow {
     property bool retiring: false
     property bool placing: false
     property bool resizing: false
+    property int pendingWidth: 0
+    property int pendingHeight: 0
+    property int pendingX: 0
+    property double lastResizeTime: 0
     property int expandedWidth: 380
     property int expandedHeight: 360
     property int normalX: 0
@@ -216,6 +220,44 @@ ApplicationWindow {
         id: autosave
         interval: 500
         onTriggered: { if (backend.save()) noteWindow.saved() }
+    }
+    Timer {
+        id: resizeThrottleTimer
+        interval: 16
+        repeat: false
+        onTriggered: noteWindow.applyPendingResize()
+    }
+
+    function applyPendingResize() {
+        var changed = false
+        if (pendingWidth > 0 && width !== pendingWidth) {
+            width = pendingWidth
+            changed = true
+        }
+        if (pendingHeight > 0 && height !== pendingHeight) {
+            height = pendingHeight
+            changed = true
+        }
+        if (pendingX !== 0 && x !== pendingX) {
+            x = pendingX
+            changed = true
+        }
+        if (changed) {
+            lastResizeTime = Date.now()
+        }
+    }
+
+    function requestResize(newW, newH, newX) {
+        if (newW !== undefined && newW > 0) pendingWidth = newW
+        if (newH !== undefined && newH > 0) pendingHeight = newH
+        if (newX !== undefined && newX !== 0) pendingX = newX
+
+        var now = Date.now()
+        if (now - lastResizeTime >= 16) {
+            applyPendingResize()
+        } else {
+            resizeThrottleTimer.restart()
+        }
     }
 
     header: Rectangle {
@@ -564,24 +606,33 @@ ApplicationWindow {
         cursorShape: Qt.SizeHorCursor
         z: 20
         property int startW: 0
-        property real startClickX: 0
+        property real startGlobalX: 0
 
         onPressed: function(mouse) {
-            noteWindow.resizing = true
-            startW = noteWindow.width
-            var p = mapToItem(null, mouse.x, mouse.y)
-            startClickX = p.x
+            if (noteWindow.canPosition) {
+                noteWindow.resizing = true
+                startW = noteWindow.width
+                startGlobalX = mapToGlobal(mouse.x, mouse.y).x
+                noteWindow.pendingWidth = startW
+            } else {
+                noteWindow.startSystemResize(Qt.RightEdge)
+            }
         }
         onPositionChanged: function(mouse) {
-            if (pressed) {
-                var p = mapToItem(null, mouse.x, mouse.y)
-                var newW = Math.round(Math.max(noteWindow.minimumWidth, startW + (p.x - startClickX)))
-                if (noteWindow.width !== newW) noteWindow.width = newW
+            if (pressed && noteWindow.canPosition) {
+                var currentGlobalX = mapToGlobal(mouse.x, mouse.y).x
+                var dx = currentGlobalX - startGlobalX
+                var newW = Math.round(Math.max(noteWindow.minimumWidth, startW + dx))
+                noteWindow.requestResize(newW, undefined, undefined)
             }
         }
         onReleased: function() {
-            noteWindow.resizing = false
-            noteWindow.captureGeometry()
+            if (noteWindow.canPosition) {
+                noteWindow.resizing = false
+                noteWindow.applyPendingResize()
+                noteWindow.pendingWidth = 0
+                noteWindow.captureGeometry()
+            }
         }
     }
 
@@ -597,24 +648,33 @@ ApplicationWindow {
         z: 20
         enabled: !noteWindow.collapsed
         property int startH: 0
-        property real startClickY: 0
+        property real startGlobalY: 0
 
         onPressed: function(mouse) {
-            noteWindow.resizing = true
-            startH = noteWindow.height
-            var p = mapToItem(null, mouse.x, mouse.y)
-            startClickY = p.y
+            if (noteWindow.canPosition) {
+                noteWindow.resizing = true
+                startH = noteWindow.height
+                startGlobalY = mapToGlobal(mouse.x, mouse.y).y
+                noteWindow.pendingHeight = startH
+            } else {
+                noteWindow.startSystemResize(Qt.BottomEdge)
+            }
         }
         onPositionChanged: function(mouse) {
-            if (pressed) {
-                var p = mapToItem(null, mouse.x, mouse.y)
-                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + (p.y - startClickY)))
-                if (noteWindow.height !== newH) noteWindow.height = newH
+            if (pressed && noteWindow.canPosition) {
+                var currentGlobalY = mapToGlobal(mouse.x, mouse.y).y
+                var dy = currentGlobalY - startGlobalY
+                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + dy))
+                noteWindow.requestResize(undefined, newH, undefined)
             }
         }
         onReleased: function() {
-            noteWindow.resizing = false
-            noteWindow.captureGeometry()
+            if (noteWindow.canPosition) {
+                noteWindow.resizing = false
+                noteWindow.applyPendingResize()
+                noteWindow.pendingHeight = 0
+                noteWindow.captureGeometry()
+            }
         }
     }
 
@@ -629,29 +689,41 @@ ApplicationWindow {
         enabled: !noteWindow.collapsed
         property int startW: 0
         property int startH: 0
-        property real startClickX: 0
-        property real startClickY: 0
+        property real startGlobalX: 0
+        property real startGlobalY: 0
 
         onPressed: function(mouse) {
-            noteWindow.resizing = true
-            startW = noteWindow.width
-            startH = noteWindow.height
-            var p = mapToItem(null, mouse.x, mouse.y)
-            startClickX = p.x
-            startClickY = p.y
+            if (noteWindow.canPosition) {
+                noteWindow.resizing = true
+                startW = noteWindow.width
+                startH = noteWindow.height
+                startGlobalX = mapToGlobal(mouse.x, mouse.y).x
+                startGlobalY = mapToGlobal(mouse.x, mouse.y).y
+                noteWindow.pendingWidth = startW
+                noteWindow.pendingHeight = startH
+            } else {
+                noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
+            }
         }
         onPositionChanged: function(mouse) {
-            if (pressed) {
-                var p = mapToItem(null, mouse.x, mouse.y)
-                var newW = Math.round(Math.max(noteWindow.minimumWidth, startW + (p.x - startClickX)))
-                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + (p.y - startClickY)))
-                if (noteWindow.width !== newW) noteWindow.width = newW
-                if (noteWindow.height !== newH) noteWindow.height = newH
+            if (pressed && noteWindow.canPosition) {
+                var currentGlobalX = mapToGlobal(mouse.x, mouse.y).x
+                var currentGlobalY = mapToGlobal(mouse.x, mouse.y).y
+                var dx = currentGlobalX - startGlobalX
+                var dy = currentGlobalY - startGlobalY
+                var newW = Math.round(Math.max(noteWindow.minimumWidth, startW + dx))
+                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + dy))
+                noteWindow.requestResize(newW, newH, undefined)
             }
         }
         onReleased: function() {
-            noteWindow.resizing = false
-            noteWindow.captureGeometry()
+            if (noteWindow.canPosition) {
+                noteWindow.resizing = false
+                noteWindow.applyPendingResize()
+                noteWindow.pendingWidth = 0
+                noteWindow.pendingHeight = 0
+                noteWindow.captureGeometry()
+            }
         }
 
         Rectangle {
@@ -686,6 +758,8 @@ ApplicationWindow {
                 startW = noteWindow.width
                 startX = noteWindow.x
                 startGlobalX = mapToGlobal(mouse.x, mouse.y).x
+                noteWindow.pendingWidth = startW
+                noteWindow.pendingX = startX
             } else {
                 noteWindow.startSystemResize(Qt.LeftEdge)
             }
@@ -696,14 +770,16 @@ ApplicationWindow {
                 var dx = currentGlobalX - startGlobalX
                 var newW = Math.round(startW - dx)
                 if (newW >= noteWindow.minimumWidth) {
-                    noteWindow.width = newW
-                    noteWindow.x = Math.round(startX + dx)
+                    noteWindow.requestResize(newW, undefined, Math.round(startX + dx))
                 }
             }
         }
         onReleased: function() {
             if (noteWindow.canPosition) {
                 noteWindow.resizing = false
+                noteWindow.applyPendingResize()
+                noteWindow.pendingWidth = 0
+                noteWindow.pendingX = 0
                 noteWindow.captureGeometry()
             }
         }
@@ -731,29 +807,35 @@ ApplicationWindow {
                 startH = noteWindow.height
                 startX = noteWindow.x
                 startGlobalX = mapToGlobal(mouse.x, mouse.y).x
-                startClickY = mapToItem(null, mouse.x, mouse.y).y
+                startGlobalY = mapToGlobal(mouse.x, mouse.y).y
+                noteWindow.pendingWidth = startW
+                noteWindow.pendingHeight = startH
+                noteWindow.pendingX = startX
             } else {
                 noteWindow.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
             }
         }
         onPositionChanged: function(mouse) {
             if (pressed && noteWindow.canPosition) {
-                var p = mapToItem(null, mouse.x, mouse.y)
-                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + (p.y - startClickY)))
-                if (noteWindow.height !== newH) noteWindow.height = newH
-
                 var currentGlobalX = mapToGlobal(mouse.x, mouse.y).x
+                var currentGlobalY = mapToGlobal(mouse.x, mouse.y).y
+                var dy = currentGlobalY - startGlobalY
+                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + dy))
+
                 var dx = currentGlobalX - startGlobalX
                 var newW = Math.round(startW - dx)
-                if (newW >= noteWindow.minimumWidth) {
-                    noteWindow.width = newW
-                    noteWindow.x = Math.round(startX + dx)
-                }
+                var newX = (newW >= noteWindow.minimumWidth) ? Math.round(startX + dx) : undefined
+                var actualW = (newW >= noteWindow.minimumWidth) ? newW : undefined
+                noteWindow.requestResize(actualW, newH, newX)
             }
         }
         onReleased: function() {
             if (noteWindow.canPosition) {
                 noteWindow.resizing = false
+                noteWindow.applyPendingResize()
+                noteWindow.pendingWidth = 0
+                noteWindow.pendingHeight = 0
+                noteWindow.pendingX = 0
                 noteWindow.captureGeometry()
             }
         }
