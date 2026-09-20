@@ -7,7 +7,7 @@ pub mod settings;
 mod store;
 mod window_state;
 
-pub use notes::{Error, Note, NoteSummary, Result};
+pub use notes::{Error, Note, NoteSummary, Result, SearchResult};
 pub use session::NotesSession;
 pub use settings::ThemePreference;
 pub use store::NoteStore;

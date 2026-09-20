@@ -1,4 +1,6 @@
-use crate::{Error, Note, NoteStore, NoteSummary, Result, ThemePreference, WindowState};
+use crate::{
+    Error, Note, NoteStore, NoteSummary, Result, SearchResult, ThemePreference, WindowState,
+};
 use std::path::Path;
 
 /// Owns the active draft; only successful writes clear the dirty flag.
@@ -14,11 +16,17 @@ impl NotesSession {
     pub fn open_note(path: &Path, id: i64) -> Result<Self> {
         let store = NoteStore::open(path)?;
         let note = store.get(id)?;
+        let snippet = note.content.chars().take(80).collect();
         Ok(Self {
             store,
             summaries: vec![NoteSummary {
                 id: note.id,
                 title: note.title.clone(),
+                snippet,
+                priority: note.priority,
+                is_archived: note.is_archived,
+                is_pinned: note.is_pinned,
+                tags: note.tags.clone(),
             }],
             current: Some(note),
             dirty: false,
@@ -50,6 +58,14 @@ impl NotesSession {
         self.dirty
     }
 
+    pub fn search(&self, query: &str) -> Result<Vec<SearchResult>> {
+        self.store.search(query)
+    }
+
+    pub fn list_tags(&self) -> Result<Vec<String>> {
+        self.store.list_tags()
+    }
+
     pub fn window_state(&self) -> Result<WindowState> {
         self.store
             .window_state(self.current.as_ref().ok_or(Error::NoSelection)?.id)
@@ -78,6 +94,11 @@ impl NotesSession {
         let note = self.store.get(id)?;
         if let Some(summary) = self.summaries.iter_mut().find(|summary| summary.id == id) {
             summary.title.clone_from(&note.title);
+            summary.snippet = note.content.chars().take(80).collect();
+            summary.priority = note.priority;
+            summary.is_archived = note.is_archived;
+            summary.is_pinned = note.is_pinned;
+            summary.tags.clone_from(&note.tags);
         }
         self.current = Some(note);
         self.dirty = false;
@@ -107,6 +128,38 @@ impl NotesSession {
         }
     }
 
+    pub fn set_pinned(&mut self, pinned: bool) -> Result<()> {
+        if let Some(note) = &mut self.current {
+            note.is_pinned = pinned;
+            self.dirty = true;
+        }
+        Ok(())
+    }
+
+    pub fn set_archived(&mut self, archived: bool) -> Result<()> {
+        if let Some(note) = &mut self.current {
+            note.is_archived = archived;
+            self.dirty = true;
+        }
+        Ok(())
+    }
+
+    pub fn set_priority(&mut self, priority: i32) -> Result<()> {
+        if let Some(note) = &mut self.current {
+            note.priority = priority.clamp(0, 3);
+            self.dirty = true;
+        }
+        Ok(())
+    }
+
+    pub fn set_tags(&mut self, tags: Vec<String>) -> Result<()> {
+        if let Some(note) = &mut self.current {
+            note.tags = tags;
+            self.dirty = true;
+        }
+        Ok(())
+    }
+
     pub fn save(&mut self) -> Result<()> {
         if self.dirty {
             let saved = self
@@ -114,6 +167,11 @@ impl NotesSession {
                 .update(self.current.as_ref().ok_or(Error::NoSelection)?)?;
             if let Some(summary) = self.summaries.iter_mut().find(|note| note.id == saved.id) {
                 summary.title.clone_from(&saved.title);
+                summary.snippet = saved.content.chars().take(80).collect();
+                summary.priority = saved.priority;
+                summary.is_archived = saved.is_archived;
+                summary.is_pinned = saved.is_pinned;
+                summary.tags.clone_from(&saved.tags);
             }
             self.current = Some(saved);
             self.dirty = false;
@@ -129,6 +187,11 @@ impl NotesSession {
             NoteSummary {
                 id: note.id,
                 title: note.title.clone(),
+                snippet: String::new(),
+                priority: note.priority,
+                is_archived: note.is_archived,
+                is_pinned: note.is_pinned,
+                tags: note.tags.clone(),
             },
         );
         self.current = Some(note);

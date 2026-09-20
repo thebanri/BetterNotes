@@ -67,7 +67,12 @@ fn main() {
             .unwrap();
     let notes = store.list().unwrap();
     assert_eq!(notes.len(), 2);
-    let note = store.get(notes[1].id).unwrap();
+    let (first_summary, second_summary) = if notes[0].title == "Other process" {
+        (&notes[0], &notes[1])
+    } else {
+        (&notes[1], &notes[0])
+    };
+    let note = store.get(first_summary.id).unwrap();
     assert_eq!(note.title, "Other process");
     assert_eq!(
         note.content,
@@ -77,7 +82,7 @@ fn main() {
     assert!(state.open && state.collapsed);
     assert_eq!((state.width, state.height), (420, 320));
     assert_eq!(store.open_window_ids().unwrap(), [note.id]);
-    let second = store.get(notes[0].id).unwrap();
+    let second = store.get(second_summary.id).unwrap();
     assert_eq!(second.content, "Independent draft\nSaved on close");
     assert!(!store.window_state(second.id).unwrap().open);
     println!(

@@ -20,6 +20,8 @@ ApplicationWindow {
     property alias theme: theme
     property var noteWindows: ({})
     property string windowError: ""
+    property string filterTab: "all"
+    property string searchFilter: ""
 
     Themes.Theme { id: theme; themeMode: backend.themeMode }
     ApplicationInfo { id: applicationInfo }
@@ -205,8 +207,107 @@ ApplicationWindow {
             onClicked: window.initialize()
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            visible: backend.ready
+
+            UI.StyledTextField {
+                id: searchField
+                Layout.fillWidth: true
+                placeholderText: qsTr("Search notes with FTS5 (Ctrl+K)...")
+                theme: window.theme
+                onTextChanged: {
+                    window.searchFilter = text.trim()
+                    if (window.searchFilter.length > 0) {
+                        backend.search(window.searchFilter)
+                    }
+                }
+            }
+
+            UI.StyledButton {
+                text: qsTr("Palette (Ctrl+K)")
+                theme: window.theme
+                variant: "ghost"
+                onClicked: commandPalette.open()
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
+            visible: backend.ready && window.searchFilter.length === 0
+
+            UI.StyledButton {
+                text: qsTr("All")
+                theme: window.theme
+                variant: window.filterTab === "all" ? "accent" : "ghost"
+                implicitHeight: 28
+                padding: 4
+                leftPadding: 10
+                rightPadding: 10
+                onClicked: window.filterTab = "all"
+            }
+
+            UI.StyledButton {
+                text: "📌 " + qsTr("Pinned")
+                theme: window.theme
+                variant: window.filterTab === "pinned" ? "accent" : "ghost"
+                implicitHeight: 28
+                padding: 4
+                leftPadding: 10
+                rightPadding: 10
+                onClicked: window.filterTab = "pinned"
+            }
+
+            UI.StyledButton {
+                text: "📦 " + qsTr("Archived")
+                theme: window.theme
+                variant: window.filterTab === "archived" ? "accent" : "ghost"
+                implicitHeight: 28
+                padding: 4
+                leftPadding: 10
+                rightPadding: 10
+                onClicked: window.filterTab = "archived"
+            }
+
+            Item { Layout.fillWidth: true }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 4
+            visible: backend.ready && backend.allTags.length > 0 && window.searchFilter.length === 0
+
+            Label {
+                text: qsTr("Tags:")
+                font.pixelSize: 11
+                color: theme.textSecondary
+            }
+
+            Repeater {
+                model: backend.allTags
+                delegate: UI.StyledButton {
+                    required property string modelData
+                    text: "#" + modelData
+                    theme: window.theme
+                    variant: "ghost"
+                    implicitHeight: 24
+                    padding: 2
+                    leftPadding: 6
+                    rightPadding: 6
+                    onClicked: {
+                        searchField.text = modelData
+                    }
+                }
+            }
+            Item { Layout.fillWidth: true }
+        }
+
         Label {
-            text: qsTr("Open a note to edit it in its own window. Bring here recovers a misplaced window.")
+            text: window.searchFilter.length > 0 ?
+                qsTr("Showing search results for '%1'").arg(window.searchFilter) :
+                qsTr("Open a note to edit it in its own window. Bring here recovers a misplaced window.")
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
             font.pixelSize: 12
@@ -214,7 +315,7 @@ ApplicationWindow {
         }
 
         Rectangle {
-            visible: backend.ready && backend.titles.length === 0
+            visible: backend.ready && ((window.searchFilter.length === 0 && backend.titles.length === 0) || (window.searchFilter.length > 0 && backend.searchResultIds.length === 0))
             Layout.fillWidth: true
             Layout.fillHeight: true
             radius: theme.radiusMd
@@ -227,19 +328,21 @@ ApplicationWindow {
                 spacing: 12
 
                 Label {
-                    text: "📝"
+                    text: window.searchFilter.length > 0 ? "🔍" : "📝"
                     font.pixelSize: 36
                     Layout.alignment: Qt.AlignHCenter
                 }
                 Label {
-                    text: qsTr("No notes yet")
+                    text: window.searchFilter.length > 0 ? qsTr("No matching notes found") : qsTr("No notes yet")
                     font.pixelSize: 16
                     font.weight: Font.Bold
                     color: theme.textPrimary
                     Layout.alignment: Qt.AlignHCenter
                 }
                 Label {
-                    text: qsTr("Create your first note to capture ideas and keep them on your desktop.")
+                    text: window.searchFilter.length > 0 ?
+                        qsTr("Try a different search term or check archived notes.") :
+                        qsTr("Create your first note to capture ideas and keep them on your desktop.")
                     font.pixelSize: 13
                     color: theme.textSecondary
                     Layout.alignment: Qt.AlignHCenter
@@ -255,33 +358,82 @@ ApplicationWindow {
         }
 
         ScrollView {
-            visible: backend.titles.length > 0
+            visible: (window.searchFilter.length === 0 && backend.titles.length > 0) || (window.searchFilter.length > 0 && backend.searchResultIds.length > 0)
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
 
             ListView {
                 id: notesList
-                model: backend.titles
+                model: window.searchFilter.length > 0 ? backend.searchResultIds : backend.titles
                 spacing: 6
                 activeFocusOnTab: true
-                Keys.onReturnPressed: { if (currentIndex >= 0) window.openNote(backend.noteIds[currentIndex]) }
+                Keys.onReturnPressed: {
+                    if (currentIndex >= 0) {
+                        const targetId = window.searchFilter.length > 0 ? backend.searchResultIds[currentIndex] : backend.noteIds[currentIndex]
+                        window.openNote(targetId)
+                    }
+                }
                 delegate: UI.NoteCard {
                     id: noteDelegate
                     required property int index
                     required property string modelData
                     theme: window.theme
-                    noteTitle: modelData
+                    noteTitle: {
+                        if (window.searchFilter.length > 0) {
+                            return backend.searchResultTitles[index] || qsTr("Untitled note")
+                        }
+                        return modelData
+                    }
+                    snippet: {
+                        if (window.searchFilter.length > 0) {
+                            return backend.searchResultSnippets[index] || ""
+                        }
+                        return backend.snippets[index] || ""
+                    }
+                    isPinned: window.searchFilter.length === 0 && backend.pinnedStates[index] === "true"
+                    isArchived: window.searchFilter.length === 0 && backend.archivedStates[index] === "true"
+                    priority: window.searchFilter.length === 0 ? parseInt(backend.priorities[index] || "0") : 0
+                    visible: {
+                        if (window.searchFilter.length > 0) return true
+                        const pinned = backend.pinnedStates[index] === "true"
+                        const archived = backend.archivedStates[index] === "true"
+                        if (window.filterTab === "pinned") return pinned
+                        if (window.filterTab === "archived") return archived
+                        return !archived
+                    }
+                    height: visible ? implicitHeight : 0
                     highlighted: ListView.isCurrentItem
                     onClicked: {
                         notesList.currentIndex = index
-                        window.openNote(backend.noteIds[index])
+                        const targetId = window.searchFilter.length > 0 ? backend.searchResultIds[index] : backend.noteIds[index]
+                        window.openNote(targetId)
                     }
-                    onBringHereRequested: window.openNote(backend.noteIds[noteDelegate.index], true)
+                    onBringHereRequested: {
+                        const targetId = window.searchFilter.length > 0 ? backend.searchResultIds[noteDelegate.index] : backend.noteIds[noteDelegate.index]
+                        window.openNote(targetId, true)
+                    }
                 }
             }
         }
     }
+
+    UI.CommandPalette {
+        id: commandPalette
+        theme: window.theme
+        backend: window.libraryBackend
+        onNoteSelected: function(id) { window.openNote(id) }
+        onActionTriggered: function(action) {
+            if (action === "new_note") window.createNote()
+            else if (action === "toggle_theme") {
+                if (backend.themeMode === "system") backend.setThemeMode("light")
+                else if (backend.themeMode === "light") backend.setThemeMode("dark")
+                else backend.setThemeMode("system")
+            }
+        }
+    }
+
     Shortcut { sequences: [StandardKey.New]; context: Qt.WindowShortcut; enabled: backend.ready; onActivated: window.createNote() }
     Shortcut { sequences: [StandardKey.Quit]; context: Qt.WindowShortcut; onActivated: window.close() }
+    Shortcut { sequences: ["Ctrl+K", "Ctrl+Shift+P"]; context: Qt.WindowShortcut; onActivated: commandPalette.open() }
 }

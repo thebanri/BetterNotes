@@ -18,11 +18,24 @@ pub mod ffi {
         #[qml_element]
         #[qproperty(QStringList, titles, READ, NOTIFY = list_changed)]
         #[qproperty(QStringList, note_ids, READ, NOTIFY = list_changed, cxx_name = "noteIds")]
+        #[qproperty(QStringList, snippets, READ, NOTIFY = list_changed)]
+        #[qproperty(QStringList, pinned_states, READ, NOTIFY = list_changed, cxx_name = "pinnedStates")]
+        #[qproperty(QStringList, archived_states, READ, NOTIFY = list_changed, cxx_name = "archivedStates")]
+        #[qproperty(QStringList, priorities, READ, NOTIFY = list_changed)]
+        #[qproperty(QStringList, all_tags, READ, NOTIFY = list_changed, cxx_name = "allTags")]
         #[qproperty(QStringList, restore_ids, READ, NOTIFY = list_changed, cxx_name = "restoreIds")]
         #[qproperty(QString, current_id, READ, NOTIFY = selection_changed, cxx_name = "currentId")]
         #[qproperty(i32, current_index, READ, NOTIFY = selection_changed, cxx_name = "currentIndex")]
         #[qproperty(QString, draft_title, READ, NOTIFY = selection_changed, cxx_name = "draftTitle")]
         #[qproperty(QString, draft_content, READ, NOTIFY = selection_changed, cxx_name = "draftContent")]
+        #[qproperty(bool, is_pinned, READ, NOTIFY = selection_changed, cxx_name = "isPinned")]
+        #[qproperty(bool, is_archived, READ, NOTIFY = selection_changed, cxx_name = "isArchived")]
+        #[qproperty(i32, priority, READ, NOTIFY = selection_changed)]
+        #[qproperty(QStringList, tags, READ, NOTIFY = selection_changed)]
+        #[qproperty(QString, tags_text, READ, NOTIFY = selection_changed, cxx_name = "tagsText")]
+        #[qproperty(QStringList, search_result_ids, READ, NOTIFY = search_changed, cxx_name = "searchResultIds")]
+        #[qproperty(QStringList, search_result_titles, READ, NOTIFY = search_changed, cxx_name = "searchResultTitles")]
+        #[qproperty(QStringList, search_result_snippets, READ, NOTIFY = search_changed, cxx_name = "searchResultSnippets")]
         #[qproperty(bool, ready, READ, NOTIFY = status_changed)]
         #[qproperty(bool, dirty, READ, NOTIFY = status_changed)]
         #[qproperty(QString, error_message, READ, NOTIFY = status_changed, cxx_name = "errorMessage")]
@@ -38,6 +51,8 @@ pub mod ffi {
         fn status_changed(self: Pin<&mut Self>);
         #[qsignal]
         fn theme_changed(self: Pin<&mut Self>);
+        #[qsignal]
+        fn search_changed(self: Pin<&mut Self>);
 
         #[qinvokable]
         fn initialize(self: Pin<&mut Self>) -> bool;
@@ -103,6 +118,20 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "setThemeMode"]
         fn set_theme_mode(self: Pin<&mut Self>, mode: QString) -> bool;
+        #[qinvokable]
+        fn search(self: Pin<&mut Self>, query: QString);
+        #[qinvokable]
+        #[cxx_name = "setPinned"]
+        fn set_pinned(self: Pin<&mut Self>, pinned: bool) -> bool;
+        #[qinvokable]
+        #[cxx_name = "setArchived"]
+        fn set_archived(self: Pin<&mut Self>, archived: bool) -> bool;
+        #[qinvokable]
+        #[cxx_name = "setPriority"]
+        fn set_priority(self: Pin<&mut Self>, priority: i32) -> bool;
+        #[qinvokable]
+        #[cxx_name = "setTags"]
+        fn set_tags(self: Pin<&mut Self>, tags: QString) -> bool;
     }
 }
 
@@ -110,11 +139,24 @@ pub struct NotesBackendRust {
     session: Option<NotesSession>,
     titles: QStringList,
     note_ids: QStringList,
+    snippets: QStringList,
+    pinned_states: QStringList,
+    archived_states: QStringList,
+    priorities: QStringList,
+    all_tags: QStringList,
     restore_ids: QStringList,
     current_id: QString,
     current_index: i32,
     draft_title: QString,
     draft_content: QString,
+    is_pinned: bool,
+    is_archived: bool,
+    priority: i32,
+    tags: QStringList,
+    tags_text: QString,
+    search_result_ids: QStringList,
+    search_result_titles: QStringList,
+    search_result_snippets: QStringList,
     ready: bool,
     dirty: bool,
     error_message: QString,
@@ -129,11 +171,24 @@ impl Default for NotesBackendRust {
             session: None,
             titles: QStringList::default(),
             note_ids: QStringList::default(),
+            snippets: QStringList::default(),
+            pinned_states: QStringList::default(),
+            archived_states: QStringList::default(),
+            priorities: QStringList::default(),
+            all_tags: QStringList::default(),
             restore_ids: QStringList::default(),
             current_id: QString::default(),
             current_index: -1,
             draft_title: QString::default(),
             draft_content: QString::default(),
+            is_pinned: false,
+            is_archived: false,
+            priority: 0,
+            tags: QStringList::default(),
+            tags_text: QString::default(),
+            search_result_ids: QStringList::default(),
+            search_result_titles: QStringList::default(),
+            search_result_snippets: QStringList::default(),
             ready: false,
             dirty: false,
             error_message: QString::default(),
@@ -313,14 +368,61 @@ impl ffi::NotesBackend {
                     .current()
                     .map(|note| QString::from(&note.content))
                     .unwrap_or_default();
+                let snippets = session
+                    .summaries()
+                    .iter()
+                    .map(|note| QString::from(&note.snippet))
+                    .collect();
+                let pinned_states = session
+                    .summaries()
+                    .iter()
+                    .map(|note| QString::from(if note.is_pinned { "true" } else { "false" }))
+                    .collect();
+                let archived_states = session
+                    .summaries()
+                    .iter()
+                    .map(|note| QString::from(if note.is_archived { "true" } else { "false" }))
+                    .collect();
+                let priorities = session
+                    .summaries()
+                    .iter()
+                    .map(|note| QString::from(&note.priority.to_string()))
+                    .collect();
+                let all_tags = session
+                    .list_tags()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(QString::from)
+                    .collect();
+                let is_pinned = session.current().map(|n| n.is_pinned).unwrap_or(false);
+                let is_archived = session.current().map(|n| n.is_archived).unwrap_or(false);
+                let priority = session.current().map(|n| n.priority).unwrap_or(0);
+                let tags = session
+                    .current()
+                    .map(|n| n.tags.iter().map(QString::from).collect())
+                    .unwrap_or_default();
+                let tags_text = session
+                    .current()
+                    .map(|n| QString::from(&n.tags.join(", ")))
+                    .unwrap_or_default();
                 let dirty = session.dirty();
                 let theme = session.theme().unwrap_or_default();
                 state.titles = titles;
                 state.note_ids = note_ids;
+                state.snippets = snippets;
+                state.pinned_states = pinned_states;
+                state.archived_states = archived_states;
+                state.priorities = priorities;
+                state.all_tags = all_tags;
                 state.current_id = current_id;
                 state.current_index = index;
                 state.draft_title = title;
                 state.draft_content = content;
+                state.is_pinned = is_pinned;
+                state.is_archived = is_archived;
+                state.priority = priority;
+                state.tags = tags;
+                state.tags_text = tags_text;
                 state.dirty = dirty;
                 state.theme_mode = QString::from(theme.as_str());
             }
@@ -396,5 +498,73 @@ impl ffi::NotesBackend {
         } else {
             false
         }
+    }
+
+    pub fn search(mut self: Pin<&mut Self>, query: QString) {
+        let q_str = query.to_string();
+        let (ids, titles, snippets) = if let Some(session) = &self.session {
+            if q_str.trim().is_empty() {
+                (
+                    QStringList::default(),
+                    QStringList::default(),
+                    QStringList::default(),
+                )
+            } else {
+                match session.search(&q_str) {
+                    Ok(results) => {
+                        let ids = results
+                            .iter()
+                            .map(|r| QString::from(&r.id.to_string()))
+                            .collect();
+                        let titles = results.iter().map(|r| QString::from(&r.title)).collect();
+                        let snippets = results.iter().map(|r| QString::from(&r.snippet)).collect();
+                        (ids, titles, snippets)
+                    }
+                    Err(err) => {
+                        eprintln!("BetterNotes: search error: {err}");
+                        (
+                            QStringList::default(),
+                            QStringList::default(),
+                            QStringList::default(),
+                        )
+                    }
+                }
+            }
+        } else {
+            (
+                QStringList::default(),
+                QStringList::default(),
+                QStringList::default(),
+            )
+        };
+        {
+            let mut state = self.as_mut().rust_mut();
+            state.search_result_ids = ids;
+            state.search_result_titles = titles;
+            state.search_result_snippets = snippets;
+        }
+        self.as_mut().search_changed();
+    }
+
+    pub fn set_pinned(self: Pin<&mut Self>, pinned: bool) -> bool {
+        self.perform(true, |session| session.set_pinned(pinned))
+    }
+
+    pub fn set_archived(self: Pin<&mut Self>, archived: bool) -> bool {
+        self.perform(true, |session| session.set_archived(archived))
+    }
+
+    pub fn set_priority(self: Pin<&mut Self>, priority: i32) -> bool {
+        self.perform(true, |session| session.set_priority(priority))
+    }
+
+    pub fn set_tags(self: Pin<&mut Self>, tags: QString) -> bool {
+        let rust_tags: Vec<String> = tags
+            .to_string()
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        self.perform(true, |session| session.set_tags(rust_tags))
     }
 }

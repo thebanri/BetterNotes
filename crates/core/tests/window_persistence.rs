@@ -23,7 +23,7 @@ fn upgrade_phase_two_preserves_notes_and_is_repeatable() {
         connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        3
+        4
     );
 }
 

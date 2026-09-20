@@ -184,13 +184,18 @@ XDG_DATA_HOME="$betternotes_test_data" QT_QPA_PLATFORM=offscreen \
 
 The successful startup line should appear without QML errors. Timeout status 124
 means the event loop remained running until the timeout; it is not a graceful exit.
-See [the Phase 4 validation report](docs/phase-4-validation.md) for commands and
-actual results. Earlier reports record [Phase 3](docs/phase-3-validation.md),
-[Phase 2](docs/phase-2-validation.md) and [Phase 1](docs/validation.md).
+See [the Phase 5 validation report](docs/phase-5-validation.md) for commands and
+actual results. Earlier reports record [Phase 4](docs/phase-4-validation.md),
+[Phase 3](docs/phase-3-validation.md), [Phase 2](docs/phase-2-validation.md) and
+[Phase 1](docs/validation.md).
 
 ## Scope and next phase
 
-Phase 4 adds Light/Dark/System themes, polished QML components, high-DPI scaling,
-responsive layouts and subtle transitions. Phase 5 will implement SQLite FTS5
-full-text search, tags, priorities, archiving, command palette and global search.
+Phase 5 adds SQLite FTS5 full-text search with automatic synchronization, tags,
+priorities, archiving, pinned notes, an instant Command Palette (`Ctrl+K`/`Ctrl+Shift+P`),
+and search/filter views in the library window.
+
+Phase 6 will implement Linux Desktop Integration: system tray icon and menu,
+XDG autostart, desktop notifications (Freedesktop specification), global shortcuts,
+and clipboard integration.
 No later-phase features are included here. Project licensing remains undecided; no license was assigned.

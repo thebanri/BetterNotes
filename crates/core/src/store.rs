@@ -1,4 +1,4 @@
-use crate::{Error, Note, NoteSummary, Result, ThemePreference, WindowState};
+use crate::{Error, Note, NoteSummary, Result, SearchResult, ThemePreference, WindowState};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::{
     path::Path,
@@ -6,10 +6,12 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x424e4f54; // BNOT, an internal identifier, not a public app ID.
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 const INITIAL_SCHEMA: &str = include_str!("../../../migrations/0001_notes.sql");
 const WINDOW_SCHEMA: &str = include_str!("../../../migrations/0002_note_windows.sql");
 const SETTINGS_SCHEMA: &str = include_str!("../../../migrations/0003_settings.sql");
+const SEARCH_ORG_SCHEMA: &str =
+    include_str!("../../../migrations/0004_search_and_organization.sql");
 
 pub struct NoteStore {
     connection: Connection,
@@ -29,42 +31,86 @@ impl NoteStore {
     }
 
     pub fn list(&self) -> Result<Vec<NoteSummary>> {
-        let mut statement = self
-            .connection
-            .prepare("SELECT id, title FROM notes ORDER BY id DESC")?;
+        let mut statement = self.connection.prepare(
+            "SELECT n.id, n.title, substr(n.content, 1, 80), n.priority, n.is_archived, n.is_pinned,
+                    COALESCE((SELECT group_concat(t.name, ',') FROM note_tags nt JOIN tags t ON nt.tag_id = t.id WHERE nt.note_id = n.id), '')
+             FROM notes n
+             ORDER BY n.is_pinned DESC, n.updated_at DESC, n.id DESC",
+        )?;
         let rows = statement.query_map([], |row| {
+            let tags_str: String = row.get(6)?;
+            let tags = if tags_str.is_empty() {
+                Vec::new()
+            } else {
+                tags_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            };
             Ok(NoteSummary {
                 id: row.get(0)?,
                 title: row.get(1)?,
+                snippet: row.get(2)?,
+                priority: row.get(3)?,
+                is_archived: row.get::<_, i32>(4)? != 0,
+                is_pinned: row.get::<_, i32>(5)? != 0,
+                tags,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn get(&self, id: i64) -> Result<Note> {
-        self.connection
+        let note = self
+            .connection
             .query_row(
-                "SELECT id, title, content, created_at, updated_at, revision FROM notes WHERE id = ?1",
+                "SELECT id, title, content, created_at, updated_at, revision, priority, is_archived, is_pinned
+                 FROM notes WHERE id = ?1",
                 [id],
                 |row| {
-                    Ok(Note {
-                        id: row.get(0)?,
-                        title: row.get(1)?,
-                        content: row.get(2)?,
-                        created_at: row.get(3)?,
-                        updated_at: row.get(4)?,
-                        revision: row.get(5)?,
-                    })
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, i64>(4)?,
+                        row.get::<_, i64>(5)?,
+                        row.get::<_, i32>(6)?,
+                        row.get::<_, i32>(7)? != 0,
+                        row.get::<_, i32>(8)? != 0,
+                    ))
                 },
             )
             .optional()?
-            .ok_or(Error::NotFound(id))
+            .ok_or(Error::NotFound(id))?;
+
+        let mut statement = self.connection.prepare(
+            "SELECT t.name FROM note_tags nt JOIN tags t ON nt.tag_id = t.id WHERE nt.note_id = ?1 ORDER BY t.name",
+        )?;
+        let tags = statement
+            .query_map([id], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(Note {
+            id: note.0,
+            title: note.1,
+            content: note.2,
+            created_at: note.3,
+            updated_at: note.4,
+            revision: note.5,
+            priority: note.6,
+            is_archived: note.7,
+            is_pinned: note.8,
+            tags,
+        })
     }
 
     pub fn create(&self) -> Result<Note> {
         let now = now_millis()?;
         self.connection.execute(
-            "INSERT INTO notes (created_at, updated_at) VALUES (?1, ?1)",
+            "INSERT INTO notes (created_at, updated_at, priority, is_archived, is_pinned)
+             VALUES (?1, ?1, 0, 0, 0)",
             [now],
         )?;
         Ok(Note {
@@ -74,6 +120,10 @@ impl NoteStore {
             created_at: now,
             updated_at: now,
             revision: 0,
+            priority: 0,
+            is_archived: false,
+            is_pinned: false,
+            tags: Vec::new(),
         })
     }
 
@@ -85,13 +135,17 @@ impl NoteStore {
             .ok_or(Error::RevisionOverflow)?;
         let updated_at = now_millis()?.max(draft.updated_at);
         let changed = self.connection.execute(
-            "UPDATE notes SET title = ?1, content = ?2, updated_at = ?3, revision = ?4
-             WHERE id = ?5 AND revision = ?6",
+            "UPDATE notes SET title = ?1, content = ?2, updated_at = ?3, revision = ?4,
+                    priority = ?5, is_archived = ?6, is_pinned = ?7
+             WHERE id = ?8 AND revision = ?9",
             params![
                 draft.title,
                 draft.content,
                 updated_at,
                 revision,
+                draft.priority,
+                if draft.is_archived { 1 } else { 0 },
+                if draft.is_pinned { 1 } else { 0 },
                 draft.id,
                 draft.revision
             ],
@@ -99,11 +153,68 @@ impl NoteStore {
         if changed != 1 {
             return Err(Error::Conflict);
         }
+
+        self.sync_tags(draft.id, &draft.tags)?;
+
         Ok(Note {
             updated_at,
             revision,
             ..draft.clone()
         })
+    }
+
+    fn sync_tags(&self, note_id: i64, tags: &[String]) -> Result<()> {
+        self.connection
+            .execute("DELETE FROM note_tags WHERE note_id = ?1", [note_id])?;
+        for tag in tags {
+            let trimmed = tag.trim();
+            if trimmed.is_empty() || trimmed.len() > 64 {
+                continue;
+            }
+            self.connection
+                .execute("INSERT OR IGNORE INTO tags (name) VALUES (?1)", [trimmed])?;
+            let tag_id: i64 = self.connection.query_row(
+                "SELECT id FROM tags WHERE name = ?1 COLLATE NOCASE",
+                [trimmed],
+                |row| row.get(0),
+            )?;
+            self.connection.execute(
+                "INSERT OR IGNORE INTO note_tags (note_id, tag_id) VALUES (?1, ?2)",
+                params![note_id, tag_id],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn search(&self, query: &str) -> Result<Vec<SearchResult>> {
+        let clean_query = sanitize_fts5_query(query);
+        if clean_query.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT n.id, n.title, snippet(notes_fts, 1, '<b>', '</b>', '...', 16)
+             FROM notes_fts
+             JOIN notes n ON notes_fts.rowid = n.id
+             WHERE notes_fts MATCH ?1
+             ORDER BY rank
+             LIMIT 50",
+        )?;
+        let rows = statement.query_map([clean_query], |row| {
+            Ok(SearchResult {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                snippet: row.get(2)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub fn list_tags(&self) -> Result<Vec<String>> {
+        let mut stmt = self
+            .connection
+            .prepare("SELECT name FROM tags ORDER BY name ASC")?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn delete(&self, note: &Note) -> Result<()> {
@@ -227,9 +338,15 @@ fn migrate(connection: &mut Connection, initial_schema: &str) -> Result<()> {
     )?;
     if version < 3 {
         transaction.execute_batch(SETTINGS_SCHEMA)?;
-        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     }
     transaction.prepare("SELECT key, value FROM settings LIMIT 0")?;
+    if version < 4 {
+        transaction.execute_batch(SEARCH_ORG_SCHEMA)?;
+        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    }
+    transaction.prepare("SELECT rowid, title, content, tags FROM notes_fts LIMIT 0")?;
+    transaction.prepare("SELECT id, name FROM tags LIMIT 0")?;
+    transaction.prepare("SELECT note_id, tag_id FROM note_tags LIMIT 0")?;
     transaction.commit()?;
     Ok(())
 }
@@ -241,6 +358,24 @@ fn now_millis() -> Result<i64> {
         .as_millis()
         .try_into()
         .map_err(|_| Error::Clock)
+}
+
+fn sanitize_fts5_query(input: &str) -> String {
+    let terms: Vec<String> = input
+        .split_whitespace()
+        .filter_map(|w| {
+            let cleaned: String = w
+                .chars()
+                .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+                .collect();
+            if cleaned.is_empty() {
+                None
+            } else {
+                Some(format!("\"{}\"*", cleaned.replace('"', "\"\"")))
+            }
+        })
+        .collect();
+    terms.join(" ")
 }
 
 #[cfg(test)]

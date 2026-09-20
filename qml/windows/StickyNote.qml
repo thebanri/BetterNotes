@@ -204,6 +204,20 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
 
             UI.StyledButton {
+                text: backend.isPinned ? "📌" : "📍"
+                theme: noteWindow.theme
+                variant: backend.isPinned ? "accent" : "ghost"
+                implicitHeight: 28
+                padding: 4
+                leftPadding: 6
+                rightPadding: 6
+                onClicked: {
+                    backend.setPinned(!backend.isPinned)
+                    autosave.restart()
+                }
+            }
+
+            UI.StyledButton {
                 text: qsTr("Menu")
                 theme: noteWindow.theme
                 variant: "ghost"
@@ -216,6 +230,14 @@ ApplicationWindow {
                 Menu {
                     id: noteMenu
                     MenuItem { text: qsTr("All notes"); onTriggered: noteWindow.libraryRequested() }
+                    MenuItem {
+                        text: backend.isPinned ? qsTr("Unpin note") : qsTr("Pin note")
+                        onTriggered: { backend.setPinned(!backend.isPinned); autosave.restart() }
+                    }
+                    MenuItem {
+                        text: backend.isArchived ? qsTr("Unarchive note") : qsTr("Archive note")
+                        onTriggered: { backend.setArchived(!backend.isArchived); autosave.restart() }
+                    }
                     MenuItem { text: qsTr("Save"); onTriggered: noteWindow.flush() && noteWindow.persist(true) }
                     MenuItem {
                         text: qsTr("Reload saved note")
@@ -277,6 +299,54 @@ ApplicationWindow {
                 radius: theme.radiusSm
             }
             onTextEdited: { backend.editTitle(text); autosave.restart() }
+        }
+
+        RowLayout {
+            visible: !noteWindow.collapsed
+            Layout.fillWidth: true
+            spacing: 6
+
+            TextField {
+                id: tagsEditor
+                Layout.fillWidth: true
+                placeholderText: qsTr("Tags (e.g. work, rust)...")
+                Accessible.name: qsTr("Note tags")
+                text: backend.tagsText
+                selectByMouse: true
+                font.pixelSize: 11
+                color: theme.noteText
+                placeholderTextColor: theme.noteTextSecondary
+                background: Rectangle {
+                    color: "transparent"
+                    border.width: tagsEditor.activeFocus ? 1 : 0
+                    border.color: theme.border
+                    radius: theme.radiusSm
+                }
+                onEditingFinished: {
+                    backend.setTags(text)
+                    autosave.restart()
+                }
+            }
+
+            UI.StyledButton {
+                text: {
+                    if (backend.priority === 3) return qsTr("High")
+                    if (backend.priority === 2) return qsTr("Med")
+                    if (backend.priority === 1) return qsTr("Low")
+                    return qsTr("Priority")
+                }
+                theme: noteWindow.theme
+                variant: backend.priority > 0 ? "accent" : "ghost"
+                implicitHeight: 24
+                padding: 2
+                leftPadding: 6
+                rightPadding: 6
+                onClicked: {
+                    const next = (backend.priority + 1) % 4
+                    backend.setPriority(next)
+                    autosave.restart()
+                }
+            }
         }
 
         ScrollView {

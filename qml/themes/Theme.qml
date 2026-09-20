@@ -35,6 +35,8 @@ QtObject {
     readonly property color dangerHover: "#dc2626"
     readonly property color dangerText: "#ffffff"
     readonly property color dangerSubtle: isDark ? "#450a0a" : "#fee2e2"
+    readonly property color warning: "#f59e0b"
+    readonly property color warningSubtle: isDark ? "#451a03" : "#fef3c7"
     readonly property color success: "#22c55e"
 
     // Sticky Note Tones (Warm Amber/Yellow modern pastel)

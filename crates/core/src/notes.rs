@@ -9,13 +9,29 @@ pub struct Note {
     pub created_at: i64,
     pub updated_at: i64,
     pub revision: i64,
+    pub priority: i32,
+    pub is_archived: bool,
+    pub is_pinned: bool,
+    pub tags: Vec<String>,
 }
 
-/// List queries deliberately omit note bodies.
+/// List queries deliberately omit note bodies, providing summaries with snippets and metadata.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NoteSummary {
     pub id: i64,
     pub title: String,
+    pub snippet: String,
+    pub priority: i32,
+    pub is_archived: bool,
+    pub is_pinned: bool,
+    pub tags: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SearchResult {
+    pub id: i64,
+    pub title: String,
+    pub snippet: String,
 }
 
 #[derive(Debug, Error)]
