@@ -75,10 +75,12 @@ ApplicationWindow {
     minimumHeight: collapsed ? collapsedHeight : 180
     maximumHeight: collapsed ? collapsedHeight : 16384
     visible: false
-    color: activeBg
+    color: "transparent"
 
     background: Rectangle {
+        id: windowCard
         color: noteWindow.activeBg
+        radius: 12
         border.width: 1
         border.color: noteWindow.activeBorder
     }
@@ -223,22 +225,58 @@ ApplicationWindow {
     }
 
     header: Rectangle {
+        id: headerContainer
         height: 38
-        color: activeHeader
+        color: "transparent"
 
         Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: 1
-            color: noteWindow.activeBorder
+            id: headerBar
+            anchors.fill: parent
+            color: activeHeader
+            radius: 12
+            border.width: 1
+            border.color: noteWindow.activeBorder
+
+            // When expanded, square off bottom corners so header bar connects smoothly with note body
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 1
+                anchors.rightMargin: 1
+                height: 12
+                color: parent.color
+                visible: !noteWindow.collapsed
+            }
+
+            // Crisp dividing border between header and note body
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 1
+                color: noteWindow.activeBorder
+                visible: !noteWindow.collapsed
+            }
         }
 
         MouseArea {
             anchors.fill: parent
             z: 0
             acceptedButtons: Qt.LeftButton
-            onPressed: noteWindow.startSystemMove()
+            property point clickPos: Qt.point(0, 0)
+            onPressed: function(mouse) {
+                clickPos = Qt.point(mouse.x, mouse.y)
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed) {
+                    var dx = Math.abs(mouse.x - clickPos.x)
+                    var dy = Math.abs(mouse.y - clickPos.y)
+                    if (dx > 3 || dy > 3) {
+                        noteWindow.startSystemMove()
+                    }
+                }
+            }
             onDoubleClicked: noteWindow.toggleCollapsed()
         }
 
@@ -457,7 +495,7 @@ ApplicationWindow {
             TextArea {
                 id: contentEditor
                 objectName: "contentEditor"
-                width: Math.max(100, contentScroll.width)
+                width: Math.max(100, contentScroll.availableWidth)
                 text: backend.draftContent
                 textFormat: TextEdit.PlainText
                 placeholderText: qsTr("Write your note…")
@@ -515,39 +553,37 @@ ApplicationWindow {
         Label { text: qsTr("Reload the saved note and discard this draft?"); wrapMode: Text.WordWrap; width: Math.min(300, noteWindow.width - 64) }
         onAccepted: backend.reloadNote()
     }
-    // Resize handles for frameless window
+    // Native system resize handles for frameless window
     MouseArea {
         id: rightResize
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.right: parent.right
+        anchors.topMargin: 12
         anchors.bottomMargin: 16
         width: 8
         cursorShape: Qt.SizeHorCursor
         z: 20
-        property int startW: 0
-        property int startGlobalX: 0
-
         onPressed: function(mouse) {
-            if (noteWindow.canPosition) {
-                noteWindow.resizing = true
-                startW = noteWindow.width
-                startGlobalX = backend.cursorGlobalX()
-            } else {
+            if (mouse.button === Qt.LeftButton) {
                 noteWindow.startSystemResize(Qt.RightEdge)
             }
         }
-        onPositionChanged: function(mouse) {
-            if (pressed && noteWindow.canPosition) {
-                var dx = backend.cursorGlobalX() - startGlobalX
-                var newW = Math.round(Math.max(noteWindow.minimumWidth, startW + dx))
-                if (noteWindow.width !== newW) noteWindow.width = newW
-            }
-        }
-        onReleased: function() {
-            if (noteWindow.canPosition) {
-                noteWindow.resizing = false
-                noteWindow.captureGeometry()
+    }
+
+    MouseArea {
+        id: leftResize
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.topMargin: 12
+        anchors.bottomMargin: 16
+        width: 8
+        cursorShape: Qt.SizeHorCursor
+        z: 20
+        onPressed: function(mouse) {
+            if (mouse.button === Qt.LeftButton) {
+                noteWindow.startSystemResize(Qt.LeftEdge)
             }
         }
     }
@@ -563,29 +599,9 @@ ApplicationWindow {
         cursorShape: Qt.SizeVerCursor
         z: 20
         enabled: !noteWindow.collapsed
-        property int startH: 0
-        property int startGlobalY: 0
-
         onPressed: function(mouse) {
-            if (noteWindow.canPosition) {
-                noteWindow.resizing = true
-                startH = noteWindow.height
-                startGlobalY = backend.cursorGlobalY()
-            } else {
+            if (mouse.button === Qt.LeftButton) {
                 noteWindow.startSystemResize(Qt.BottomEdge)
-            }
-        }
-        onPositionChanged: function(mouse) {
-            if (pressed && noteWindow.canPosition) {
-                var dy = backend.cursorGlobalY() - startGlobalY
-                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + dy))
-                if (noteWindow.height !== newH) noteWindow.height = newH
-            }
-        }
-        onReleased: function() {
-            if (noteWindow.canPosition) {
-                noteWindow.resizing = false
-                noteWindow.captureGeometry()
             }
         }
     }
@@ -599,90 +615,23 @@ ApplicationWindow {
         cursorShape: Qt.SizeFDiagCursor
         z: 21
         enabled: !noteWindow.collapsed
-        property int startW: 0
-        property int startH: 0
-        property int startGlobalX: 0
-        property int startGlobalY: 0
-
         onPressed: function(mouse) {
-            if (noteWindow.canPosition) {
-                noteWindow.resizing = true
-                startW = noteWindow.width
-                startH = noteWindow.height
-                startGlobalX = backend.cursorGlobalX()
-                startGlobalY = backend.cursorGlobalY()
-            } else {
+            if (mouse.button === Qt.LeftButton) {
                 noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
-            }
-        }
-        onPositionChanged: function(mouse) {
-            if (pressed && noteWindow.canPosition) {
-                var dx = backend.cursorGlobalX() - startGlobalX
-                var dy = backend.cursorGlobalY() - startGlobalY
-                var newW = Math.round(Math.max(noteWindow.minimumWidth, startW + dx))
-                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + dy))
-                if (noteWindow.width !== newW) noteWindow.width = newW
-                if (noteWindow.height !== newH) noteWindow.height = newH
-            }
-        }
-        onReleased: function() {
-            if (noteWindow.canPosition) {
-                noteWindow.resizing = false
-                noteWindow.captureGeometry()
             }
         }
 
         Rectangle {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.margins: 3
+            anchors.margins: 4
             width: 8
             height: 8
             color: "transparent"
             border.width: 1
             border.color: noteWindow.activeBorder
             opacity: 0.5
-        }
-    }
-
-    MouseArea {
-        id: leftResize
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.bottomMargin: 16
-        width: 8
-        cursorShape: Qt.SizeHorCursor
-        z: 20
-        property int startW: 0
-        property int startX: 0
-        property int startGlobalX: 0
-
-        onPressed: function(mouse) {
-            if (noteWindow.canPosition) {
-                noteWindow.resizing = true
-                startW = noteWindow.width
-                startX = noteWindow.x
-                startGlobalX = backend.cursorGlobalX()
-            } else {
-                noteWindow.startSystemResize(Qt.LeftEdge)
-            }
-        }
-        onPositionChanged: function(mouse) {
-            if (pressed && noteWindow.canPosition) {
-                var dx = backend.cursorGlobalX() - startGlobalX
-                var newW = Math.round(startW - dx)
-                if (newW >= noteWindow.minimumWidth) {
-                    noteWindow.width = newW
-                    noteWindow.x = Math.round(startX + dx)
-                }
-            }
-        }
-        onReleased: function() {
-            if (noteWindow.canPosition) {
-                noteWindow.resizing = false
-                noteWindow.captureGeometry()
-            }
+            radius: 2
         }
     }
 
@@ -695,42 +644,9 @@ ApplicationWindow {
         cursorShape: Qt.SizeBDiagCursor
         z: 21
         enabled: !noteWindow.collapsed
-        property int startW: 0
-        property int startH: 0
-        property int startX: 0
-        property int startGlobalX: 0
-        property int startGlobalY: 0
-
         onPressed: function(mouse) {
-            if (noteWindow.canPosition) {
-                noteWindow.resizing = true
-                startW = noteWindow.width
-                startH = noteWindow.height
-                startX = noteWindow.x
-                startGlobalX = backend.cursorGlobalX()
-                startGlobalY = backend.cursorGlobalY()
-            } else {
+            if (mouse.button === Qt.LeftButton) {
                 noteWindow.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
-            }
-        }
-        onPositionChanged: function(mouse) {
-            if (pressed && noteWindow.canPosition) {
-                var dy = backend.cursorGlobalY() - startGlobalY
-                var newH = Math.round(Math.max(noteWindow.minimumHeight, startH + dy))
-                if (noteWindow.height !== newH) noteWindow.height = newH
-
-                var dx = backend.cursorGlobalX() - startGlobalX
-                var newW = Math.round(startW - dx)
-                if (newW >= noteWindow.minimumWidth) {
-                    noteWindow.width = newW
-                    noteWindow.x = Math.round(startX + dx)
-                }
-            }
-        }
-        onReleased: function() {
-            if (noteWindow.canPosition) {
-                noteWindow.resizing = false
-                noteWindow.captureGeometry()
             }
         }
     }
