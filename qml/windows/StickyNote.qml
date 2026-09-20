@@ -2,12 +2,15 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import BetterNotes.App
+import "../themes" as Themes
+import "../components" as UI
 import "WindowPlacement.js" as Placement
 
 ApplicationWindow {
     id: noteWindow
     required property string noteId
     property alias editorBackend: backend
+    property alias theme: theme
     property bool collapsed: false
     property bool initialized: false
     property bool retiring: false
@@ -35,7 +38,9 @@ ApplicationWindow {
     minimumHeight: collapsed ? collapsedHeight : 180
     maximumHeight: collapsed ? collapsedHeight : 16384
     visible: false
+    color: theme.noteBackground
 
+    Themes.Theme { id: theme; themeMode: backend.themeMode }
     NotesBackend { id: backend; objectName: "notesBackend" }
     ApplicationInfo { id: platformInfo }
 
@@ -167,14 +172,47 @@ ApplicationWindow {
         onTriggered: { if (backend.save()) noteWindow.saved() }
     }
 
-    header: ToolBar {
+    header: Rectangle {
+        height: 40
+        color: theme.noteHeader
+        border.width: 1
+        border.color: theme.noteBorder
+
         RowLayout {
             anchors.fill: parent
-            ToolButton { text: noteWindow.collapsed ? qsTr("Expand") : qsTr("Collapse"); onClicked: noteWindow.toggleCollapsed() }
-            Label { text: backend.dirty ? qsTr("Unsaved") : qsTr("Saved"); Layout.fillWidth: true }
-            ToolButton {
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            spacing: 8
+
+            UI.StyledButton {
+                text: noteWindow.collapsed ? qsTr("Expand") : qsTr("Collapse")
+                theme: noteWindow.theme
+                variant: "ghost"
+                implicitHeight: 28
+                padding: 4
+                leftPadding: 8
+                rightPadding: 8
+                onClicked: noteWindow.toggleCollapsed()
+            }
+
+            UI.StatusBadge {
+                dirty: backend.dirty
+                theme: noteWindow.theme
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            Item { Layout.fillWidth: true }
+
+            UI.StyledButton {
                 text: qsTr("Menu")
+                theme: noteWindow.theme
+                variant: "ghost"
+                implicitHeight: 28
+                padding: 4
+                leftPadding: 8
+                rightPadding: 8
                 onClicked: noteMenu.open()
+
                 Menu {
                     id: noteMenu
                     MenuItem { text: qsTr("All notes"); onTriggered: noteWindow.libraryRequested() }
@@ -198,16 +236,25 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 8
-        spacing: 6
+        anchors.margins: 10
+        spacing: 8
+        opacity: noteWindow.collapsed ? 0 : 1
+        visible: opacity > 0
+
+        Behavior on opacity {
+            NumberAnimation { duration: theme.animShort }
+        }
+
         Label {
             visible: backend.errorMessage.length > 0 || backend.windowError.length > 0
             text: backend.errorMessage || backend.windowError
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
+            color: theme.danger
             Accessible.role: Accessible.AlertMessage
         }
+
         TextField {
             id: titleEditor
             objectName: "titleEditor"
@@ -217,12 +264,27 @@ ApplicationWindow {
             Accessible.name: qsTr("Note title")
             text: backend.draftTitle
             selectByMouse: true
+            font.pixelSize: 15
+            font.weight: Font.DemiBold
+            color: theme.noteText
+            placeholderTextColor: theme.noteTextSecondary
+            selectionColor: theme.accent
+            selectedTextColor: theme.accentText
+            background: Rectangle {
+                color: "transparent"
+                border.width: titleEditor.activeFocus ? 1 : 0
+                border.color: theme.border
+                radius: theme.radiusSm
+            }
             onTextEdited: { backend.editTitle(text); autosave.restart() }
         }
+
         ScrollView {
             visible: !noteWindow.collapsed
             Layout.fillWidth: true
             Layout.fillHeight: true
+            clip: true
+
             TextArea {
                 id: contentEditor
                 objectName: "contentEditor"
@@ -232,6 +294,12 @@ ApplicationWindow {
                 Accessible.name: qsTr("Note content")
                 wrapMode: TextEdit.Wrap
                 selectByMouse: true
+                font.pixelSize: 13
+                color: theme.noteText
+                placeholderTextColor: theme.noteTextSecondary
+                selectionColor: theme.accent
+                selectedTextColor: theme.accentText
+                background: null
                 onTextChanged: {
                     if (text !== backend.draftContent) {
                         backend.editContent(text)

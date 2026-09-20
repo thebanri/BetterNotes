@@ -1,4 +1,4 @@
-use crate::{Error, Note, NoteStore, NoteSummary, Result, WindowState};
+use crate::{Error, Note, NoteStore, NoteSummary, Result, ThemePreference, WindowState};
 use std::path::Path;
 
 /// Owns the active draft; only successful writes clear the dirty flag.
@@ -62,6 +62,14 @@ impl NotesSession {
 
     pub fn open_window_ids(&self) -> Result<Vec<i64>> {
         self.store.open_window_ids()
+    }
+
+    pub fn theme(&self) -> Result<ThemePreference> {
+        self.store.theme()
+    }
+
+    pub fn set_theme(&mut self, theme: ThemePreference) -> Result<()> {
+        self.store.set_theme(theme)
     }
 
     /// Sticky reload must never silently switch to a different note after deletion.

@@ -4,6 +4,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import BetterNotes.App
+import "../themes" as Themes
+import "../components" as UI
 
 ApplicationWindow {
     id: window
@@ -13,10 +15,13 @@ ApplicationWindow {
     minimumHeight: 300
     visible: true
     title: applicationInfo.name() + qsTr(" — All notes")
+    color: theme.windowBackground
     property alias libraryBackend: backend
+    property alias theme: theme
     property var noteWindows: ({})
     property string windowError: ""
 
+    Themes.Theme { id: theme; themeMode: backend.themeMode }
     ApplicationInfo { id: applicationInfo }
     NotesBackend { id: backend; objectName: "notesBackend" }
     Component {
@@ -93,61 +98,186 @@ ApplicationWindow {
         }
     }
 
-    header: ToolBar {
+    header: Rectangle {
+        height: 48
+        color: theme.surface
+        border.width: 1
+        border.color: theme.border
+
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            Button { text: qsTr("New note"); enabled: backend.ready; onClicked: window.createNote() }
-            Button { text: qsTr("Refresh list"); enabled: backend.ready; onClicked: backend.reload() }
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            spacing: 8
+
+            Label {
+                text: applicationInfo.name()
+                font.pixelSize: 15
+                font.weight: Font.Bold
+                color: theme.textPrimary
+            }
+
+            Rectangle {
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: 20
+                color: theme.border
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+            }
+
+            UI.StyledButton {
+                text: qsTr("New note")
+                theme: window.theme
+                variant: "accent"
+                enabled: backend.ready
+                onClicked: window.createNote()
+            }
+
+            UI.StyledButton {
+                text: qsTr("Refresh")
+                theme: window.theme
+                variant: "ghost"
+                enabled: backend.ready
+                onClicked: backend.reload()
+            }
+
             Item { Layout.fillWidth: true }
-            Button { text: qsTr("Quit"); onClicked: window.close() }
+
+            UI.StyledButton {
+                text: {
+                    if (backend.themeMode === "light") return "☀️ " + qsTr("Light")
+                    if (backend.themeMode === "dark") return "🌙 " + qsTr("Dark")
+                    return "🖥️ " + qsTr("System")
+                }
+                theme: window.theme
+                variant: "ghost"
+                onClicked: {
+                    if (backend.themeMode === "system") backend.setThemeMode("light")
+                    else if (backend.themeMode === "light") backend.setThemeMode("dark")
+                    else backend.setThemeMode("system")
+                }
+            }
+
+            UI.StyledButton {
+                text: qsTr("Quit")
+                theme: window.theme
+                variant: "ghost"
+                onClicked: window.close()
+            }
         }
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 12
-        Label {
-            text: window.windowError || backend.errorMessage
-            visible: text.length > 0
-            textFormat: Text.PlainText
-            wrapMode: Text.WordWrap
+        anchors.margins: 14
+        spacing: 10
+
+        Rectangle {
+            visible: window.windowError.length > 0 || backend.errorMessage.length > 0
             Layout.fillWidth: true
-            Accessible.role: Accessible.AlertMessage
+            implicitHeight: errorRow.implicitHeight + 16
+            radius: theme.radiusSm
+            color: theme.dangerSubtle
+            border.width: 1
+            border.color: theme.danger
+
+            RowLayout {
+                id: errorRow
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: 8
+                Label {
+                    text: window.windowError || backend.errorMessage
+                    textFormat: Text.PlainText
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                    color: theme.danger
+                    Accessible.role: Accessible.AlertMessage
+                }
+            }
         }
-        Button { text: qsTr("Retry opening"); visible: !backend.ready; onClicked: window.initialize() }
+
+        UI.StyledButton {
+            text: qsTr("Retry opening")
+            theme: window.theme
+            variant: "accent"
+            visible: !backend.ready
+            onClicked: window.initialize()
+        }
+
         Label {
             text: qsTr("Open a note to edit it in its own window. Bring here recovers a misplaced window.")
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
+            font.pixelSize: 12
+            color: theme.textSecondary
         }
-        Label { visible: backend.ready && backend.titles.length === 0; text: qsTr("Create your first note.") }
+
+        Rectangle {
+            visible: backend.ready && backend.titles.length === 0
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            radius: theme.radiusMd
+            color: theme.surface
+            border.width: 1
+            border.color: theme.border
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                spacing: 12
+
+                Label {
+                    text: "📝"
+                    font.pixelSize: 36
+                    Layout.alignment: Qt.AlignHCenter
+                }
+                Label {
+                    text: qsTr("No notes yet")
+                    font.pixelSize: 16
+                    font.weight: Font.Bold
+                    color: theme.textPrimary
+                    Layout.alignment: Qt.AlignHCenter
+                }
+                Label {
+                    text: qsTr("Create your first note to capture ideas and keep them on your desktop.")
+                    font.pixelSize: 13
+                    color: theme.textSecondary
+                    Layout.alignment: Qt.AlignHCenter
+                }
+                UI.StyledButton {
+                    text: qsTr("Create note")
+                    theme: window.theme
+                    variant: "accent"
+                    Layout.alignment: Qt.AlignHCenter
+                    onClicked: window.createNote()
+                }
+            }
+        }
+
         ScrollView {
+            visible: backend.titles.length > 0
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+
             ListView {
                 id: notesList
                 model: backend.titles
+                spacing: 6
                 activeFocusOnTab: true
                 Keys.onReturnPressed: { if (currentIndex >= 0) window.openNote(backend.noteIds[currentIndex]) }
-                delegate: ItemDelegate {
+                delegate: UI.NoteCard {
                     id: noteDelegate
                     required property int index
                     required property string modelData
-                    width: ListView.view.width
+                    theme: window.theme
+                    noteTitle: modelData
                     highlighted: ListView.isCurrentItem
-                    onClicked: { notesList.currentIndex = index; window.openNote(backend.noteIds[index]) }
-                    contentItem: RowLayout {
-                        Label {
-                            text: noteDelegate.modelData.trim().length ? noteDelegate.modelData : qsTr("Untitled note")
-                            textFormat: Text.PlainText
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-                        Button { text: qsTr("Bring here"); onClicked: window.openNote(backend.noteIds[noteDelegate.index], true) }
+                    onClicked: {
+                        notesList.currentIndex = index
+                        window.openNote(backend.noteIds[index])
                     }
+                    onBringHereRequested: window.openNote(backend.noteIds[noteDelegate.index], true)
                 }
             }
         }

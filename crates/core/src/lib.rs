@@ -3,11 +3,13 @@
 mod notes;
 pub mod paths;
 mod session;
+pub mod settings;
 mod store;
 mod window_state;
 
 pub use notes::{Error, Note, NoteSummary, Result};
 pub use session::NotesSession;
+pub use settings::ThemePreference;
 pub use store::NoteStore;
 pub use window_state::WindowState;
 

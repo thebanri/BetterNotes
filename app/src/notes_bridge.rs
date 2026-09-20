@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 //! Qt adapter for the independent Rust editing session. No SQL or note rules in QML.
-use betternotes_core::{paths, Error, NotesSession, Result, WindowState};
+use betternotes_core::{paths, Error, NotesSession, Result, ThemePreference, WindowState};
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 use std::pin::Pin;
@@ -27,6 +27,7 @@ pub mod ffi {
         #[qproperty(bool, dirty, READ, NOTIFY = status_changed)]
         #[qproperty(QString, error_message, READ, NOTIFY = status_changed, cxx_name = "errorMessage")]
         #[qproperty(QString, window_error, READ, NOTIFY = status_changed, cxx_name = "windowError")]
+        #[qproperty(QString, theme_mode, READ, NOTIFY = theme_changed, cxx_name = "themeMode")]
         type NotesBackend = super::NotesBackendRust;
 
         #[qsignal]
@@ -35,6 +36,8 @@ pub mod ffi {
         fn selection_changed(self: Pin<&mut Self>);
         #[qsignal]
         fn status_changed(self: Pin<&mut Self>);
+        #[qsignal]
+        fn theme_changed(self: Pin<&mut Self>);
 
         #[qinvokable]
         fn initialize(self: Pin<&mut Self>) -> bool;
@@ -97,6 +100,9 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "editContent"]
         fn edit_content(self: Pin<&mut Self>, content: QString);
+        #[qinvokable]
+        #[cxx_name = "setThemeMode"]
+        fn set_theme_mode(self: Pin<&mut Self>, mode: QString) -> bool;
     }
 }
 
@@ -114,6 +120,7 @@ pub struct NotesBackendRust {
     error_message: QString,
     window_error: QString,
     window_state: WindowState,
+    theme_mode: QString,
 }
 
 impl Default for NotesBackendRust {
@@ -132,6 +139,7 @@ impl Default for NotesBackendRust {
             error_message: QString::default(),
             window_error: QString::default(),
             window_state: WindowState::default(),
+            theme_mode: QString::from("system"),
         }
     }
 }
@@ -306,6 +314,7 @@ impl ffi::NotesBackend {
                     .map(|note| QString::from(&note.content))
                     .unwrap_or_default();
                 let dirty = session.dirty();
+                let theme = session.theme().unwrap_or_default();
                 state.titles = titles;
                 state.note_ids = note_ids;
                 state.current_id = current_id;
@@ -313,12 +322,14 @@ impl ffi::NotesBackend {
                 state.draft_title = title;
                 state.draft_content = content;
                 state.dirty = dirty;
+                state.theme_mode = QString::from(theme.as_str());
             }
         }
         self.as_mut().list_changed();
         if editor && success {
             self.as_mut().selection_changed();
         }
+        self.as_mut().theme_changed();
         self.status_changed();
         success
     }
@@ -367,5 +378,23 @@ impl ffi::NotesBackend {
             }
         }
         self.status_changed();
+    }
+
+    pub fn set_theme_mode(mut self: Pin<&mut Self>, mode: QString) -> bool {
+        let pref: ThemePreference = mode.to_string().parse().unwrap_or_default();
+        let result = self
+            .as_mut()
+            .rust_mut()
+            .session
+            .as_mut()
+            .ok_or(Error::NoSelection)
+            .and_then(|session| session.set_theme(pref));
+        if result.is_ok() {
+            self.as_mut().rust_mut().theme_mode = mode;
+            self.as_mut().theme_changed();
+            true
+        } else {
+            false
+        }
     }
 }

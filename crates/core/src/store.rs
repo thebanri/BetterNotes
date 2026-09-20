@@ -1,4 +1,4 @@
-use crate::{Error, Note, NoteSummary, Result, WindowState};
+use crate::{Error, Note, NoteSummary, Result, ThemePreference, WindowState};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::{
     path::Path,
@@ -6,9 +6,10 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x424e4f54; // BNOT, an internal identifier, not a public app ID.
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 const INITIAL_SCHEMA: &str = include_str!("../../../migrations/0001_notes.sql");
 const WINDOW_SCHEMA: &str = include_str!("../../../migrations/0002_note_windows.sql");
+const SETTINGS_SCHEMA: &str = include_str!("../../../migrations/0003_settings.sql");
 
 pub struct NoteStore {
     connection: Connection,
@@ -160,6 +161,36 @@ impl NoteStore {
         let rows = statement.query_map([], |row| row.get(0))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
+
+    pub fn get_setting(&self, key: &str) -> Result<Option<String>> {
+        let val = self
+            .connection
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+                row.get(0)
+            })
+            .optional()?;
+        Ok(val)
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
+        self.connection.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![key, value],
+        )?;
+        Ok(())
+    }
+
+    pub fn theme(&self) -> Result<ThemePreference> {
+        let pref = self
+            .get_setting("theme")?
+            .unwrap_or_else(|| "system".to_string());
+        Ok(pref.parse().unwrap_or_default())
+    }
+
+    pub fn set_theme(&self, theme: ThemePreference) -> Result<()> {
+        self.set_setting("theme", theme.as_str())
+    }
 }
 
 fn migrate(connection: &mut Connection, initial_schema: &str) -> Result<()> {
@@ -190,11 +221,15 @@ fn migrate(connection: &mut Connection, initial_schema: &str) -> Result<()> {
     )?;
     if version < 2 {
         transaction.execute_batch(WINDOW_SCHEMA)?;
-        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     }
     transaction.prepare(
         "SELECT note_id, x, y, width, height, screen, collapsed, is_open FROM note_windows LIMIT 0",
     )?;
+    if version < 3 {
+        transaction.execute_batch(SETTINGS_SCHEMA)?;
+        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    }
+    transaction.prepare("SELECT key, value FROM settings LIMIT 0")?;
     transaction.commit()?;
     Ok(())
 }

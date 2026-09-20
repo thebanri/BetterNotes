@@ -1,20 +1,22 @@
 # BetterNotes
 
-Linux-first desktop notes application, currently at **Phase 3 — Sticky Windows**.
+Linux-first desktop notes application, currently at **Phase 4 — Modern UI**.
 BetterNotes is a working codename. Create, edit and delete plain-text notes in
-independent windows, with autosave, SQLite persistence and saved window state.
+independent windows, with autosave, SQLite persistence, saved window state,
+and light/dark/system themes with polished QML components.
 
 ## Architecture
 
 Rust owns application behavior; QML owns presentation. A Qt-independent
-`betternotes-core` crate owns notes, SQLite migrations, persistence and draft
-state. A CXX-Qt adapter exposes this state to QML, which is embedded as Qt resources.
+`betternotes-core` crate owns notes, SQLite migrations, persistence, draft
+state and user settings. A CXX-Qt adapter exposes this state to QML, which is embedded as Qt resources.
 
 ```text
 Cargo.toml              Rust workspace
 crates/core/src/lib.rs  Qt-independent core
 crates/core/src/store.rs SQLite persistence and migrations
 crates/core/src/session.rs Draft state and save-before-navigation rules
+crates/core/src/settings.rs Theme preferences and settings
 crates/core/src/window_state.rs Validated per-note window state
 crates/core/src/paths.rs Linux XDG data path resolution
 app/build.rs            CXX-Qt code generation and Qt resources
@@ -22,6 +24,8 @@ app/src/main.rs         Qt lifecycle and startup errors
 app/src/engine.rs       Shared QML loading and error handling
 app/src/platform.rs     Qt platform capability policy
 app/src/notes_bridge.rs Notes QObject exposed to QML
+qml/themes/Theme.qml    Design system with light/dark palettes
+qml/components/         Reusable UI components (buttons, badges, cards)
 qml/windows/Main.qml   Notes library and window ownership
 qml/windows/StickyNote.qml Independent note editor
 qml/windows/WindowPlacement.js Display fitting and recovery
@@ -180,13 +184,13 @@ XDG_DATA_HOME="$betternotes_test_data" QT_QPA_PLATFORM=offscreen \
 
 The successful startup line should appear without QML errors. Timeout status 124
 means the event loop remained running until the timeout; it is not a graceful exit.
-See [the Phase 3 validation report](docs/phase-3-validation.md) for commands and
-actual results. Earlier reports record [Phase 2](docs/phase-2-validation.md) and
-[Phase 1](docs/validation.md).
+See [the Phase 4 validation report](docs/phase-4-validation.md) for commands and
+actual results. Earlier reports record [Phase 3](docs/phase-3-validation.md),
+[Phase 2](docs/phase-2-validation.md) and [Phase 1](docs/validation.md).
 
 ## Scope and next phase
 
-Phase 3 adds independent note windows, moving/resizing through native decorations,
-collapse/expand and saved window state. Phase 4 should address themes and polished,
-responsive QML components with high-DPI validation. No later-phase features are
-included here. Project licensing remains undecided; no license was assigned.
+Phase 4 adds Light/Dark/System themes, polished QML components, high-DPI scaling,
+responsive layouts and subtle transitions. Phase 5 will implement SQLite FTS5
+full-text search, tags, priorities, archiving, command palette and global search.
+No later-phase features are included here. Project licensing remains undecided; no license was assigned.

@@ -3,5 +3,10 @@
         <file>windows/Main.qml</file>
         <file>windows/StickyNote.qml</file>
         <file>windows/WindowPlacement.js</file>
+        <file>themes/Theme.qml</file>
+        <file>components/StyledButton.qml</file>
+        <file>components/StyledTextField.qml</file>
+        <file>components/StatusBadge.qml</file>
+        <file>components/NoteCard.qml</file>
     </qresource>
 </RCC>
