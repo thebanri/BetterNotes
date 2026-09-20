@@ -25,8 +25,8 @@ T.Button {
                              implicitContentHeight + topPadding + bottomPadding)
 
     padding: 6
-    leftPadding: (iconName.length > 0 && text.length === 0) ? 6 : 12
-    rightPadding: (iconName.length > 0 && text.length === 0) ? 6 : 12
+    leftPadding: (iconName.length > 0 && text.length === 0) ? padding : ((text.length > 0 && iconName.length === 0) ? Math.max(padding, 10) : padding)
+    rightPadding: leftPadding
     spacing: 6
 
     contentItem: RowLayout {
@@ -60,8 +60,8 @@ T.Button {
     }
 
     background: Rectangle {
-        implicitWidth: (control.iconName.length > 0 && control.text.length === 0) ? 28 : 72
-        implicitHeight: (control.iconName.length > 0 && control.text.length === 0) ? 28 : 32
+        implicitWidth: (control.iconName.length > 0 && control.text.length === 0) ? 26 : 72
+        implicitHeight: (control.iconName.length > 0 && control.text.length === 0) ? 24 : 32
         radius: control.theme ? control.theme.radiusSm : 4
         opacity: control.enabled ? 1.0 : 0.5
         border.width: (control.variant === "ghost") ? 0 : 1

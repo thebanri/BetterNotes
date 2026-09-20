@@ -37,6 +37,46 @@ ApplicationWindow {
     property int noteFontSize: 13
     property bool isRichText: false
 
+    property int savedSelectionStart: -1
+    property int savedSelectionEnd: -1
+    property string savedSelectedText: ""
+
+    function updateSavedSelection() {
+        if (contentEditor.selectionStart !== contentEditor.selectionEnd) {
+            savedSelectionStart = contentEditor.selectionStart
+            savedSelectionEnd = contentEditor.selectionEnd
+            savedSelectedText = contentEditor.selectedText
+        }
+    }
+
+    function ensureRichText() {
+        if (!isRichText) {
+            isRichText = true
+            contentEditor.textFormat = TextEdit.RichText
+            if (savedSelectionStart !== savedSelectionEnd && savedSelectedText.length > 0) {
+                contentEditor.select(savedSelectionStart, savedSelectionEnd)
+            }
+        }
+    }
+
+    function getActiveSelection() {
+        var s = contentEditor.selectionStart
+        var e = contentEditor.selectionEnd
+        var t = contentEditor.selectedText
+        if (s === e && savedSelectionStart !== savedSelectionEnd && savedSelectedText.length > 0) {
+            s = savedSelectionStart
+            e = savedSelectionEnd
+            t = savedSelectedText
+            contentEditor.select(s, e)
+        }
+        return {
+            start: Math.min(s, e),
+            end: Math.max(s, e),
+            text: t,
+            hasSelection: (s !== e && t.length > 0)
+        }
+    }
+
     function checkRichText(content) {
         if (!content || content.length === 0) return false
         return content.indexOf("<!DOCTYPE") !== -1 ||
@@ -403,18 +443,191 @@ ApplicationWindow {
         showDialog(deleteDialog)
     }
 
+    function applyTextColor(colorHex, isDefault) {
+        contentEditor.forceActiveFocus()
+        ensureRichText()
+        var sel = getActiveSelection()
+        if (sel.hasSelection) {
+            contentEditor.remove(sel.start, sel.end)
+            if (isDefault) {
+                contentEditor.insert(sel.start, sel.text)
+            } else {
+                contentEditor.insert(sel.start, "<font color='" + colorHex + "'>" + sel.text + "</font>")
+            }
+            contentEditor.select(sel.start, sel.start + sel.text.length)
+            savedSelectionStart = sel.start
+            savedSelectionEnd = sel.start + sel.text.length
+            savedSelectedText = sel.text
+        } else {
+            var pos = contentEditor.cursorPosition
+            var word = qsTr("text")
+            if (isDefault) {
+                contentEditor.insert(pos, word)
+            } else {
+                contentEditor.insert(pos, "<font color='" + colorHex + "'>" + word + "</font>")
+            }
+            contentEditor.select(pos, pos + word.length)
+        }
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+    }
+
+    function toggleHeading(level) {
+        contentEditor.forceActiveFocus()
+        ensureRichText()
+        var sel = getActiveSelection()
+        var s = sel.start
+        var e = sel.end
+
+        var plain = contentEditor.getText(0, contentEditor.length)
+        var paragraphs = plain.split(/\u2029|\r?\n/)
+        var charCount = 0
+        var startBlock = -1
+        var endBlock = -1
+
+        for (var i = 0; i < paragraphs.length; i++) {
+            var pLen = paragraphs[i].length
+            var pEnd = charCount + pLen
+            charCount += pLen + 1
+
+            if (startBlock === -1 && s <= pEnd) {
+                startBlock = i
+            }
+            if (e <= pEnd || i === paragraphs.length - 1) {
+                endBlock = i
+                break
+            }
+        }
+        if (startBlock === -1) startBlock = 0
+        if (endBlock === -1) endBlock = startBlock
+
+        var html = contentEditor.text
+        var bodyStart = html.indexOf("<body")
+        if (bodyStart === -1) return
+        var bodyTagEnd = html.indexOf(">", bodyStart) + 1
+        var bodyEnd = html.indexOf("</body>", bodyTagEnd)
+        if (bodyEnd === -1) return
+
+        var header = html.substring(0, bodyTagEnd)
+        var body = html.substring(bodyTagEnd, bodyEnd)
+        var footer = html.substring(bodyEnd)
+
+        var blockRegex = /<(p|h1|h2)[^>]*>([\s\S]*?)<\/\1>/gi
+        var blocks = []
+        var match
+        while ((match = blockRegex.exec(body)) !== null) {
+            blocks.push({
+                full: match[0],
+                tag: match[1].toLowerCase(),
+                content: match[2]
+            })
+        }
+
+        var allSame = true
+        var targetTag = "h" + level
+        for (var b = startBlock; b <= endBlock && b < blocks.length; b++) {
+            if (blocks[b].tag !== targetTag) {
+                allSame = false
+                break
+            }
+        }
+
+        var newTag = allSame ? "p" : targetTag
+
+        var newBody = ""
+        var lastIdx = 0
+        blockRegex.lastIndex = 0
+        var bIdx = 0
+
+        while ((match = blockRegex.exec(body)) !== null) {
+            newBody += body.substring(lastIdx, match.index)
+            if (bIdx >= startBlock && bIdx <= endBlock) {
+                var content = match[2]
+                content = content.replace(/font-size:(xx-large|x-large);/gi, "")
+                content = content.replace(/font-weight:700;/gi, "")
+
+                if (newTag === "h1") {
+                    newBody += "<h1 style=' margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;'><span style=' font-size:xx-large; font-weight:700;'>" + content + "</span></h1>"
+                } else if (newTag === "h2") {
+                    newBody += "<h2 style=' margin-top:16px; margin-bottom:10px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;'><span style=' font-size:x-large; font-weight:700;'>" + content + "</span></h2>"
+                } else {
+                    newBody += "<p style=' margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;'>" + content + "</p>"
+                }
+            } else {
+                newBody += match[0]
+            }
+            lastIdx = blockRegex.lastIndex
+            bIdx++
+        }
+        newBody += body.substring(lastIdx)
+
+        contentEditor.text = header + newBody + footer
+        contentEditor.select(s, e)
+        savedSelectionStart = s
+        savedSelectionEnd = e
+        savedSelectedText = sel.text
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+    }
+
+    function isStyleActive(tag, text) {
+        var html = contentEditor.text
+        var escaped = text.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+        if (tag === "b") {
+            var boldRegex = new RegExp("<(b|strong)>[^<]*" + escaped + "[^<]*<\\/\\1>|<span[^>]*font-weight:700[^>]*>[^<]*" + escaped + "[^<]*<\\/span>", "i")
+            return boldRegex.test(html)
+        }
+        if (tag === "i") {
+            var italicRegex = new RegExp("<(i|em)>[^<]*" + escaped + "[^<]*<\\/\\1>|<span[^>]*font-style:italic[^>]*>[^<]*" + escaped + "[^<]*<\\/span>", "i")
+            return italicRegex.test(html)
+        }
+        if (tag === "u") {
+            var underlineRegex = new RegExp("<u>[^<]*" + escaped + "[^<]*<\\/u>|<span[^>]*text-decoration: underline[^>]*>[^<]*" + escaped + "[^<]*<\\/span>", "i")
+            return underlineRegex.test(html)
+        }
+        return false
+    }
+
+    function toggleInlineStyle(tag) {
+        contentEditor.forceActiveFocus()
+        ensureRichText()
+        var sel = getActiveSelection()
+        if (sel.hasSelection) {
+            var s = sel.start
+            var e = sel.end
+            var text = sel.text
+            var active = isStyleActive(tag, text)
+            contentEditor.remove(s, e)
+            if (active) {
+                contentEditor.insert(s, text)
+            } else {
+                contentEditor.insert(s, "<" + tag + ">" + text + "</" + tag + ">")
+            }
+            contentEditor.select(s, s + text.length)
+            savedSelectionStart = s
+            savedSelectionEnd = s + text.length
+            savedSelectedText = text
+        } else {
+            var pos = contentEditor.cursorPosition
+            var word = qsTr("text")
+            contentEditor.insert(pos, "<" + tag + ">" + word + "</" + tag + ">")
+            contentEditor.select(pos, pos + word.length)
+        }
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+    }
+
     function formatSelection(prefix, suffix) {
         contentEditor.forceActiveFocus()
-        if (!isRichText) {
-            isRichText = true
-            contentEditor.textFormat = TextEdit.RichText
-        }
-        if (contentEditor.selectionStart !== contentEditor.selectionEnd) {
-            var start = Math.min(contentEditor.selectionStart, contentEditor.selectionEnd)
-            var end = Math.max(contentEditor.selectionStart, contentEditor.selectionEnd)
-            var sel = contentEditor.selectedText
-            contentEditor.remove(start, end)
-            contentEditor.insert(start, prefix + sel + suffix)
+        ensureRichText()
+        var sel = getActiveSelection()
+        if (sel.hasSelection) {
+            contentEditor.remove(sel.start, sel.end)
+            contentEditor.insert(sel.start, prefix + sel.text + suffix)
+            contentEditor.select(sel.start, sel.start + sel.text.length)
+            savedSelectionStart = sel.start
+            savedSelectionEnd = sel.start + sel.text.length
+            savedSelectedText = sel.text
         } else {
             var pos = contentEditor.cursorPosition
             contentEditor.insert(pos, prefix + qsTr("text") + suffix)
@@ -425,10 +638,7 @@ ApplicationWindow {
 
     function insertImageTag(imageUrl) {
         contentEditor.forceActiveFocus()
-        if (!isRichText) {
-            isRichText = true
-            contentEditor.textFormat = TextEdit.RichText
-        }
+        ensureRichText()
         var imgWidth = Math.max(160, Math.min(300, Math.round(contentEditor.width - 24)))
         var imgTag = "<br><img src=\"" + imageUrl + "\" width=\"" + imgWidth + "\" /><br>"
         var pos = contentEditor.cursorPosition
@@ -439,23 +649,23 @@ ApplicationWindow {
 
     Shortcut {
         sequence: "Ctrl+B"
-        onActivated: noteWindow.formatSelection("<b>", "</b>")
+        onActivated: noteWindow.toggleInlineStyle("b")
     }
     Shortcut {
         sequence: "Ctrl+I"
-        onActivated: noteWindow.formatSelection("<i>", "</i>")
+        onActivated: noteWindow.toggleInlineStyle("i")
     }
     Shortcut {
         sequence: "Ctrl+U"
-        onActivated: noteWindow.formatSelection("<u>", "</u>")
+        onActivated: noteWindow.toggleInlineStyle("u")
     }
     Shortcut {
         sequence: "Ctrl+1"
-        onActivated: noteWindow.formatSelection("<h1>", "</h1>")
+        onActivated: noteWindow.toggleHeading(1)
     }
     Shortcut {
         sequence: "Ctrl+2"
-        onActivated: noteWindow.formatSelection("<h2>", "</h2>")
+        onActivated: noteWindow.toggleHeading(2)
     }
 
     FileDialog {
@@ -589,31 +799,44 @@ ApplicationWindow {
 
                 // H1
                 UI.StyledButton {
-                    text: "H1"
+                    iconName: "heading-1"
+                    iconSize: 14
                     theme: noteWindow.theme
                     variant: "ghost"
                     implicitWidth: 26
-                    implicitHeight: 22
+                    implicitHeight: 24
                     padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Heading 1 (Ctrl+1)")
-                    onClicked: noteWindow.formatSelection("<h1>", "</h1>")
+                    onClicked: noteWindow.toggleHeading(1)
                 }
 
                 // H2
                 UI.StyledButton {
-                    text: "H2"
+                    iconName: "heading-2"
+                    iconSize: 14
                     theme: noteWindow.theme
                     variant: "ghost"
                     implicitWidth: 26
-                    implicitHeight: 22
+                    implicitHeight: 24
                     padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Heading 2 (Ctrl+2)")
-                    onClicked: noteWindow.formatSelection("<h2>", "</h2>")
+                    onClicked: noteWindow.toggleHeading(2)
                 }
 
-                Rectangle { width: 1; height: 14; color: theme.border }
+                Rectangle {
+                    width: 1
+                    height: 14
+                    color: theme.border
+                    Layout.alignment: Qt.AlignVCenter
+                }
 
                 // Bold
                 UI.StyledButton {
@@ -621,12 +844,15 @@ ApplicationWindow {
                     iconSize: 13
                     theme: noteWindow.theme
                     variant: "ghost"
-                    implicitWidth: 24
-                    implicitHeight: 22
+                    implicitWidth: 26
+                    implicitHeight: 24
                     padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Bold (Ctrl+B)")
-                    onClicked: noteWindow.formatSelection("<b>", "</b>")
+                    onClicked: noteWindow.toggleInlineStyle("b")
                 }
 
                 // Italic
@@ -635,12 +861,15 @@ ApplicationWindow {
                     iconSize: 13
                     theme: noteWindow.theme
                     variant: "ghost"
-                    implicitWidth: 24
-                    implicitHeight: 22
+                    implicitWidth: 26
+                    implicitHeight: 24
                     padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Italic (Ctrl+I)")
-                    onClicked: noteWindow.formatSelection("<i>", "</i>")
+                    onClicked: noteWindow.toggleInlineStyle("i")
                 }
 
                 // Underline
@@ -649,15 +878,23 @@ ApplicationWindow {
                     iconSize: 13
                     theme: noteWindow.theme
                     variant: "ghost"
-                    implicitWidth: 24
-                    implicitHeight: 22
+                    implicitWidth: 26
+                    implicitHeight: 24
                     padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Underline (Ctrl+U)")
-                    onClicked: noteWindow.formatSelection("<u>", "</u>")
+                    onClicked: noteWindow.toggleInlineStyle("u")
                 }
 
-                Rectangle { width: 1; height: 14; color: theme.border }
+                Rectangle {
+                    width: 1
+                    height: 14
+                    color: theme.border
+                    Layout.alignment: Qt.AlignVCenter
+                }
 
                 // Text Color Dropper
                 UI.StyledButton {
@@ -666,18 +903,24 @@ ApplicationWindow {
                     iconSize: 13
                     theme: noteWindow.theme
                     variant: textColorPopup.visible ? "accent" : "ghost"
-                    implicitWidth: 24
-                    implicitHeight: 22
+                    implicitWidth: 26
+                    implicitHeight: 24
                     padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered && !textColorPopup.visible
                     ToolTip.text: qsTr("Text Color")
-                    onClicked: textColorPopup.open()
+                    onClicked: {
+                        noteWindow.updateSavedSelection()
+                        textColorPopup.open()
+                    }
 
                     Popup {
                         id: textColorPopup
                         y: textColorBtn.height + 4
                         x: -4
-                        width: 176
+                        width: 196
                         height: 38
                         padding: 5
                         background: Rectangle {
@@ -693,31 +936,36 @@ ApplicationWindow {
 
                             Repeater {
                                 model: [
-                                    { color: theme.noteText, name: qsTr("Default") },
-                                    { color: "#ef4444", name: qsTr("Red") },
-                                    { color: "#f97316", name: qsTr("Orange") },
-                                    { color: "#eab308", name: qsTr("Yellow") },
-                                    { color: "#22c55e", name: qsTr("Green") },
-                                    { color: "#06b6d4", name: qsTr("Cyan") },
-                                    { color: "#6366f1", name: qsTr("Indigo") },
-                                    { color: "#d946ef", name: qsTr("Fuchsia") }
+                                    { color: theme.noteText, name: qsTr("Default"), isDefault: true },
+                                    { color: "#ef4444", name: qsTr("Red"), isDefault: false },
+                                    { color: "#f97316", name: qsTr("Orange"), isDefault: false },
+                                    { color: "#eab308", name: qsTr("Yellow"), isDefault: false },
+                                    { color: "#22c55e", name: qsTr("Green"), isDefault: false },
+                                    { color: "#06b6d4", name: qsTr("Cyan"), isDefault: false },
+                                    { color: "#6366f1", name: qsTr("Indigo"), isDefault: false },
+                                    { color: "#d946ef", name: qsTr("Fuchsia"), isDefault: false }
                                 ]
 
                                 delegate: Rectangle {
+                                    id: colorSwatch
                                     required property var modelData
-                                    width: 16
-                                    height: 16
-                                    radius: 8
+                                    width: 18
+                                    height: 18
+                                    radius: 9
                                     color: modelData.color
-                                    border.width: 1
-                                    border.color: Qt.darker(modelData.color, 1.2)
+                                    border.width: modelData.isDefault ? 1.5 : 1
+                                    border.color: modelData.isDefault ? theme.border : Qt.darker(modelData.color, 1.2)
+
+                                    ToolTip.visible: colorSwatchArea.containsMouse
+                                    ToolTip.text: modelData.name
 
                                     MouseArea {
+                                        id: colorSwatchArea
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
-                                            noteWindow.formatSelection("<font color='" + modelData.color + "'>", "</font>")
+                                            noteWindow.applyTextColor(modelData.color, modelData.isDefault)
                                             textColorPopup.close()
                                         }
                                     }
@@ -733,9 +981,12 @@ ApplicationWindow {
                     iconSize: 14
                     theme: noteWindow.theme
                     variant: "ghost"
-                    implicitWidth: 24
-                    implicitHeight: 22
+                    implicitWidth: 26
+                    implicitHeight: 24
                     padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Insert Image or GIF")
                     onClicked: imageDialog.open()
@@ -771,6 +1022,9 @@ ApplicationWindow {
                 selectionColor: theme.accent
                 selectedTextColor: theme.accentText
                 background: null
+                onSelectionStartChanged: noteWindow.updateSavedSelection()
+                onSelectionEndChanged: noteWindow.updateSavedSelection()
+                onSelectedTextChanged: noteWindow.updateSavedSelection()
                 onTextChanged: {
                     if (text !== backend.draftContent) {
                         backend.editContent(text)
