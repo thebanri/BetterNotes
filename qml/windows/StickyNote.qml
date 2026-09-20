@@ -18,6 +18,10 @@ ApplicationWindow {
     property bool initialized: false
     property bool retiring: false
     property bool placing: false
+    // Drag state for the QML-driven resize handles.
+    property bool resizing: false
+    property int targetWidth: 0
+    property int targetHeight: 0
     property int expandedWidth: 380
     property int expandedHeight: 360
     property int normalX: 0
@@ -238,24 +242,48 @@ ApplicationWindow {
     // Handing the drag to the compositor with startSystemResize() smears stale
     // frames across the desktop on Wayland/KWin: a quick drag leaves copies of
     // every intermediate size behind. Setting width/height ourselves repaints
-    // cleanly. Each step is measured from the geometry and pointer position
-    // captured on press, never accumulated, so the window cannot drift or
-    // oscillate as the anchored handle moves underneath the pointer.
+    // cleanly, but only if the size is a pure function of where the pointer is:
+    //
+    //  * Scene coordinates, not global ones. The window's top-left is what
+    //    these edges never move, so measuring against it makes the target size
+    //    independent of the current size. Global coordinates would fold in the
+    //    window position, which the compositor revises mid-drag on Wayland, and
+    //    each revision would feed straight back into the next size.
+    //  * Whole pixels. A fractional size makes the border and the text layout
+    //    shimmer between neighbouring device pixels.
+    //  * One resize per frame. Pointer events arrive faster than the window can
+    //    be reconfigured, and resizing several times inside one frame is what
+    //    makes the edge vibrate instead of following the cursor.
     function beginEdgeResize(handle, mouse) {
-        handle.pressOrigin = handle.mapToGlobal(mouse.x, mouse.y)
-        handle.startWidth = width
-        handle.startHeight = height
+        const scene = handle.mapToItem(null, mouse.x, mouse.y)
+        // Distance from the grab point to each edge, held for the whole drag.
+        handle.grabRight = width - scene.x
+        handle.grabBottom = height - scene.y
+        targetWidth = width
+        targetHeight = height
+        resizing = true
     }
 
-    function applyEdgeResize(handle, mouse, horizontal, vertical) {
-        const here = handle.mapToGlobal(mouse.x, mouse.y)
+    function trackEdgeResize(handle, mouse, horizontal, vertical) {
+        const scene = handle.mapToItem(null, mouse.x, mouse.y)
         if (horizontal) {
-            width = Math.max(minimumWidth, handle.startWidth + (here.x - handle.pressOrigin.x))
+            targetWidth = Math.max(minimumWidth, Math.round(scene.x + handle.grabRight))
         }
         if (vertical) {
-            height = Math.max(minimumHeight,
-                Math.min(maximumHeight, handle.startHeight + (here.y - handle.pressOrigin.y)))
+            targetHeight = Math.max(minimumHeight,
+                Math.min(maximumHeight, Math.round(scene.y + handle.grabBottom)))
         }
+    }
+
+    function commitEdgeResize() {
+        if (targetWidth > 0 && width !== targetWidth) width = targetWidth
+        if (targetHeight > 0 && height !== targetHeight) height = targetHeight
+    }
+
+    function endEdgeResize() {
+        commitEdgeResize()
+        resizing = false
+        persist(true)
     }
 
     function captureGeometry() {
@@ -995,18 +1023,26 @@ ApplicationWindow {
     // subject to its repaint behaviour.
     component ResizeHandle: MouseArea {
         id: handle
-        property point pressOrigin
-        property int startWidth
-        property int startHeight
+        property real grabRight: 0
+        property real grabBottom: 0
         property bool horizontal: false
         property bool vertical: false
         acceptedButtons: Qt.LeftButton
         preventStealing: true
         onPressed: function(mouse) { noteWindow.beginEdgeResize(handle, mouse) }
         onPositionChanged: function(mouse) {
-            if (pressed) noteWindow.applyEdgeResize(handle, mouse, horizontal, vertical)
+            if (pressed) noteWindow.trackEdgeResize(handle, mouse, horizontal, vertical)
         }
-        onReleased: noteWindow.persist(true)
+        onReleased: noteWindow.endEdgeResize()
+        onCanceled: noteWindow.endEdgeResize()
+    }
+
+    // Applies the pointer's latest target once per displayed frame, so the
+    // window is reconfigured at the refresh rate rather than at the pointer's
+    // event rate.
+    FrameAnimation {
+        running: noteWindow.resizing
+        onTriggered: noteWindow.commitEdgeResize()
     }
 
     ResizeHandle {

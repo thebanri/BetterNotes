@@ -81,25 +81,45 @@ Window {
     }
 
     // The bottom-right grip resizes the window in QML rather than handing the
-    // drag to the compositor. Each step must be measured from the press, so a
-    // pointer that returns to where it started must leave the original size.
+    // drag to the compositor. The size must be a pure function of where the
+    // pointer is in scene coordinates -- that invariant is what stops the edge
+    // vibrating, because a stationary pointer then yields a stationary size no
+    // matter how the anchored grip moves underneath it.
     function assertEdgeResize(window) {
         const grip = findItem(window.contentItem, "bottomRightResize")
         check(grip, "Missing resize grip")
         const startWidth = window.width
         const startHeight = window.height
-        const press = Qt.point(grip.width / 2, grip.height / 2)
-        window.beginEdgeResize(grip, {x: press.x, y: press.y})
-        window.applyEdgeResize(grip, {x: press.x + 60, y: press.y + 40}, true, true)
+        // Scene coordinates are what a still pointer holds constant, so drive
+        // the handle through them rather than through grip-local offsets.
+        function at(sceneX, sceneY) { return grip.mapFromItem(null, sceneX, sceneY) }
+        const pressX = startWidth - 8
+        const pressY = startHeight - 8
+
+        window.beginEdgeResize(grip, at(pressX, pressY))
+        window.trackEdgeResize(grip, at(pressX + 60, pressY + 40), true, true)
+        window.commitEdgeResize()
         check(window.width === startWidth + 60, "Horizontal resize did not follow the pointer")
         check(window.height === startHeight + 40, "Vertical resize did not follow the pointer")
-        // A second event at the same place must not move the window again.
-        window.applyEdgeResize(grip, {x: press.x + 60, y: press.y + 40}, true, true)
-        check(window.width === startWidth + 60 && window.height === startHeight + 40, "Resize accumulated instead of tracking the pointer")
-        window.applyEdgeResize(grip, {x: press.x, y: press.y}, true, true)
+
+        // Pointer held still: the size must not creep frame after frame.
+        for (let i = 0; i < 3; ++i) {
+            window.trackEdgeResize(grip, at(pressX + 60, pressY + 40), true, true)
+            window.commitEdgeResize()
+        }
+        check(window.width === startWidth + 60 && window.height === startHeight + 40, "Resize crept while the pointer was still")
+
+        window.trackEdgeResize(grip, at(pressX, pressY), true, true)
+        window.commitEdgeResize()
         check(window.width === startWidth && window.height === startHeight, "Returning the pointer did not restore the size")
-        window.applyEdgeResize(grip, {x: press.x - 5000, y: press.y - 5000}, true, true)
+
+        window.trackEdgeResize(grip, at(pressX - 5000, pressY - 5000), true, true)
+        window.commitEdgeResize()
         check(window.width === window.minimumWidth && window.height === window.minimumHeight, "Resize ignored the minimum size")
+
+        check(window.width === Math.round(window.width) && window.height === Math.round(window.height), "Resize produced a fractional size")
+        window.endEdgeResize()
+        check(!window.resizing, "Resize state outlived the drag")
         window.width = startWidth
         window.height = startHeight
     }
