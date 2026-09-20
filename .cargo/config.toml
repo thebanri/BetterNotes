@@ -1,0 +1,3 @@
+[env]
+# Never accidentally select a Qt 5 installation on a mixed development system.
+QT_VERSION_MAJOR = "6"
