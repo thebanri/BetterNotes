@@ -3,3 +3,10 @@ name = "betternotes-core"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+
+[dependencies]
+rusqlite.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

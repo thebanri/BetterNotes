@@ -1,23 +1,28 @@
 # BetterNotes
 
-Linux-first desktop notes application, currently at **Phase 1 — Foundation**.
-BetterNotes is a working codename. This preview opens a basic Qt Quick window;
-note editing and persistence are not implemented yet.
+Linux-first desktop notes application, currently at **Phase 2 — Basic Notes**.
+BetterNotes is a working codename. Create, edit and delete plain-text notes in one
+main window, with autosave and local SQLite persistence. Independent desktop
+sticky windows belong to Phase 3.
 
 ## Architecture
 
 Rust owns application behavior; QML owns presentation. A Qt-independent
-`betternotes-core` crate supplies application identity through a small CXX-Qt
-adapter in the executable. QML is embedded in the binary as Qt resources.
+`betternotes-core` crate owns notes, SQLite migrations, persistence and draft
+state. A CXX-Qt adapter exposes this state to QML, which is embedded as Qt resources.
 
 ```text
 Cargo.toml              Rust workspace
 crates/core/src/lib.rs  Qt-independent core
+crates/core/src/store.rs SQLite persistence and migrations
+crates/core/src/session.rs Draft state and save-before-navigation rules
+crates/core/src/paths.rs Linux XDG data path resolution
 app/build.rs            CXX-Qt code generation and Qt resources
 app/src/main.rs         Qt lifecycle and startup errors
-app/src/bridge.rs       Rust QObject exposed to QML
-qml/windows/Main.qml   Basic application window
+app/src/notes_bridge.rs Notes QObject exposed to QML
+qml/windows/Main.qml   Notes list and editor
 qml/qml.qrc            Embedded UI resource manifest
+migrations/            Versioned SQL schema
 docs/architecture.md   Integration evaluation and decisions
 ```
 
@@ -32,11 +37,14 @@ require at least Rust 1.88; only the toolchain in the validation report has been
 tested. Required Qt modules are Core, Gui, Qml, Quick, Quick Controls and Layouts.
 Qt tools include `qmake6`, `moc`, `rcc` and `qmltyperegistrar`. Install Qt's QML
 runtime imports and the platform plugins for your session as well as headers.
+SQLite 3.34.1 or newer, its development headers, and pkg-config are also required.
+`rusqlite` links the system SQLite library; it does not download or compile a
+bundled copy.
 
 On Arch Linux / CachyOS:
 
 ```sh
-sudo pacman -S --needed base-devel rust qt6-base qt6-declarative qt6-wayland
+sudo pacman -S --needed base-devel rust sqlite pkgconf qt6-base qt6-declarative qt6-wayland
 ```
 
 If using rustup instead of distribution Rust, use the stable toolchain with
@@ -49,7 +57,7 @@ On Ubuntu 24.04 or newer, install the system build and Qt packages, then provide
 a current stable Rust toolchain (older distro Rust may be insufficient):
 
 ```sh
-sudo apt install build-essential pkg-config \
+sudo apt install build-essential pkg-config libsqlite3-dev \
   qt6-base-dev qt6-base-dev-tools qt6-declarative-dev qt6-declarative-dev-tools \
   qmake6 qt6-qpa-plugins qt6-wayland \
   qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls \
@@ -78,10 +86,30 @@ cargo build --locked
 cargo run --locked -p betternotes
 ```
 
-Close the window with its Close button, the window manager, or Ctrl+Q. Tab and
-Enter navigate/activate the button. Application identity displayed in the window
-comes from Rust through QML method calls. Startup diagnostics go to stderr; QML
-load failure returns a nonzero exit status instead of leaving an invisible process.
+Use **New note** (Ctrl+N), choose a note from the list, and edit its title or body.
+Tab navigates controls; Up/Down selects notes when the list has keyboard focus.
+Ctrl+S saves immediately. Close with the window manager or Ctrl+Q.
+
+After 500 ms without an edit, a one-shot timer saves the draft. Selecting another
+note, creating a note, and closing the window also save pending edits immediately.
+The status shows whether changes remain unsaved. Delete requires confirmation;
+it permanently removes the selected note, including its pending draft.
+
+Database errors appear in the window and on stderr. Failed saves keep the draft
+and block navigation or closure that would lose it. Use **Save again** to retry a
+save, or repeat the failed operation after resolving its cause. **Reload** reads
+the saved notes again and asks before discarding a pending draft. When another
+process edited/deleted the same note, copy any unsaved text before reloading.
+Startup storage errors disable editing and offer **Retry opening**; they never
+silently switch to temporary storage or replace the database.
+
+Notes live in `$XDG_DATA_HOME/betternotes/notes.sqlite3`, falling back to
+`$HOME/.local/share/betternotes/notes.sqlite3` if XDG_DATA_HOME is unset, empty or
+relative. Newly created data directories have mode 0700. The database contains
+unencrypted local text. SQLite WAL and FULL synchronization protect completed
+transactions; a forced kill or power loss can still lose edits since the last
+successful save. Do not delete the `-wal`/`-shm` sidecar files while the application
+is running. Backup/restore tooling is not implemented yet.
 
 The executable is `target/debug/betternotes`. It can be launched from any working
 directory. Qt libraries, QML modules and platform plugins must remain installed.
@@ -102,11 +130,12 @@ substitute X11 behavior for missing Wayland functionality.
 
 ## Validation
 
-`cargo test` runs a headless Qt smoke test using the offscreen platform and software
-renderer. It loads the actual embedded window and checks that a missing resource
-returns an error. Qt's expected missing-resource warning appears during this test.
-The core has no domain behavior to test yet. Headless tests do not establish
-visual quality, keyboard interaction or compositor compatibility.
+`cargo test` checks CRUD, reopening saved data, migrations and rollback, concurrent
+edits, failed writes, crash recovery and XDG paths. A headless Qt test exercises the
+actual QML editor, its autosave timer, selection, deletion and close-time saving.
+Tests use temporary data directories, not your real notes. Qt's expected
+missing-resource warning appears during the error-path test. Headless tests do
+not establish visual quality, physical keyboard interaction or compositor compatibility.
 
 To keep a headless executable running briefly for a manual startup check:
 
@@ -116,10 +145,12 @@ QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software timeout 3s target/debug/bett
 
 The successful startup line should appear without QML errors. Timeout status 124
 means the event loop remained running until the timeout; it is not a graceful exit.
-See [the validation report](docs/validation.md) for commands and actual results.
+See [the Phase 2 validation report](docs/phase-2-validation.md) for commands and
+actual results; [the original report](docs/validation.md) records Phase 1.
 
 ## Scope and next phase
 
-Phase 2 should add SQLite migrations, the Rust note model, create/edit/delete,
-autosave and persistence, with data integrity tests. No later-phase functionality
-is included here. Project licensing remains undecided; no license was assigned.
+Phase 2 includes SQLite migrations, the Rust note model, create/edit/delete,
+autosave and persistence. Phase 3 should add independent sticky windows and window
+state persistence while respecting Wayland restrictions. No later-phase features
+are included here. Project licensing remains undecided; no license was assigned.

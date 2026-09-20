@@ -1,4 +1,13 @@
-//! Qt-independent application core. Domain behavior will be added in Phase 2.
+//! Qt-independent notes, persistence and editor state.
+
+mod notes;
+pub mod paths;
+mod session;
+mod store;
+
+pub use notes::{Error, Note, NoteSummary, Result};
+pub use session::NotesSession;
+pub use store::NoteStore;
 
 /// Development codename, not a final product name.
 pub const APPLICATION_NAME: &str = "BetterNotes";

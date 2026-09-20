@@ -12,3 +12,6 @@ cxx-qt-lib.workspace = true
 
 [build-dependencies]
 cxx-qt-build.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

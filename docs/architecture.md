@@ -1,4 +1,4 @@
-# Phase 1 architecture
+# Architecture
 
 Decision date: 2026-09-20. BetterNotes remains a development codename.
 
@@ -42,3 +42,55 @@ headless loading alone cannot certify them.
 
 License selection is deferred to the project owner. No project license is assigned
 by this foundation; distribution will also need to account for dependency licenses.
+
+## Phase 2 — Basic Notes
+
+The Qt integration and Cargo build remain unchanged. Persistence and editor
+behavior are implemented as focused modules in the existing Rust core. A separate
+database crate is unnecessary for this small schema and would add a dependency
+boundary without another consumer yet. SQL is confined to `store.rs`; domain
+types and the editing session do not depend on QML. Linux filesystem conventions
+are confined to `paths.rs` and exposed through ordinary Rust functions.
+
+Use [rusqlite](https://docs.rs/rusqlite/0.40.2/rusqlite/) with system SQLite.
+Synchronous, parameterized queries keep the implementation small and require no
+runtime, connection pool or worker thread. The 250 ms SQLite busy timeout bounds
+lock waiting; slow disks or large notes can still pause the GUI. Measure that
+before introducing a worker. `thiserror` provides explicit errors, and `tempfile`
+is used only for isolated tests. No serialization format is needed in this phase.
+
+`migrations/0001_notes.sql` creates only the notes table: stable integer ID, title,
+plain-text body, creation/modification timestamps (Unix milliseconds), and a
+revision counter. The ID is not reused after deletion. List queries retrieve only
+IDs and titles; only the selected note's body is loaded. Newest-created notes
+appear first, and editing does not reorder the list.
+
+Migration and version updates share an immediate transaction. `user_version`
+records the schema and `application_id` identifies a BetterNotes database. Unknown
+schemas, unrelated nonempty databases and corrupt databases produce errors;
+there is no reset/delete/recreate recovery path. Each note mutation is one atomic
+SQL statement. Conditional revision checks reject stale updates/deletions from
+another process. This is data protection, not Phase 9 single-instance IPC.
+
+WAL journaling with `synchronous=FULL` is used for committed-write durability;
+see [SQLite's synchronization documentation](https://www.sqlite.org/pragma.html#pragma_synchronous).
+Pending drafts remain in memory until saved. A crash can lose edits since the last
+successful save, and software cannot guarantee durability against faulty hardware.
+Interrupted-process tests verify recovery of committed WAL records and rollback
+of an incomplete transaction, not physical power-loss behavior.
+
+`NotesSession` owns the draft, dirty state, save-before-switch/create policy,
+explicit discard/reload and confirmed deletion. It clears dirty state only after
+a successful write. The Qt adapter exposes read-only properties and invokes these
+operations. QML supplies list/editor controls, confirmations, and a 500 ms one-shot
+timer triggered by edits; it contains no SQL or persistence decisions. Normal
+window closure calls the same Rust save operation and is rejected on failure.
+
+The database path follows the [XDG Base Directory specification](https://specifications.freedesktop.org/basedir/0.8/).
+Only the data path is needed now. Relative/empty XDG_DATA_HOME is ignored, and an
+absolute HOME fallback is required. App-created directories use mode 0700;
+existing directory permissions are left intact. Configuration/cache/state paths
+will be added to the same boundary when a requested feature actually needs them.
+
+This phase supplies one application window. It does not add sticky windows,
+rich text, search, tags, reminders, tray integration, IPC or import/export.
