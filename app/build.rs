@@ -8,5 +8,6 @@ fn main() {
         .qrc("../qml/qml.qrc")
         .qt_module("Gui")
         .qt_module("Quick")
+        .qt_module("Widgets")
         .build();
 }
