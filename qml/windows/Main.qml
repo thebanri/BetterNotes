@@ -164,6 +164,12 @@ ApplicationWindow {
                 return
             }
         }
+        // If system tray is available or there are sticky notes on desktop, keep running in background!
+        if (systemTray.available || ids.length > 0) {
+            close.accepted = false
+            window.hide()
+            return
+        }
         for (let i = 0; i < ids.length; ++i) {
             const sticky = noteWindows[ids[i]]
             sticky.retiring = true
@@ -529,6 +535,15 @@ ApplicationWindow {
         visible: systemTray.available
         icon.name: "accessories-notes"
         tooltip: applicationInfo.name()
+
+        onActivated: function(reason) {
+            if (window.visible) {
+                window.hide()
+            } else {
+                window.showNormal()
+                window.requestActivate()
+            }
+        }
 
         menu: Platform.Menu {
             Platform.MenuItem {

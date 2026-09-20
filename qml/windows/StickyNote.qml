@@ -21,7 +21,7 @@ ApplicationWindow {
     property int normalY: 0
     property string normalScreen: ""
     readonly property bool canPosition: platformInfo.canPositionWindows(Qt.platform.pluginName)
-    readonly property int collapsedHeight: 76
+    readonly property int collapsedHeight: 38
 
     signal saved()
     signal dismissed(string id)
@@ -386,12 +386,7 @@ ApplicationWindow {
         anchors.fill: parent
         anchors.margins: 10
         spacing: 8
-        opacity: noteWindow.collapsed ? 0 : 1
-        visible: opacity > 0
-
-        Behavior on opacity {
-            NumberAnimation { duration: theme.animShort }
-        }
+        visible: !noteWindow.collapsed
 
         Label {
             visible: backend.errorMessage.length > 0 || backend.windowError.length > 0
@@ -476,14 +471,17 @@ ApplicationWindow {
         }
 
         ScrollView {
+            id: contentScroll
             visible: !noteWindow.collapsed
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
             TextArea {
                 id: contentEditor
                 objectName: "contentEditor"
+                width: contentScroll.availableWidth
                 text: backend.draftContent
                 textFormat: TextEdit.PlainText
                 placeholderText: qsTr("Write your note…")
@@ -556,9 +554,8 @@ ApplicationWindow {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.right: parent.right
-        anchors.bottomMargin: 12
-        anchors.topMargin: 38
-        width: 6
+        anchors.bottomMargin: 16
+        width: 8
         cursorShape: Qt.SizeHorCursor
         z: 10
         onPressed: noteWindow.startSystemResize(Qt.RightEdge)
@@ -568,9 +565,8 @@ ApplicationWindow {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
-        anchors.bottomMargin: 12
-        anchors.topMargin: 38
-        width: 6
+        anchors.bottomMargin: 16
+        width: 8
         cursorShape: Qt.SizeHorCursor
         z: 10
         onPressed: noteWindow.startSystemResize(Qt.LeftEdge)
@@ -580,9 +576,9 @@ ApplicationWindow {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        height: 6
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        height: 8
         cursorShape: Qt.SizeVerCursor
         z: 10
         onPressed: noteWindow.startSystemResize(Qt.BottomEdge)
@@ -591,34 +587,30 @@ ApplicationWindow {
         id: bottomRightResize
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        width: 14
-        height: 14
+        width: 16
+        height: 16
         cursorShape: Qt.SizeFDiagCursor
         z: 11
         onPressed: noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
 
-        Canvas {
-            anchors.fill: parent
-            onPaint: {
-                var ctx = getContext("2d")
-                ctx.clearRect(0, 0, width, height)
-                ctx.strokeStyle = noteWindow.activeBorder
-                ctx.lineWidth = 1
-                ctx.beginPath()
-                ctx.moveTo(width - 3, height - 9)
-                ctx.lineTo(width - 9, height - 3)
-                ctx.moveTo(width - 3, height - 5)
-                ctx.lineTo(width - 5, height - 3)
-                ctx.stroke()
-            }
+        Rectangle {
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 3
+            width: 8
+            height: 8
+            color: "transparent"
+            border.width: 1
+            border.color: noteWindow.activeBorder
+            opacity: 0.5
         }
     }
     MouseArea {
         id: bottomLeftResize
         anchors.left: parent.left
         anchors.bottom: parent.bottom
-        width: 14
-        height: 14
+        width: 16
+        height: 16
         cursorShape: Qt.SizeBDiagCursor
         z: 11
         onPressed: noteWindow.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
