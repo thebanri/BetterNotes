@@ -12,6 +12,14 @@ use engine::{load_engine, MAIN_QML};
 use std::path::{Path, PathBuf};
 
 fn run() -> Result<i32, &'static str> {
+    // If the user hasn't explicitly set QT_QPA_PLATFORM:
+    // Desktop sticky notes require reliable window positioning and restoration across sessions.
+    // Native Wayland xdg-shell strictly forbids clients from requesting their screen coordinates.
+    // Using xcb (X11/XWayland) with wayland fallback provides exact desktop coordinate persistence
+    // while gracefully functioning on pure Wayland environments.
+    if std::env::var_os("QT_QPA_PLATFORM").is_none() {
+        std::env::set_var("QT_QPA_PLATFORM", "xcb;wayland");
+    }
     let mut app = QGuiApplication::new();
     let mut app = app.as_mut().ok_or("could not create the Qt application")?;
     app.as_mut()
