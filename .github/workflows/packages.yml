@@ -290,7 +290,10 @@ jobs:
             for installation and desktop limitations. Flatpak currently lacks
             host KWin integration and working host autostart. Desktop-wide Quick
             Capture needs a custom shortcut; reminders need the app running.
-          prerelease: ${{ startsWith(needs.prepare.outputs.version, '0.') }}
+          # Every published version becomes the repository's Latest release;
+          # GitHub never shows a prerelease as Latest.
+          prerelease: false
+          make_latest: true
           fail_on_unmatched_files: true
           files: |
             dist/*.deb

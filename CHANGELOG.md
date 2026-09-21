@@ -4,7 +4,9 @@ All notable changes to the BetterNotes project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] - 2026-09-21
+
+Published as the Latest release rather than a prerelease.
 
 ### Added
 - Animated GIFs play inside notes while the note is visible.
@@ -22,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Image files whose path contains spaces or non-ASCII characters can be attached.
 - The system tray icon no longer disappears on icon themes without `accessories-notes`.
+- Note images and GIF frames are found on Qt 6.8, which looked them up under a different name and warned "Cannot read resource".
 
 ## [0.1.0] - 2026-09-21
 

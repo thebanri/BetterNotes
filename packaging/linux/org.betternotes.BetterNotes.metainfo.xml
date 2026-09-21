@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.1" date="2026-09-21">
+      <description>
+        <p>Animated GIFs, image resizing and drag and drop, automatic lists, tag chips, installing into the applications menu, and a visible window and tray icon.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-09-21">
       <description>
         <p>First packaged preview of BetterNotes for Linux desktop environments.</p>

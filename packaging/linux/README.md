@@ -23,7 +23,7 @@ has build coverage only; its GUI and sandbox integration need manual testing.
 
 Pushing a `vMAJOR.MINOR.PATCH` tag matching `Cargo.toml` publishes a GitHub Release
 after CI and package checks pass. All five formats, a source archive and
-`SHA256SUMS` are attached; `0.x` versions are marked as prereleases. A manual
+`SHA256SUMS` are attached, and it becomes the Latest release. A manual
 workflow run on `main` uploads Actions artifacts but does not publish a release.
 
 ## Formats
