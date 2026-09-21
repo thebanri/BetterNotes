@@ -103,6 +103,9 @@ class TextFormatter : public QObject {
     Q_INVOKABLE bool clearEmptyFormatting(QQuickTextDocument *document);
     // Document settings the editor needs, such as a compact list indent.
     Q_INVOKABLE void prepare(QQuickTextDocument *document);
+    // The list level of the paragraph at position: 0 outside a list, 1 for a
+    // top-level item, 2 for a sub-item and so on.
+    Q_INVOKABLE int listLevel(QQuickTextDocument *document, int position) const;
     // Enter on an empty list item ends the list instead of adding an item.
     Q_INVOKABLE bool endEmptyListItem(QQuickTextDocument *document, int position);
 

@@ -679,17 +679,31 @@ int TextFormatter::codeFence(QQuickTextDocument *quickDocument, int position) {
     return block.position();
 }
 
+namespace {
+// A paragraph holding only images. Code formatting never applies to one, so
+// a selection that runs over an image leaves the image as it is.
+bool isImageOnly(const QTextBlock &block) {
+    const QString text = block.text();
+    return !text.isEmpty() &&
+           std::all_of(text.cbegin(), text.cend(), [](QChar c) {
+               return c == QChar::ObjectReplacementCharacter;
+           });
+}
+} // namespace
+
 bool TextFormatter::codeActive(QQuickTextDocument *quickDocument, int start,
                                int end) const {
     const auto blocks = blocksIn(
         quickDocument ? quickDocument->textDocument() : nullptr, start, end);
-    if (blocks.isEmpty())
-        return false;
+    bool any = false;
     for (const auto &block : blocks) {
+        if (isImageOnly(block))
+            continue;
         if (!isCodeBlock(block))
             return false;
+        any = true;
     }
-    return true;
+    return any;
 }
 
 void TextFormatter::toggleCode(QQuickTextDocument *quickDocument, int start,
@@ -702,6 +716,8 @@ void TextFormatter::toggleCode(QQuickTextDocument *quickDocument, int start,
     QTextCursor cursor(document);
     cursor.beginEditBlock();
     for (const auto &block : blocks) {
+        if (isImageOnly(block))
+            continue;
         // Code is not a list item; take it out of any list first.
         if (code) {
             if (auto *list = block.textList()) {
@@ -1075,4 +1091,12 @@ bool TextFormatter::clearEmptyFormatting(QQuickTextDocument *quickDocument) {
 void TextFormatter::prepare(QQuickTextDocument *quickDocument) {
     if (auto *document = quickDocument ? quickDocument->textDocument() : nullptr)
         document->setIndentWidth(22);
+}
+
+int TextFormatter::listLevel(QQuickTextDocument *quickDocument, int position) const {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || position < 0 || position >= document->characterCount())
+        return 0;
+    const auto *list = document->findBlock(position).textList();
+    return list ? list->format().indent() : 0;
 }

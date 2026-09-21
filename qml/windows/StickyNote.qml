@@ -867,6 +867,19 @@ ApplicationWindow {
         return true
     }
 
+    // Enter on an empty sub-item moves it up a level rather than ending the
+    // whole list, as in most editors.
+    function leaveEmptySubItem() {
+        if (!isRichText || hasTextSelection) return false
+        const position = contentEditor.cursorPosition
+        if (formatter.listLevel(contentEditor.textDocument, position) < 2) return false
+        const lineStart = plainContent.lastIndexOf("\n", position - 1) + 1
+        let lineEnd = plainContent.indexOf("\n", position)
+        if (lineEnd < 0) lineEnd = plainContent.length
+        if (lineEnd > lineStart) return false
+        return indent(-1)
+    }
+
     function alignment() {
         // Reading text keeps menus in step with edits.
         if (!isRichText || !contentEditor.text.length) return "left"
@@ -1676,7 +1689,7 @@ ApplicationWindow {
                     rightPadding: 0
                     Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Checklist (%1) — or type \"[ ] \"").arg(noteWindow.shortcutText("checklist", "Ctrl+Shift+9"))
+                    ToolTip.text: qsTr("Checklist (%1) — or type \"[ ] \". Tab makes a sub-item.").arg(noteWindow.shortcutText("checklist", "Ctrl+Shift+9"))
                     onClicked: noteWindow.toggleList("check")
                 }
 
@@ -1875,6 +1888,20 @@ ApplicationWindow {
                         }
                         MenuSeparator {}
                         MenuItem {
+                            objectName: "subItemItem"
+                            text: qsTr("Make Sub-item (Tab)")
+                            enabled: noteWindow.isRichText
+                                && formatter.listLevel(contentEditor.textDocument, contentEditor.cursorPosition) > 0
+                            onTriggered: noteWindow.indent(1)
+                        }
+                        MenuItem {
+                            text: qsTr("Move Up a Level (Shift+Tab)")
+                            enabled: noteWindow.isRichText
+                                && formatter.listLevel(contentEditor.textDocument, contentEditor.cursorPosition) > 0
+                            onTriggered: noteWindow.indent(-1)
+                        }
+                        MenuSeparator {}
+                        MenuItem {
                             objectName: "lockNoteItem"
                             text: backend.isLocked ? qsTr("Remove Lock…") : qsTr("Lock with Password…")
                             onTriggered: noteWindow.lockRequested(noteWindow.noteId, !backend.isLocked)
@@ -2070,7 +2097,7 @@ ApplicationWindow {
                 // empty list item ends the list.
                 Keys.onReturnPressed: function(event) {
                     event.accepted = event.modifiers === Qt.NoModifier
-                        && (noteWindow.codeFence() || (noteWindow.isRichText
+                        && (noteWindow.codeFence() || noteWindow.leaveEmptySubItem() || (noteWindow.isRichText
                             && formatter.endEmptyListItem(contentEditor.textDocument, contentEditor.cursorPosition)))
                 }
                 Keys.onEscapePressed: function(event) {

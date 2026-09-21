@@ -346,6 +346,24 @@ Window {
         check(body.text.indexOf("-qt-list-indent: 2") < 0, "Shift+Tab did not bring the item back")
         check(formatter.checkState(body.textDocument, 5) === 2, "Indenting lost the tick")
 
+        // Sub-items: Tab nests a checklist item under the one above, keeping
+        // its box; Enter on an empty sub-item moves back up a level.
+        body.text = ""
+        formatter.prepare(body.textDocument)
+        type("[ ] parent\n")
+        input.keyClick(Qt.Key_Tab)
+        type("child one\nchild two\n")
+        check(formatter.listLevel(body.textDocument, 7) === 2 && formatter.listLevel(body.textDocument, 17) === 2, "Tab did not make sub-items")
+        check(formatter.checkState(body.textDocument, 7) === 1 && formatter.checkState(body.textDocument, 17) === 1, "Sub-items lost their boxes")
+        input.keyClick(Qt.Key_Return)
+        check(formatter.listLevel(body.textDocument, body.length) === 1, "Enter on an empty sub-item did not move it up a level")
+        type("next parent")
+        check(window.plainContent === "parent\nchild one\nchild two\nnext parent", "Sub-item text wrong: " + JSON.stringify(window.plainContent))
+        input.wait(20)
+        const rects = []
+        for (let i = 0; i < body.children.length; ++i) if (body.children[i].objectName === "checkBox") rects.push(body.children[i].x)
+        check(rects.length === 4 && Math.max.apply(null, rects) > Math.min.apply(null, rects), "Sub-item boxes are not indented: " + rects)
+
         // Select all and delete leaves a plain, empty note behind.
         body.forceActiveFocus()
         body.selectAll()
@@ -410,6 +428,14 @@ Window {
         check(!formatter.codeActive(body.textDocument, imagePosition, imagePosition), "The image went into the code block")
         check(formatter.codeActive(body.textDocument, body.length - 1, body.length - 1), "The code block did not start under the image")
         check(findItem(window.contentItem, "attachButton"), "The toolbar has no attach button")
+        // The code button with a selection over the image and the text below.
+        body.select(0, body.length)
+        window.toggleCode()
+        check(!formatter.codeActive(body.textDocument, body.length - 1, body.length - 1), "The code button did not turn code off")
+        body.select(imagePosition, body.length)
+        window.toggleCode()
+        check(!formatter.codeActive(body.textDocument, imagePosition, imagePosition), "The code button put the image into the code block")
+        check(formatter.codeActive(body.textDocument, body.length - 1, body.length - 1), "The code button did not make the text code")
         // Older notes kept images inside a paragraph of text; opening them
         // gives each image its own paragraph.
         body.text = "<p>before<br><img src=\"" + fixtures + "still.png\" width=\"40\" /><br>after</p>"

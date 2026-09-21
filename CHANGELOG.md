@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The library remembers recent searches and offers them in the empty search field.
 - Search results highlight where the searched words appear.
 - Checklists: type `[ ] ` (or `[x] `) at a line start, or use the toolbar button (Ctrl+Shift+9); click a box or press Ctrl+Enter to tick it.
-- Tab and Shift+Tab move list items a level in or out; bullets and numbers change style per level.
+- Tab and Shift+Tab move list and checklist items a level in or out, making sub-items (also in the ⋯ menu); bullets and numbers change style per level, and Enter on an empty sub-item moves it back up a level.
 - Find and replace in a note (Ctrl+F / Ctrl+H) with match counts, match case, replace and replace all.
 - A **⋯** toolbar menu with paragraph alignment (left, center, right, justify; also Ctrl+Shift+L/E/R/J), find and replace, and the note's word and character count (or the selection's).
 - Paste images with Ctrl+V: a screenshot or copied picture, or image files copied in a file manager.
@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Code blocks: type ``` (optionally with a language name) at the start of a line and press Enter to start one; Enter continues it and ``` on a line of its own ends it. A toolbar button turns selected lines into code and back. Code is monospace in a grey box and survives saving and reopening.
 
 ### Fixed
-- A code block (or list, or alignment) started under an image no longer takes the image and the text around it along: images now sit in a paragraph of their own, and images in older notes are separated when the note opens.
+- A code block started under an image, or made with the code button over a selection that includes an image, no longer takes the image along: images now sit in a paragraph of their own, and images in older notes are separated when the note opens.
 - Checklist items have proper checkboxes that are easy to click, and ticked items are struck through.
 - Selecting everything and deleting it no longer leaves an empty bullet, checkbox or code block behind.
 - Search matches the text of notes instead of their HTML: searching for words like "indent" no longer finds every formatted note, and result previews no longer show markup such as `text-indent:0px;">`. Existing notes are reindexed on first start.
