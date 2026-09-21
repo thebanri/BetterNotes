@@ -77,6 +77,8 @@ pub enum IpcAction {
     QuickCapture,
     OpenNote(i64),
     Reload,
+    /// A reminder notification's Snooze button: remind again in 10 minutes.
+    SnoozeReminder(i64),
 }
 
 pub type SharedIpcQueue = Arc<Mutex<VecDeque<IpcAction>>>;

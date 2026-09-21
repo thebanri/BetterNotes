@@ -77,6 +77,7 @@ ApplicationWindow {
 
     function initialize() {
         if (!backend.initialize()) return
+        backend.setReminderTexts(qsTr("Reminder from BetterNotes"), qsTr("Open note"), qsTr("Snooze 10 min"))
         const ids = backend.restoreIds
         const errors = []
         for (let i = 0; i < ids.length; ++i) {
@@ -1708,6 +1709,9 @@ ApplicationWindow {
                 } else if (action.startsWith("open:")) {
                     let id = action.substring(5)
                     window.openNote(id)
+                } else if (action.startsWith("snoozed:")) {
+                    window.reminderChanged(action.substring(8))
+                    window.showToast(qsTr("Reminder snoozed for 10 minutes"))
                 }
             }
         }

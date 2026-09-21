@@ -449,8 +449,38 @@ ApplicationWindow {
                 onClicked: noteWindow.toggleCollapsed()
             }
 
+            // The reminder, when the note has one and there is room.
+            Rectangle {
+                objectName: "headerReminder"
+                visible: noteWindow.reminder.length > 0 && !noteWindow.collapsed && noteWindow.width >= 340
+                implicitWidth: headerReminderRow.implicitWidth + 12
+                implicitHeight: 22
+                radius: 11
+                color: theme.isDark ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(0, 0, 0, 0.07)
+                Layout.alignment: Qt.AlignVCenter
+                RowLayout {
+                    id: headerReminderRow
+                    anchors.fill: parent
+                    anchors.leftMargin: 6
+                    anchors.rightMargin: 6
+                    spacing: 4
+                    UI.AppIcon { name: "bell"; size: 11; color: theme.noteText }
+                    Label {
+                        text: Reminders.describeShort(noteWindow.reminder)
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                        font.pixelSize: 11
+                        color: theme.noteText
+                        Layout.fillWidth: true
+                    }
+                }
+                TapHandler { onTapped: noteWindow.editReminder() }
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+            }
+
             UI.StatusBadge {
-                visible: noteWindow.width >= 320 && !noteWindow.collapsed
+                // A narrow note gives the room to the reminder.
+                visible: noteWindow.width >= (noteWindow.reminder.length > 0 ? 440 : 320) && !noteWindow.collapsed
                 dirty: backend.dirty
                 theme: noteWindow.theme
                 Layout.alignment: Qt.AlignVCenter

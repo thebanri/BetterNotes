@@ -277,6 +277,17 @@ pub mod ffi {
         #[cxx_name = "checkReminders"]
         fn check_reminders(self: Pin<&mut Self>) -> i32;
 
+        /// The words reminder notifications use, in the interface language:
+        /// the body text and the Open and Snooze button labels.
+        #[qinvokable]
+        #[cxx_name = "setReminderTexts"]
+        fn set_reminder_texts(
+            self: Pin<&mut Self>,
+            body: QString,
+            open_label: QString,
+            snooze_label: QString,
+        );
+
         /// A note's reminder as "<unix seconds>|<recurrence>", or "".
         #[qinvokable]
         #[cxx_name = "noteReminder"]
@@ -350,6 +361,7 @@ pub struct NotesBackendRust {
     note_tags: QStringList,
     note_colors: QStringList,
     note_reminders: QStringList,
+    reminder_texts: [String; 3],
     trash_ids: QStringList,
     trash_titles: QStringList,
     trash_snippets: QStringList,
@@ -391,6 +403,11 @@ impl Default for NotesBackendRust {
             note_tags: QStringList::default(),
             note_colors: QStringList::default(),
             note_reminders: QStringList::default(),
+            reminder_texts: [
+                "Reminder from BetterNotes".into(),
+                "Open note".into(),
+                "Snooze 10 min".into(),
+            ],
             trash_ids: QStringList::default(),
             trash_titles: QStringList::default(),
             trash_snippets: QStringList::default(),
@@ -1238,18 +1255,39 @@ impl ffi::NotesBackend {
             .unwrap_or_default()
             .as_secs() as i64;
         let mut triggered = 0;
+        let texts = self.reminder_texts.clone();
         if let Some(session) = self.as_mut().rust_mut().session.as_mut() {
             if let Ok(due_list) = session.check_due_reminders(now) {
                 for due in due_list {
-                    let title = due.note_title.trim();
-                    let _ = betternotes_core::NotificationService::notify(
-                        if title.is_empty() {
-                            "Untitled note"
-                        } else {
-                            title
-                        },
-                        "Reminder from BetterNotes",
-                    );
+                    let title = match due.note_title.trim() {
+                        "" => "Untitled note".to_string(),
+                        title => title.to_string(),
+                    };
+                    let [body, open, snooze] = texts.clone();
+                    let note_id = due.note_id;
+                    // A recurring reminder keeps its schedule; with one reminder
+                    // per note, snoozing would replace it.
+                    let can_snooze = due.recurrence == betternotes_core::Recurrence::None;
+                    // The notification waits for a button or for being closed,
+                    // so it runs off the GUI thread and reports back through
+                    // the action queue the GUI already polls.
+                    std::thread::spawn(move || {
+                        let mut actions = vec![("open", open.as_str())];
+                        if can_snooze {
+                            actions.push(("snooze", snooze.as_str()));
+                        }
+                        let chosen = betternotes_core::NotificationService::notify_with_actions(
+                            &title, &body, &actions,
+                        );
+                        let action = match chosen.ok().flatten().as_deref() {
+                            Some("open") => betternotes_core::IpcAction::OpenNote(note_id),
+                            Some("snooze") => betternotes_core::IpcAction::SnoozeReminder(note_id),
+                            _ => return,
+                        };
+                        if let Ok(mut queue) = betternotes_core::global_ipc_queue().lock() {
+                            queue.push_back(action);
+                        }
+                    });
                     let _ = session.dismiss_reminder(due.reminder_id, now);
                     triggered += 1;
                 }
@@ -1284,6 +1322,19 @@ impl ffi::NotesBackend {
         if let Some(session) = self.session.as_ref() {
             let _ = session.store().clear_recent_searches();
         }
+    }
+
+    pub fn set_reminder_texts(
+        mut self: Pin<&mut Self>,
+        body: QString,
+        open_label: QString,
+        snooze_label: QString,
+    ) {
+        self.as_mut().rust_mut().reminder_texts = [
+            body.to_string(),
+            open_label.to_string(),
+            snooze_label.to_string(),
+        ];
     }
 
     pub fn note_reminder(&self, id: QString) -> QString {
@@ -1382,6 +1433,21 @@ impl ffi::NotesBackend {
             Some(betternotes_core::IpcAction::Reload) => {
                 self.as_mut().reload();
                 QString::from("reload")
+            }
+            Some(betternotes_core::IpcAction::SnoozeReminder(id)) => {
+                let at = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|elapsed| elapsed.as_secs() as i64 + 600)
+                    .unwrap_or(0);
+                let snoozed = self.as_mut().perform(false, |session| {
+                    session.set_reminder(id, at, betternotes_core::Recurrence::None)?;
+                    Ok(())
+                });
+                QString::from(&if snoozed {
+                    format!("snoozed:{id}")
+                } else {
+                    String::new()
+                })
             }
             None => QString::from(""),
         }

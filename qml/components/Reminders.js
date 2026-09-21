@@ -60,6 +60,14 @@ function describe(stored, now) {
     return day + " " + timeText(date) + (repeat.length ? " · " + repeat : "")
 }
 
+// Shorter, for tight spaces: "Tomorrow 09:30", with ↻ when it repeats.
+function describeShort(stored, now) {
+    const reminder = parse(stored)
+    if (!reminder) return ""
+    const full = describe(reminder.date.getTime() / 1000 + "|none", now)
+    return full + (reminder.recurrence !== "none" ? " ↻" : "")
+}
+
 // One-click choices, each a Date in the future.
 function presets(now) {
     now = now || new Date()

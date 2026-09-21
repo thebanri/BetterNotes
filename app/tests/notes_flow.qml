@@ -470,6 +470,8 @@ Window {
         check(!editor.visible && note.reminder.endsWith("|weekly"), "Saving a reminder failed")
         const expected = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 9, 30)
         check(parseInt(note.reminder) === expected.getTime() / 1000, "Reminder time is not the local time entered")
+        const headerChip = findItem(note.header, "headerReminder")
+        check(headerChip && headerChip.visible, "The title bar does not show the reminder")
 
         const backend = library.libraryBackend
         const index = backend.noteIds.indexOf(id)
