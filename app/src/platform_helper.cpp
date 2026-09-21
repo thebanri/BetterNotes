@@ -2,7 +2,11 @@
 #include <QGuiApplication>
 #include <QClipboard>
 #include <QCursor>
+#include <QDateTime>
+#include <QDir>
 #include <QIcon>
+#include <QImage>
+#include <QMimeData>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QtWidgets/QApplication>
@@ -79,4 +83,41 @@ QString platformDocumentsFolder() {
     return QUrl::fromLocalFile(
                QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation))
         .toString();
+}
+
+// An image on the clipboard (a screenshot, or one copied from a browser)
+// written to a new PNG in the temporary folder; its path, or "" when the
+// clipboard holds no image data. The caller removes the file.
+QString platformClipboardImageToFile() {
+    auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
+    const QMimeData *data = app && app->clipboard() ? app->clipboard()->mimeData() : nullptr;
+    if (!data || !data->hasImage())
+        return {};
+    // Office apps put a picture of copied text beside the text itself; that
+    // is a text paste. Browsers copying an image add just its address.
+    const QString text = data->text().trimmed();
+    if (!text.isEmpty() && (text.contains(u'\n') || text.contains(u' ')))
+        return {};
+    const QImage image = qvariant_cast<QImage>(data->imageData());
+    if (image.isNull())
+        return {};
+    const QString path =
+        QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
+            .filePath(QStringLiteral("betternotes-pasted-%1.png")
+                          .arg(QDateTime::currentMSecsSinceEpoch()));
+    return image.save(path, "PNG") ? path : QString();
+}
+
+// Files copied in a file manager, as newline-separated file URLs.
+QString platformClipboardImageUrls() {
+    auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
+    const QMimeData *data = app && app->clipboard() ? app->clipboard()->mimeData() : nullptr;
+    if (!data || !data->hasUrls())
+        return {};
+    QStringList urls;
+    for (const auto &url : data->urls()) {
+        if (url.isLocalFile())
+            urls.append(url.toString());
+    }
+    return urls.join(u'\n');
 }

@@ -10,12 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Export asks where to save (a JSON file, or a folder for Markdown), and **Import notes** in the command palette adds notes from JSON exports or Markdown files.
 - The library remembers recent searches and offers them in the empty search field.
 - Search results highlight where the searched words appear.
+- Checklists: type `[ ] ` (or `[x] `) at a line start, or use the toolbar button (Ctrl+Shift+9); click a box or press Ctrl+Enter to tick it.
+- Tab and Shift+Tab move list items a level in or out; bullets and numbers change style per level.
+- Find and replace in a note (Ctrl+F / Ctrl+H) with match counts, match case, replace and replace all.
+- A **⋯** toolbar menu with paragraph alignment (left, center, right, justify; also Ctrl+Shift+L/E/R/J), find and replace, and the note's word and character count (or the selection's).
+- Paste images with Ctrl+V: a screenshot or copied picture, or image files copied in a file manager.
+- Right-click an image to align it or view it full size; double-clicking an image also opens it full size, with GIFs playing.
+- Code blocks have a copy button.
 - Code blocks: type ``` (optionally with a language name) at the start of a line and press Enter to start one; Enter continues it and ``` on a line of its own ends it. A toolbar button turns selected lines into code and back. Code is monospace in a grey box and survives saving and reopening.
 
 ### Fixed
 - Search matches the text of notes instead of their HTML: searching for words like "indent" no longer finds every formatted note, and result previews no longer show markup such as `text-indent:0px;">`. Existing notes are reindexed on first start.
 - Export no longer writes into the directory BetterNotes was started from.
 - The search field and other text fields show their placeholder hint; the library search box read as empty before.
+- The tag field's hint is no longer cut off.
 
 ## [0.1.3] - 2026-09-21
 

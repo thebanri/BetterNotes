@@ -67,6 +67,29 @@ class TextFormatter : public QObject {
     // Quick does not paint paragraph backgrounds, so the editor draws the
     // code boxes itself.
     Q_INVOKABLE QVariantList codeBlocks(QQuickTextDocument *document) const;
+    // Checklists: 0 for no checkbox at position, 1 open, 2 ticked.
+    Q_INVOKABLE int checkState(QQuickTextDocument *document, int position) const;
+    Q_INVOKABLE bool toggleCheck(QQuickTextDocument *document, int position);
+    // A new item made by Enter on a ticked one starts unticked.
+    Q_INVOKABLE void uncheckNewItem(QQuickTextDocument *document, int position);
+    // Moves list items a level in (delta 1) or out (-1); out of the first
+    // level ends the list. Returns false when a paragraph is not a list item.
+    Q_INVOKABLE bool indentList(QQuickTextDocument *document, int start, int end,
+                                int delta);
+    // Every occurrence of text as {start, end}, matched as Qt matches it, so
+    // positions stay right for letters whose case changes their length.
+    Q_INVOKABLE QVariantList findAll(QQuickTextDocument *document,
+                                     const QString &text,
+                                     bool caseSensitive) const;
+    Q_INVOKABLE bool replaceRange(QQuickTextDocument *document, int start,
+                                  int end, const QString &text);
+    Q_INVOKABLE int replaceAll(QQuickTextDocument *document, const QString &text,
+                               const QString &replacement, bool caseSensitive);
+    // Paragraph alignment: "left", "center", "right" or "justify".
+    Q_INVOKABLE QString alignmentAt(QQuickTextDocument *document,
+                                    int position) const;
+    Q_INVOKABLE void setAlignment(QQuickTextDocument *document, int start,
+                                  int end, const QString &alignment);
     // Enter on an empty list item ends the list instead of adding an item.
     Q_INVOKABLE bool endEmptyListItem(QQuickTextDocument *document, int position);
 

@@ -20,6 +20,8 @@ pub mod ffi {
         fn platformSetApplicationIcon() -> bool;
         fn platformPicturesFolder() -> QString;
         fn platformDocumentsFolder() -> QString;
+        fn platformClipboardImageToFile() -> QString;
+        fn platformClipboardImageUrls() -> QString;
     }
     extern "RustQt" {
         #[qobject]
@@ -197,6 +199,15 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "documentsFolder"]
         fn documents_folder(&self) -> QString;
+        /// Attaches an image on the clipboard to the note and returns its
+        /// file URL, or "" when the clipboard holds no image data.
+        #[qinvokable]
+        #[cxx_name = "pasteClipboardImage"]
+        fn paste_clipboard_image(self: Pin<&mut Self>) -> QString;
+        /// Local file URLs on the clipboard, newline-separated.
+        #[qinvokable]
+        #[cxx_name = "clipboardFileUrls"]
+        fn clipboard_file_urls(&self) -> QString;
         #[qinvokable]
         #[cxx_name = "attachImage"]
         fn attach_image(self: Pin<&mut Self>, file_url: QString) -> QString;
@@ -916,6 +927,22 @@ impl ffi::NotesBackend {
 
     pub fn documents_folder(&self) -> QString {
         ffi::platformDocumentsFolder()
+    }
+
+    pub fn paste_clipboard_image(self: Pin<&mut Self>) -> QString {
+        let path = ffi::platformClipboardImageToFile().to_string();
+        if path.is_empty() {
+            return QString::default();
+        }
+        let url = QUrl::from_local_file(&QString::from(&path)).to_qstring();
+        let stored = self.attach_image(url);
+        // The attachment is a copy; the temporary file is ours to remove.
+        let _ = std::fs::remove_file(&path);
+        stored
+    }
+
+    pub fn clipboard_file_urls(&self) -> QString {
+        ffi::platformClipboardImageUrls()
     }
 
     pub fn attach_image(mut self: Pin<&mut Self>, file_url: QString) -> QString {

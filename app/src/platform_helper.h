@@ -8,3 +8,5 @@ int platformCursorGlobalY();
 bool platformSetApplicationIcon();
 QString platformPicturesFolder();
 QString platformDocumentsFolder();
+QString platformClipboardImageToFile();
+QString platformClipboardImageUrls();

@@ -17,6 +17,8 @@ ApplicationWindow {
     property alias imageAnimator: gifs
     property alias imageFormatter: formatter
     property alias imageMenu: imageMenu
+    property alias imagePreviewWindow: imagePreview
+    property alias findBarItem: findBar
     property alias reminderEditor: reminderEditor
     // "<unix seconds>|<recurrence>" or "", reread whenever it may have changed.
     property string reminder: ""
@@ -634,33 +636,37 @@ ApplicationWindow {
         saveImageDialog.open()
     }
 
+    // Inserts an image already stored as an attachment, on its own line.
+    function insertStoredImage(stored, position) {
+        const width = formatter.fittedImageWidth(stored, maxImageWidth)
+        if (width <= 0) return position
+        ensureRichText()
+        const at = Math.max(0, Math.min(position, contentEditor.length))
+        const lineStart = at === 0 || contentEditor.getText(at - 1, at) === "\n"
+            || contentEditor.getText(at - 1, at) === "\u2029"
+        const before = contentEditor.length
+        contentEditor.insert(at, (lineStart ? "" : "<br>") + "<img src=\"" + stored + "\" width=\"" + width + "\" /><br>")
+        const end = at + (contentEditor.length - before)
+        contentEditor.forceActiveFocus()
+        contentEditor.cursorPosition = Math.min(end, contentEditor.length)
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+        gifs.refresh()
+        return end
+    }
+
     // Copies each image into the note's attachments and inserts it at the
     // position, each on its own line, at most as wide as the note.
     function insertImages(urls, position) {
         let inserted = 0
         for (let i = 0; i < urls.length; ++i) {
             const url = urls[i].toString()
-            if (!isImageUrl(url)) continue
-            const width = formatter.fittedImageWidth(url, maxImageWidth)
-            if (width <= 0) continue
+            if (!isImageUrl(url) || formatter.fittedImageWidth(url, maxImageWidth) <= 0) continue
             const stored = backend.attachImage(url)
             if (!stored || stored.length === 0) continue
-            ensureRichText()
-            const at = Math.max(0, Math.min(position, contentEditor.length))
-            const lineStart = at === 0 || contentEditor.getText(at - 1, at) === "\n"
-                || contentEditor.getText(at - 1, at) === "\u2029"
-            const tag = (lineStart ? "" : "<br>") + "<img src=\"" + stored + "\" width=\"" + width + "\" /><br>"
-            const before = contentEditor.length
-            contentEditor.insert(at, tag)
-            position = at + (contentEditor.length - before)
+            position = insertStoredImage(stored, position)
             ++inserted
         }
-        if (inserted === 0) return 0
-        contentEditor.forceActiveFocus()
-        contentEditor.cursorPosition = Math.min(position, contentEditor.length)
-        backend.editContent(contentEditor.text)
-        autosave.restart()
-        gifs.refresh()
         return inserted
     }
 
@@ -668,6 +674,7 @@ ApplicationWindow {
 
     // Typing "- ", "* ", ". " or "1. " at the start of a line starts a list.
     function continueList() {
+        if (isRichText) formatter.uncheckNewItem(contentEditor.textDocument, contentEditor.cursorPosition)
         const position = contentEditor.cursorPosition
         if (position < 2 || contentEditor.getText(position - 1, position) !== " ") return
         if (!isRichText) {
@@ -738,7 +745,8 @@ ApplicationWindow {
         for (let i = 0; i < runs.length; ++i) {
             const top = contentEditor.positionToRectangle(runs[i].start)
             const bottom = contentEditor.positionToRectangle(runs[i].end)
-            boxes.push({ y: top.y - 4, height: bottom.y + bottom.height - top.y + 8 })
+            boxes.push({ y: top.y - 4, height: bottom.y + bottom.height - top.y + 8,
+                start: runs[i].start, end: runs[i].end })
         }
         codeBoxes = boxes
     }
@@ -756,6 +764,149 @@ ApplicationWindow {
         typingFont(formatter.codeActive(contentEditor.textDocument, contentEditor.cursorPosition, contentEditor.cursorPosition))
         backend.editContent(contentEditor.text)
         autosave.restart()
+    }
+
+    // ---- Checklists, indentation, alignment -------------------------------
+
+    // Toggles the checkbox of the item at a point, if the point is on it:
+    // the marker sits in the margin left of the item's first character.
+    function toggleCheckAt(x, y) {
+        if (!isRichText) return false
+        const position = contentEditor.positionAt(x, y)
+        if (formatter.checkState(contentEditor.textDocument, position) === 0) return false
+        const lineStart = plainContent.lastIndexOf("\n", position - 1) + 1
+        const first = contentEditor.positionToRectangle(lineStart)
+        if (x >= first.x || x < first.x - 28 || y < first.y || y > first.y + first.height) return false
+        return toggleCheck(lineStart)
+    }
+
+    function toggleCheck(position) {
+        if (!formatter.toggleCheck(contentEditor.textDocument, position)) return false
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+        return true
+    }
+
+    function indent(delta) {
+        if (!isRichText) return false
+        if (!formatter.indentList(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd, delta)) return false
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+        return true
+    }
+
+    function alignment() {
+        // Reading text keeps menus in step with edits.
+        if (!isRichText || !contentEditor.text.length) return "left"
+        return formatter.alignmentAt(contentEditor.textDocument, contentEditor.cursorPosition)
+    }
+
+    function align(value) {
+        contentEditor.forceActiveFocus()
+        ensureRichText()
+        formatter.setAlignment(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd, value)
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+    }
+
+    // Words and characters in the note, or in the selection when there is one.
+    // Images (U+FFFC) are neither.
+    function textStats() {
+        const text = (hasTextSelection
+            ? contentEditor.getText(contentEditor.selectionStart, contentEditor.selectionEnd)
+            : plainContent).replace(/\ufffc/g, "")
+        const words = text.split(/\s+/).filter(function(word) { return word.length > 0 }).length
+        return { words: words, characters: text.replace(/\n/g, "").length }
+    }
+
+    // ---- Pasting images ----------------------------------------------------
+
+    // Ctrl+V with a picture or copied image files on the clipboard adds them
+    // as images; anything else pastes as usual.
+    function pasteImages() {
+        const files = backend.clipboardFileUrls().split("\n").filter(function(url) { return isImageUrl(url) })
+        if (files.length > 0) return insertImages(files, contentEditor.selectionStart) > 0
+        const stored = backend.pasteClipboardImage()
+        if (!stored || stored.length === 0) return false
+        insertStoredImage(stored, contentEditor.selectionStart)
+        return true
+    }
+
+    // ---- Find and replace ---------------------------------------------------
+
+    property bool findOpen: false
+    property var findMatches: []
+    property int findIndex: -1
+
+    function openFind(replace) {
+        if (collapsed) toggleCollapsed()
+        findOpen = true
+        findBar.replaceShown = replace || findBar.replaceShown
+        if (hasTextSelection) findBar.query = contentEditor.getText(contentEditor.selectionStart, contentEditor.selectionEnd).split("\n")[0]
+        findBar.focusQuery()
+        runFind(0)
+    }
+
+    function closeFind() {
+        findOpen = false
+        findMatches = []
+        findIndex = -1
+        contentEditor.forceActiveFocus()
+    }
+
+    // Recomputes matches and shows the one at or after the caret (offset 0),
+    // or the next (1) or previous (-1) one.
+    function runFind(offset) {
+        if (!findOpen) return
+        const matches = findBar.query.length ? formatter.findAll(contentEditor.textDocument, findBar.query, findBar.caseSensitive) : []
+        findMatches = matches
+        if (!matches.length) {
+            findIndex = -1
+            return
+        }
+        let index
+        if (offset === 0 || findIndex < 0) {
+            const from = offset === 0 ? contentEditor.selectionStart : contentEditor.selectionEnd
+            index = matches.findIndex(function(match) { return match.start >= from })
+            if (index < 0) index = 0
+        } else {
+            index = (findIndex + offset + matches.length) % matches.length
+        }
+        showMatch(index)
+    }
+
+    function showMatch(index) {
+        findIndex = index
+        const match = findMatches[index]
+        contentEditor.select(match.start, match.end)
+        const rect = contentEditor.positionToRectangle(match.start)
+        const flick = contentScroll.contentItem
+        if (rect.y < flick.contentY || rect.y + rect.height > flick.contentY + contentScroll.height)
+            flick.contentY = Math.max(0, Math.min(rect.y - contentScroll.height / 3, contentEditor.height - contentScroll.height))
+    }
+
+    function replaceCurrent() {
+        if (findIndex < 0) return
+        const match = findMatches[findIndex]
+        ensureRichText()
+        formatter.replaceRange(contentEditor.textDocument, match.start, match.end, findBar.replacement)
+        contentEditor.cursorPosition = match.start + findBar.replacement.length
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+        findIndex = -1
+        runFind(0)
+    }
+
+    function replaceAll() {
+        if (!findBar.query.length) return 0
+        ensureRichText()
+        const count = formatter.replaceAll(contentEditor.textDocument, findBar.query, findBar.replacement, findBar.caseSensitive)
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+        findIndex = -1
+        runFind(0)
+        findBar.status = qsTr("Replaced %n", "", count)
+        return count
     }
 
     // ---- Tags -------------------------------------------------------------
@@ -838,6 +989,41 @@ ApplicationWindow {
         onActivated: noteWindow.toggleInlineStyle("u")
     }
     Shortcut {
+        sequence: "Ctrl+Shift+9"
+        enabled: contentEditor.activeFocus
+        onActivated: noteWindow.toggleList("check")
+    }
+    Shortcut {
+        sequences: [StandardKey.Find]
+        context: Qt.WindowShortcut
+        onActivated: noteWindow.openFind(false)
+    }
+    Shortcut {
+        sequences: ["Ctrl+H", StandardKey.Replace]
+        context: Qt.WindowShortcut
+        onActivated: noteWindow.openFind(true)
+    }
+    Shortcut {
+        sequences: ["Ctrl+Shift+L"]
+        enabled: contentEditor.activeFocus
+        onActivated: noteWindow.align("left")
+    }
+    Shortcut {
+        sequences: ["Ctrl+Shift+E"]
+        enabled: contentEditor.activeFocus
+        onActivated: noteWindow.align("center")
+    }
+    Shortcut {
+        sequences: ["Ctrl+Shift+R"]
+        enabled: contentEditor.activeFocus
+        onActivated: noteWindow.align("right")
+    }
+    Shortcut {
+        sequences: ["Ctrl+Shift+J"]
+        enabled: contentEditor.activeFocus
+        onActivated: noteWindow.align("justify")
+    }
+    Shortcut {
         sequence: "Ctrl+Shift+8"
         enabled: contentEditor.activeFocus
         onActivated: noteWindow.toggleList("bullet")
@@ -887,8 +1073,37 @@ ApplicationWindow {
         }
     }
 
+    UI.ImagePreview {
+        id: imagePreview
+        theme: noteWindow.theme
+    }
+
+    function previewSelectedImage() {
+        if (selectedImage < 0) return
+        const source = formatter.imageAt(contentEditor.textDocument, selectedImage).name
+        if (source) imagePreview.show(source, backend.imageFileName(source))
+    }
+
     Menu {
         id: imageMenu
+        MenuItem {
+            text: qsTr("View Full Size")
+            onTriggered: noteWindow.previewSelectedImage()
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: qsTr("Align Left")
+            onTriggered: noteWindow.align("left")
+        }
+        MenuItem {
+            text: qsTr("Align Center")
+            onTriggered: noteWindow.align("center")
+        }
+        MenuItem {
+            text: qsTr("Align Right")
+            onTriggered: noteWindow.align("right")
+        }
+        MenuSeparator {}
         MenuItem {
             objectName: "saveImageItem"
             text: qsTr("Save Image As…")
@@ -1046,7 +1261,9 @@ ApplicationWindow {
                     id: tagsEditor
                     objectName: "tagInput"
                     height: 22
-                    width: Math.min(tagFlow.width, Math.max(90, contentWidth + leftPadding + rightPadding + 8))
+                    // Wide enough for its hint while empty, then for what is typed.
+                    width: Math.min(tagFlow.width, Math.max(90, (length ? contentWidth : tagHint.advanceWidth) + leftPadding + rightPadding + 8))
+                    TextMetrics { id: tagHint; font: tagsEditor.font; text: tagsEditor.placeholderText }
                     topPadding: 2
                     bottomPadding: 2
                     leftPadding: 6
@@ -1280,6 +1497,24 @@ ApplicationWindow {
                     ToolTip.text: qsTr("Numbered list (Ctrl+Shift+7) — or type \"1. \"")
                     onClicked: noteWindow.toggleList("number")
                 }
+                UI.StyledButton {
+                    objectName: "checklistButton"
+                    visible: formatToolbar.width >= 300
+                    iconName: "check-square"
+                    iconSize: 14
+                    theme: noteWindow.theme
+                    variant: noteWindow.listActive("check") ? "accent" : "ghost"
+                    implicitWidth: 24
+                    implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
+                    padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Checklist (Ctrl+Shift+9) — or type \"[ ] \"")
+                    onClicked: noteWindow.toggleList("check")
+                }
 
                 UI.StyledButton {
                     objectName: "codeBlockButton"
@@ -1408,6 +1643,76 @@ ApplicationWindow {
                 }
 
                 Item { Layout.fillWidth: true }
+
+                // Alignment, find and replace, and counts.
+                UI.StyledButton {
+                    id: moreButton
+                    objectName: "moreButton"
+                    iconName: "more"
+                    iconSize: 14
+                    theme: noteWindow.theme
+                    variant: moreMenu.visible ? "accent" : "ghost"
+                    implicitWidth: 24
+                    implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
+                    padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
+                    ToolTip.visible: hovered && !moreMenu.visible
+                    ToolTip.text: qsTr("More: alignment, find and replace, word count")
+                    onClicked: moreMenu.popup(moreButton, 0, moreButton.height)
+
+                    Menu {
+                        id: moreMenu
+                        objectName: "moreMenu"
+                        readonly property string current: noteWindow.alignment()
+                        MenuItem {
+                            text: qsTr("Align Left")
+                            checkable: true
+                            checked: moreMenu.current === "left"
+                            onTriggered: noteWindow.align("left")
+                        }
+                        MenuItem {
+                            text: qsTr("Align Center")
+                            checkable: true
+                            checked: moreMenu.current === "center"
+                            onTriggered: noteWindow.align("center")
+                        }
+                        MenuItem {
+                            text: qsTr("Align Right")
+                            checkable: true
+                            checked: moreMenu.current === "right"
+                            onTriggered: noteWindow.align("right")
+                        }
+                        MenuItem {
+                            text: qsTr("Justify")
+                            checkable: true
+                            checked: moreMenu.current === "justify"
+                            onTriggered: noteWindow.align("justify")
+                        }
+                        MenuSeparator {}
+                        MenuItem {
+                            text: qsTr("Find… (Ctrl+F)")
+                            onTriggered: noteWindow.openFind(false)
+                        }
+                        MenuItem {
+                            text: qsTr("Replace… (Ctrl+H)")
+                            onTriggered: noteWindow.openFind(true)
+                        }
+                        MenuSeparator {}
+                        MenuItem {
+                            objectName: "countItem"
+                            enabled: false
+                            text: {
+                                const stats = noteWindow.textStats()
+                                const words = qsTr("%n word(s)", "", stats.words)
+                                const characters = qsTr("%n character(s)", "", stats.characters)
+                                return (noteWindow.hasTextSelection ? qsTr("Selection: ") : "") + words + " · " + characters
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1480,6 +1785,42 @@ ApplicationWindow {
                         border.color: theme.isDark ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(0, 0, 0, 0.08)
                     }
                 }
+                // Copy buttons for the code boxes. They sit above the text,
+                // unlike the boxes, so they stay clickable.
+                Repeater {
+                    model: noteWindow.codeBoxes
+                    delegate: UI.StyledButton {
+                        id: copyCode
+                        required property var modelData
+                        objectName: "copyCodeButton"
+                        property bool copied: false
+                        z: 6
+                        x: contentEditor.width - contentEditor.rightPadding - width - 4
+                        y: modelData.y + 4
+                        text: copied ? qsTr("Copied") : ""
+                        iconName: copied ? "check" : "copy"
+                        iconSize: 12
+                        font.pixelSize: 11
+                        theme: noteWindow.theme
+                        variant: "ghost"
+                        implicitHeight: 22
+                        padding: 3
+                        focusPolicy: Qt.NoFocus
+                        opacity: copied || hovered || codeHover.hovered ? 1 : 0.55
+                        ToolTip.visible: hovered && !copied
+                        ToolTip.text: qsTr("Copy code")
+                        HoverHandler { id: codeHover }
+                        onClicked: {
+                            // Paragraph breaks come back as U+2029; other apps expect \n.
+                            const code = contentEditor.getText(modelData.start, modelData.end).replace(/[\u2028\u2029]/g, "\n")
+                            if (backend.copyToClipboard(code)) {
+                                copied = true
+                                copiedTimer.restart()
+                            }
+                        }
+                        Timer { id: copiedTimer; interval: 1500; onTriggered: copyCode.copied = false }
+                    }
+                }
                 // Any other selection ends image resizing.
                 onSelectionStartChanged: if (noteWindow.selectedImage >= 0 && selectionStart !== noteWindow.selectedImage) noteWindow.selectedImage = -1
                 onSelectionEndChanged: if (noteWindow.selectedImage >= 0 && selectionEnd !== noteWindow.selectedImage + 1) noteWindow.selectedImage = -1
@@ -1493,8 +1834,25 @@ ApplicationWindow {
                             && formatter.endEmptyListItem(contentEditor.textDocument, contentEditor.cursorPosition)))
                 }
                 Keys.onEscapePressed: function(event) {
+                    if (noteWindow.findOpen) {
+                        noteWindow.closeFind()
+                        event.accepted = true
+                        return
+                    }
                     event.accepted = noteWindow.selectedImage >= 0
                     if (event.accepted) contentEditor.deselect()
+                }
+                // Tab and Shift+Tab move list items a level in or out.
+                Keys.onTabPressed: function(event) { event.accepted = noteWindow.indent(1) }
+                Keys.onBacktabPressed: function(event) { event.accepted = noteWindow.indent(-1) }
+                Keys.onPressed: function(event) {
+                    if (event.matches(StandardKey.Paste)) {
+                        event.accepted = noteWindow.pasteImages()
+                    } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                               && event.modifiers === Qt.ControlModifier) {
+                        // Ctrl+Enter ticks the checklist item at the caret.
+                        event.accepted = noteWindow.toggleCheck(contentEditor.cursorPosition)
+                    }
                 }
 
                 // A plain click on a link opens it and a click on an image
@@ -1503,9 +1861,15 @@ ApplicationWindow {
                 TapHandler {
                     acceptedButtons: Qt.LeftButton
                     onTapped: function(eventPoint) {
-                        const link = noteWindow.linkAt(eventPoint.position.x, eventPoint.position.y)
+                        const x = eventPoint.position.x
+                        const y = eventPoint.position.y
+                        const link = noteWindow.linkAt(x, y)
                         if (link.length > 0) noteWindow.openLink(link)
-                        else noteWindow.selectImageAt(eventPoint.position.x, eventPoint.position.y)
+                        else if (!noteWindow.toggleCheckAt(x, y)) noteWindow.selectImageAt(x, y)
+                    }
+                    // Double-clicking an image shows it at full size.
+                    onDoubleTapped: function(eventPoint) {
+                        if (noteWindow.selectImageAt(eventPoint.position.x, eventPoint.position.y)) noteWindow.previewSelectedImage()
                     }
                 }
 
@@ -1599,6 +1963,132 @@ ApplicationWindow {
                     id: linkHover
                     cursorShape: noteWindow.linkAt(linkHover.point.position.x, linkHover.point.position.y).length > 0
                         ? Qt.PointingHandCursor : Qt.IBeamCursor
+                }
+            }
+        }
+
+        // Find and replace (Ctrl+F / Ctrl+H).
+        Rectangle {
+            id: findBar
+            objectName: "findBar"
+            property alias query: findField.text
+            property alias replacement: replaceField.text
+            property bool caseSensitive: false
+            property bool replaceShown: false
+            property string status: ""
+            function focusQuery() {
+                findField.forceActiveFocus()
+                findField.selectAll()
+            }
+            visible: noteWindow.findOpen && !noteWindow.collapsed
+            Layout.fillWidth: true
+            implicitHeight: findColumn.implicitHeight + 12
+            radius: 10
+            color: theme.isDark ? Qt.rgba(1, 1, 1, 0.05) : Qt.rgba(0, 0, 0, 0.04)
+            border.width: 1
+            border.color: theme.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
+            onQueryChanged: { status = ""; noteWindow.runFind(0) }
+            onCaseSensitiveChanged: noteWindow.runFind(0)
+
+            component BarButton: UI.StyledButton {
+                property string hint: ""
+                theme: noteWindow.theme
+                variant: "ghost"
+                iconSize: 13
+                implicitWidth: 24
+                implicitHeight: 24
+                padding: 0
+                focusPolicy: Qt.NoFocus
+                ToolTip.visible: hovered && hint.length > 0
+                ToolTip.text: hint
+            }
+
+            ColumnLayout {
+                id: findColumn
+                anchors.fill: parent
+                anchors.margins: 6
+                spacing: 4
+
+                RowLayout {
+                    spacing: 2
+                    Layout.fillWidth: true
+                    TextField {
+                        id: findField
+                        objectName: "findField"
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 60
+                        implicitHeight: 26
+                        font.pixelSize: 12
+                        placeholderText: qsTr("Find in note")
+                        selectByMouse: true
+                        color: theme.noteText
+                        placeholderTextColor: theme.noteTextSecondary
+                        background: Rectangle { color: "transparent" }
+                        Keys.onReturnPressed: function(event) { noteWindow.runFind(event.modifiers & Qt.ShiftModifier ? -1 : 1) }
+                        Keys.onEscapePressed: noteWindow.closeFind()
+                    }
+                    Label {
+                        objectName: "findCount"
+                        text: findBar.status.length ? findBar.status
+                            : (findField.text.length === 0 ? "" : (noteWindow.findMatches.length === 0 ? qsTr("No matches")
+                                : qsTr("%1 of %2").arg(noteWindow.findIndex + 1).arg(noteWindow.findMatches.length)))
+                        font.pixelSize: 11
+                        color: noteWindow.findMatches.length === 0 && findField.text.length ? theme.danger : theme.noteTextSecondary
+                    }
+                    BarButton {
+                        text: "Aa"
+                        font.pixelSize: 11
+                        variant: findBar.caseSensitive ? "accent" : "ghost"
+                        hint: qsTr("Match case")
+                        onClicked: findBar.caseSensitive = !findBar.caseSensitive
+                    }
+                    BarButton { iconName: "chevron-up"; hint: qsTr("Previous (Shift+Enter)"); onClicked: noteWindow.runFind(-1) }
+                    BarButton { iconName: "chevron-down"; hint: qsTr("Next (Enter)"); onClicked: noteWindow.runFind(1) }
+                    BarButton {
+                        iconName: "replace"
+                        variant: findBar.replaceShown ? "accent" : "ghost"
+                        hint: qsTr("Replace")
+                        onClicked: findBar.replaceShown = !findBar.replaceShown
+                    }
+                    BarButton { iconName: "x"; hint: qsTr("Close (Esc)"); onClicked: noteWindow.closeFind() }
+                }
+                RowLayout {
+                    visible: findBar.replaceShown
+                    spacing: 4
+                    Layout.fillWidth: true
+                    TextField {
+                        id: replaceField
+                        objectName: "replaceField"
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 60
+                        implicitHeight: 26
+                        font.pixelSize: 12
+                        placeholderText: qsTr("Replace with")
+                        selectByMouse: true
+                        color: theme.noteText
+                        placeholderTextColor: theme.noteTextSecondary
+                        background: Rectangle { color: "transparent" }
+                        Keys.onReturnPressed: noteWindow.replaceCurrent()
+                        Keys.onEscapePressed: noteWindow.closeFind()
+                    }
+                    UI.StyledButton {
+                        text: qsTr("Replace")
+                        theme: noteWindow.theme
+                        font.pixelSize: 11
+                        implicitHeight: 24
+                        focusPolicy: Qt.NoFocus
+                        enabled: noteWindow.findIndex >= 0
+                        onClicked: noteWindow.replaceCurrent()
+                    }
+                    UI.StyledButton {
+                        text: qsTr("All")
+                        theme: noteWindow.theme
+                        font.pixelSize: 11
+                        implicitHeight: 24
+                        focusPolicy: Qt.NoFocus
+                        enabled: noteWindow.findMatches.length > 0
+                        onClicked: noteWindow.replaceAll()
+                    }
                 }
             }
         }

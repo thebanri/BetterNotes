@@ -359,9 +359,22 @@ void setCode(const QTextBlock &block, bool code) {
 // "- ", "* ", "• " and ". " start a bulleted list; "1. " or "1) " starts a
 // numbered list at that number. Anything else is ordinary text.
 bool listStyleFor(const QString &prefix, QTextListFormat::Style *style,
-                  int *start) {
+                  int *start,
+                  QTextBlockFormat::MarkerType *marker = nullptr) {
     static const QRegularExpression numbered(
         QStringLiteral(R"(^(\d{1,3})[.)] $)"));
+    static const QRegularExpression checkbox(QStringLiteral(R"(^\[( |x|X)?\] $)"));
+    if (marker)
+        *marker = QTextBlockFormat::MarkerType::NoMarker;
+    if (const auto box = checkbox.match(prefix); box.hasMatch()) {
+        *style = QTextListFormat::ListDisc;
+        *start = 1;
+        if (marker)
+            *marker = box.captured(1).trimmed().isEmpty()
+                          ? QTextBlockFormat::MarkerType::Unchecked
+                          : QTextBlockFormat::MarkerType::Checked;
+        return true;
+    }
     if (prefix == QStringLiteral("- ") || prefix == QStringLiteral("* ") ||
         prefix == QStringLiteral("\u2022 ") || prefix == QStringLiteral(". ")) {
         *style = QTextListFormat::ListDisc;
@@ -431,8 +444,9 @@ int TextFormatter::autoList(QQuickTextDocument *quickDocument, int position) {
         return -1;
     QTextListFormat::Style style;
     int start;
+    QTextBlockFormat::MarkerType marker;
     if (!listStyleFor(block.text().left(position - block.position()), &style,
-                      &start))
+                      &start, &marker))
         return -1;
     QTextCursor cursor(document);
     cursor.beginEditBlock();
@@ -444,6 +458,11 @@ int TextFormatter::autoList(QQuickTextDocument *quickDocument, int position) {
     format.setStart(start);
     format.setIndent(1);
     cursor.createList(format);
+    if (marker != QTextBlockFormat::MarkerType::NoMarker) {
+        auto blockFormat = cursor.blockFormat();
+        blockFormat.setMarker(marker);
+        cursor.setBlockFormat(blockFormat);
+    }
     cursor.endEditBlock();
     return block.position();
 }
@@ -462,6 +481,7 @@ bool TextFormatter::endEmptyListItem(QQuickTextDocument *quickDocument,
     list->remove(block);
     auto format = cursor.blockFormat();
     format.setIndent(0);
+    format.setMarker(QTextBlockFormat::MarkerType::NoMarker);
     cursor.setBlockFormat(format);
     cursor.endEditBlock();
     return true;
@@ -519,8 +539,28 @@ bool isBullet(QTextListFormat::Style style) {
            style == QTextListFormat::ListSquare;
 }
 
-bool matchesKind(const QTextList *list, const QString &kind) {
-    return list && isBullet(list->format().style()) == (kind == u"bullet");
+bool isChecklistItem(const QTextBlock &block) {
+    return block.textList() && block.blockFormat().marker() !=
+                                   QTextBlockFormat::MarkerType::NoMarker;
+}
+
+// "bullet", "number" or "check": a checklist is a bulleted list whose items
+// carry a checkbox marker.
+bool matchesKind(const QTextBlock &block, const QString &kind) {
+    const auto *list = block.textList();
+    if (!list)
+        return false;
+    if (kind == u"check")
+        return isChecklistItem(block);
+    return !isChecklistItem(block) &&
+           isBullet(list->format().style()) == (kind == u"bullet");
+}
+
+void setMarker(const QTextBlock &block, QTextBlockFormat::MarkerType marker) {
+    QTextCursor cursor(block);
+    auto format = cursor.blockFormat();
+    format.setMarker(marker);
+    cursor.setBlockFormat(format);
 }
 
 // The paragraphs a selection touches; an empty selection is its paragraph.
@@ -546,7 +586,7 @@ bool TextFormatter::listActive(QQuickTextDocument *quickDocument, int start,
     if (blocks.isEmpty())
         return false;
     for (const auto &block : blocks) {
-        if (!matchesKind(block.textList(), kind))
+        if (!matchesKind(block, kind))
             return false;
     }
     return true;
@@ -556,7 +596,8 @@ void TextFormatter::toggleList(QQuickTextDocument *quickDocument, int start,
                                int end, const QString &kind) {
     auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
     const auto blocks = blocksIn(document, start, end);
-    if (blocks.isEmpty() || (kind != u"bullet" && kind != u"number"))
+    if (blocks.isEmpty() ||
+        (kind != u"bullet" && kind != u"number" && kind != u"check"))
         return;
     const bool remove = listActive(quickDocument, start, end, kind);
     QTextCursor cursor(document);
@@ -569,17 +610,22 @@ void TextFormatter::toggleList(QQuickTextDocument *quickDocument, int start,
         QTextCursor paragraph(block);
         auto format = paragraph.blockFormat();
         format.setIndent(0);
+        format.setMarker(QTextBlockFormat::MarkerType::NoMarker);
         paragraph.setBlockFormat(format);
     }
     if (!remove) {
         QTextListFormat format;
-        format.setStyle(kind == u"bullet" ? QTextListFormat::ListDisc
-                                          : QTextListFormat::ListDecimal);
+        format.setStyle(kind == u"number" ? QTextListFormat::ListDecimal
+                                          : QTextListFormat::ListDisc);
         format.setIndent(1);
         QTextCursor first(blocks.first());
         auto *list = first.createList(format);
         for (qsizetype i = 1; i < blocks.size(); ++i)
             list->add(blocks.at(i));
+        if (kind == u"check") {
+            for (const auto &block : blocks)
+                setMarker(block, QTextBlockFormat::MarkerType::Unchecked);
+        }
     }
     cursor.endEditBlock();
 }
@@ -687,4 +733,200 @@ QVariantList TextFormatter::codeBlocks(QQuickTextDocument *quickDocument) const 
         runs.append(QVariantMap{{QStringLiteral("start"), start},
                                 {QStringLiteral("end"), end}});
     return runs;
+}
+
+int TextFormatter::checkState(QQuickTextDocument *quickDocument,
+                              int position) const {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || position < 0 || position >= document->characterCount())
+        return 0;
+    const auto block = document->findBlock(position);
+    if (!isChecklistItem(block))
+        return 0;
+    return block.blockFormat().marker() == QTextBlockFormat::MarkerType::Checked
+               ? 2
+               : 1;
+}
+
+bool TextFormatter::toggleCheck(QQuickTextDocument *quickDocument,
+                                int position) {
+    const int state = checkState(quickDocument, position);
+    if (state == 0)
+        return false;
+    auto *document = quickDocument->textDocument();
+    setMarker(document->findBlock(position),
+              state == 2 ? QTextBlockFormat::MarkerType::Unchecked
+                         : QTextBlockFormat::MarkerType::Checked);
+    return true;
+}
+
+void TextFormatter::uncheckNewItem(QQuickTextDocument *quickDocument,
+                                   int position) {
+    // Enter copies the item it splits, tick and all; a new item starts open.
+    if (checkState(quickDocument, position) != 2)
+        return;
+    const auto block = quickDocument->textDocument()->findBlock(position);
+    if (block.text().isEmpty())
+        setMarker(block, QTextBlockFormat::MarkerType::Unchecked);
+}
+
+namespace {
+// Bullets change shape and numbers change style with each level, as in most
+// editors, so nested levels are easy to tell apart.
+QTextListFormat::Style styleForLevel(bool numbered, int level) {
+    static const QTextListFormat::Style bullets[] = {
+        QTextListFormat::ListDisc, QTextListFormat::ListCircle,
+        QTextListFormat::ListSquare};
+    static const QTextListFormat::Style numbers[] = {
+        QTextListFormat::ListDecimal, QTextListFormat::ListLowerAlpha,
+        QTextListFormat::ListLowerRoman};
+    const int index = (qMax(1, level) - 1) % 3;
+    return numbered ? numbers[index] : bullets[index];
+}
+} // namespace
+
+bool TextFormatter::indentList(QQuickTextDocument *quickDocument, int start,
+                               int end, int delta) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    const auto blocks = blocksIn(document, start, end);
+    if (blocks.isEmpty() || delta == 0)
+        return false;
+    for (const auto &block : blocks) {
+        if (!block.textList())
+            return false;
+    }
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    for (const auto &block : blocks) {
+        auto *list = block.textList();
+        const auto format = list->format();
+        const bool numbered = !isBullet(format.style());
+        const int level = qMin(format.indent() + delta, 8);
+        const auto marker = block.blockFormat().marker();
+        list->remove(block);
+        QTextCursor paragraph(block);
+        auto blockFormat = paragraph.blockFormat();
+        blockFormat.setIndent(0);
+        paragraph.setBlockFormat(blockFormat);
+        if (level < 1) {
+            setMarker(block, QTextBlockFormat::MarkerType::NoMarker);
+            continue;
+        }
+        // Join the list the item above has at this level, so consecutive
+        // items share one list and keep counting.
+        QTextList *target = nullptr;
+        for (auto above = block.previous(); above.isValid(); above = above.previous()) {
+            auto *candidate = above.textList();
+            if (!candidate)
+                break;
+            if (candidate->format().indent() == level) {
+                target = candidate;
+                break;
+            }
+            if (candidate->format().indent() < level)
+                break;
+        }
+        if (target) {
+            target->add(block);
+        } else {
+            QTextListFormat nested;
+            nested.setIndent(level);
+            nested.setStyle(styleForLevel(numbered, level));
+            paragraph.createList(nested);
+        }
+        setMarker(block, marker);
+    }
+    cursor.endEditBlock();
+    return true;
+}
+
+QVariantList TextFormatter::findAll(QQuickTextDocument *quickDocument,
+                                    const QString &text,
+                                    bool caseSensitive) const {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    QVariantList matches;
+    if (!document || text.isEmpty())
+        return matches;
+    const QTextDocument::FindFlags flags =
+        caseSensitive ? QTextDocument::FindCaseSensitively
+                      : QTextDocument::FindFlags();
+    QTextCursor cursor(document);
+    while (true) {
+        cursor = document->find(text, cursor, flags);
+        if (cursor.isNull() || matches.size() >= 10000)
+            break;
+        matches.append(QVariantMap{{QStringLiteral("start"), cursor.selectionStart()},
+                                   {QStringLiteral("end"), cursor.selectionEnd()}});
+    }
+    return matches;
+}
+
+bool TextFormatter::replaceRange(QQuickTextDocument *quickDocument, int start,
+                                 int end, const QString &text) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || start < 0 || end < start ||
+        end >= document->characterCount())
+        return false;
+    QTextCursor cursor(document);
+    cursor.setPosition(start);
+    cursor.setPosition(end, QTextCursor::KeepAnchor);
+    // insertText keeps the format of the text it replaces.
+    cursor.insertText(text);
+    return true;
+}
+
+int TextFormatter::replaceAll(QQuickTextDocument *quickDocument,
+                              const QString &text, const QString &replacement,
+                              bool caseSensitive) {
+    const auto matches = findAll(quickDocument, text, caseSensitive);
+    if (matches.isEmpty())
+        return 0;
+    QTextCursor cursor(quickDocument->textDocument());
+    cursor.beginEditBlock();
+    // Last first, so earlier positions stay valid.
+    for (auto it = matches.crbegin(); it != matches.crend(); ++it) {
+        const auto match = it->toMap();
+        replaceRange(quickDocument, match.value(QStringLiteral("start")).toInt(),
+                     match.value(QStringLiteral("end")).toInt(), replacement);
+    }
+    cursor.endEditBlock();
+    return int(matches.size());
+}
+
+QString TextFormatter::alignmentAt(QQuickTextDocument *quickDocument,
+                                   int position) const {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || position < 0 || position >= document->characterCount())
+        return QStringLiteral("left");
+    const auto alignment =
+        document->findBlock(position).blockFormat().alignment();
+    if (alignment & Qt::AlignHCenter)
+        return QStringLiteral("center");
+    if (alignment & Qt::AlignJustify)
+        return QStringLiteral("justify");
+    if (alignment & Qt::AlignRight)
+        return QStringLiteral("right");
+    return QStringLiteral("left");
+}
+
+void TextFormatter::setAlignment(QQuickTextDocument *quickDocument, int start,
+                                 int end, const QString &alignment) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    const auto blocks = blocksIn(document, start, end);
+    Qt::Alignment value = Qt::AlignLeft;
+    if (alignment == u"center")
+        value = Qt::AlignHCenter;
+    else if (alignment == u"right")
+        value = Qt::AlignRight;
+    else if (alignment == u"justify")
+        value = Qt::AlignJustify;
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    for (const auto &block : blocks) {
+        QTextCursor paragraph(block);
+        auto format = paragraph.blockFormat();
+        format.setAlignment(value);
+        paragraph.setBlockFormat(format);
+    }
+    cursor.endEditBlock();
 }

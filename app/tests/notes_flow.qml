@@ -300,6 +300,83 @@ Window {
         check(backend.noteIds.length === existing.length, "Imported notes were not cleaned up")
     }
 
+    // Checklists, list indentation, alignment, counts, find and replace,
+    // image preview and pasting.
+    function assertEditorExtras(window) {
+        const body = findItem(window.contentItem, "contentEditor")
+        const formatter = window.imageFormatter
+        const type = function(text) {
+            for (const key of text) {
+                input.keyClick(key === "\n" ? Qt.Key_Return : key)
+                input.wait(1)
+            }
+        }
+        body.forceActiveFocus()
+        input.wait(10)
+
+        // "[ ] " starts a checklist; Ctrl+Enter or a click on the box ticks it.
+        type("[ ] milk")
+        check(body.text.indexOf('class="unchecked"') >= 0 && window.plainContent === "milk", "'[ ] ' did not start a checklist")
+        input.keyClick(Qt.Key_Return, Qt.ControlModifier)
+        check(formatter.checkState(body.textDocument, 0) === 2, "Ctrl+Enter did not tick the item")
+        input.keyClick(Qt.Key_End)
+        type("\neggs")
+        input.wait(5)
+        check(formatter.checkState(body.textDocument, 5) === 1, "A new item after a ticked one started ticked")
+        const box = body.positionToRectangle(5)
+        check(window.toggleCheckAt(box.x - 12, box.y + box.height / 2), "Clicking the box did not tick it")
+        check(formatter.checkState(body.textDocument, 5) === 2, "Clicking the box left it open")
+        check(!window.toggleCheckAt(box.x + 10, box.y + box.height / 2), "Clicking the text ticked the box")
+
+        // Tab nests an item, Shift+Tab brings it back.
+        input.keyClick(Qt.Key_Tab)
+        check(body.text.indexOf("-qt-list-indent: 2") >= 0, "Tab did not nest the list item")
+        input.keyClick(Qt.Key_Backtab, Qt.ShiftModifier)
+        check(body.text.indexOf("-qt-list-indent: 2") < 0, "Shift+Tab did not bring the item back")
+        check(formatter.checkState(body.textDocument, 5) === 2, "Indenting lost the tick")
+
+        // Alignment and counts.
+        body.text = ""
+        type("one two three")
+        window.align("center")
+        check(window.alignment() === "center" && body.text.indexOf('align="center"') >= 0, "Centering failed")
+        window.align("left")
+        const stats = window.textStats()
+        check(stats.words === 3 && stats.characters === 13, "Word count wrong: " + JSON.stringify(stats))
+
+        // Find and replace.
+        body.text = ""
+        type("cat Cat cAt dog")
+        window.openFind(true)
+        const bar = window.findBarItem
+        check(bar.visible, "Find bar did not open")
+        bar.query = "cat"
+        check(window.findMatches.length === 3 && body.selectedText.toLowerCase() === "cat", "Find did not match case-insensitively")
+        bar.caseSensitive = true
+        check(window.findMatches.length === 1, "Match case did not narrow the matches")
+        bar.caseSensitive = false
+        bar.replacement = "bird"
+        window.replaceCurrent()
+        check(window.findMatches.length === 2 && window.plainContent.split("bird").length === 2, "Replace did not change one match")
+        check(window.replaceAll() === 2 && window.plainContent === "bird bird bird dog", "Replace all failed: " + window.plainContent)
+        window.closeFind()
+        check(!bar.visible, "Find bar did not close")
+
+        // Pasting text is untouched by image paste.
+        window.editorBackend.copyToClipboard("plain words")
+        check(!window.pasteImages(), "Plain text was taken for an image")
+
+        // Double-clicking an image opens it full size.
+        body.text = ""
+        const fixtures = window.editorBackend.picturesFolder() + "/"
+        check(window.insertImages([fixtures + "still.png"], 0) === 1, "Image insert failed")
+        const imageAt = body.positionToRectangle(window.plainContent.indexOf("\ufffc"))
+        check(window.selectImageAt(imageAt.x + 4, imageAt.y + 4), "Image not selectable")
+        window.previewSelectedImage()
+        check(window.imagePreviewWindow.visible && window.imagePreviewWindow.name === "still.png", "Image preview did not open")
+        window.imagePreviewWindow.close()
+    }
+
     // A reminder set on a note shows in the library, can be edited there and
     // fires once when due.
     function assertReminders(library, note) {
@@ -430,6 +507,10 @@ Window {
         let boxes = 0
         for (let i = 0; i < body.children.length; ++i) if (body.children[i].objectName === "codeBox") ++boxes
         check(boxes === 1, "The code block has no box behind it")
+        const copyButton = findItem(body, "copyCodeButton")
+        check(copyButton, "The code block has no copy button")
+        input.mouseClick(copyButton, copyButton.width / 2, copyButton.height / 2)
+        check(window.editorBackend.getClipboardText() === "let x = 1;\n- y", "Copy code copied: " + JSON.stringify(window.editorBackend.getClipboardText()))
         check(body.text.indexOf("rgba(128,128,128") >= 0 && body.text.indexOf("monospace") >= 0, "Code block formatting is not saved")
         body.select(0, 0)
         check(window.codeActive(), "Code button does not show the code block")
@@ -597,6 +678,9 @@ Window {
                 harness.assertMediaAndLists(media)
                 harness.assertReminders(harness.library, media)
                 harness.assertSearchAndTransfer(harness.library, media)
+                const extras = harness.library.createNote()
+                harness.assertEditorExtras(extras)
+                harness.check(extras.deleteConfirmed(), "Editor extras note could not be deleted")
                 harness.check(media.deleteConfirmed(), "Media test note could not be deleted")
                 harness.first.toggleCollapsed()
                 harness.check(harness.first.collapsed && harness.first.height === harness.first.collapsedHeight, "Collapse failed")
