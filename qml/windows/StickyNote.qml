@@ -157,7 +157,10 @@ ApplicationWindow {
     transientParent: null
     flags: Qt.Window | Qt.FramelessWindowHint
         | (alwaysOnTop ? Qt.WindowStaysOnTopHint : (stayBelow ? Qt.WindowStaysOnBottomHint : 0))
-    title: (titleEditor.text.trim().length ? titleEditor.text : qsTr("Untitled note")) + " — BetterNotes" + layerMarker + noteKeyMarker
+    // Flipped to ask the KDE Plasma integration to move the note to the
+    // position the library gave it (see arrangeNotes in Main.qml).
+    property bool arrangeMarker: false
+    title: (titleEditor.text.trim().length ? titleEditor.text : qsTr("Untitled note")) + " — BetterNotes" + layerMarker + noteKeyMarker + (arrangeMarker ? "\u2062" : "")
     width: 380
     height: 360
     minimumWidth: 240

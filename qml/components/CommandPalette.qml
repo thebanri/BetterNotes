@@ -50,6 +50,7 @@ Popup {
         { id: "new_note", title: qsTr("📝 New note"), subtitle: qsTr("Create a fresh desktop sticky note"), shortcut: "Ctrl+N" },
         { id: "quick_capture", title: qsTr("⚡ Quick capture"), subtitle: qsTr("Open fast note capture scratchpad"), shortcut: "Ctrl+Alt+Space" },
         { id: "show_all", title: qsTr("👁️ Show all notes"), subtitle: qsTr("Bring all sticky notes to front"), shortcut: "" },
+        { id: "arrange", title: qsTr("🧩 Arrange notes"), subtitle: qsTr("Line up the open notes on this screen"), shortcut: "" },
         { id: "hide_all", title: qsTr("🙈 Hide all notes"), subtitle: qsTr("Minimize all sticky notes"), shortcut: "" },
         { id: "toggle_theme", title: qsTr("🎨 Toggle theme mode"), subtitle: qsTr("Cycle through system, light, and dark"), shortcut: "" },
         { id: "toggle_pin", title: qsTr("📌 Toggle pin"), subtitle: qsTr("Pin or unpin active note"), shortcut: "" },

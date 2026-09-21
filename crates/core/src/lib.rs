@@ -10,6 +10,7 @@ pub mod ipc;
 pub mod links;
 mod notes;
 pub mod notifications;
+pub mod open_files;
 pub mod paths;
 pub mod preview;
 pub mod reminders;

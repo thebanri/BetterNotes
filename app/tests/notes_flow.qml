@@ -443,6 +443,42 @@ Window {
         library.showSection("all")
     }
 
+    // Arranging lines the open notes up without overlap on the library's
+    // screen. The offscreen platform places windows, as X11 does.
+    function assertArrangeAndOpenFiles(library) {
+        const ids = Object.keys(library.noteWindows)
+        check(ids.length >= 1, "No open notes to arrange")
+        const first = library.noteWindows[ids[0]]
+        first.x = 5000
+        first.y = 5000
+        check(library.arrangeNotes() === "arranged", "Arranging was not possible")
+        const rects = ids.map(function(id) {
+            const w = library.noteWindows[id]
+            return { x: w.x, y: w.y, width: w.width, height: w.height }
+        })
+        for (let i = 0; i < rects.length; ++i) {
+            const a = rects[i]
+            check(a.x >= library.screen.virtualX && a.x < library.screen.virtualX + library.screen.width, "A note was left off screen")
+            for (let j = i + 1; j < rects.length; ++j) {
+                const b = rects[j]
+                const overlap = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+                check(!overlap, "Arranged notes overlap")
+            }
+        }
+
+        // Files opened with BetterNotes become notes.
+        const backend = library.libraryBackend
+        const folder = backend.picturesFolder().replace("file://", "")
+        const opened = backend.openFiles([folder + "/notes.txt", folder + "/still.png", folder + "/missing.txt"])
+        check(opened.length === 2, "Opening files made " + opened.length + " notes")
+        check(backend.errorMessage.indexOf("missing.txt") >= 0, "A file that could not be opened was not reported")
+        for (const id of opened) {
+            const i = backend.noteIds.indexOf(id)
+            check(i >= 0, "An opened file's note is not listed")
+            check(backend.deleteNoteById(id), "Could not clean up an opened note")
+        }
+    }
+
     // A reminder set on a note shows in the library, can be edited there and
     // fires once when due.
     function assertReminders(library, note) {
@@ -747,6 +783,7 @@ Window {
                 harness.assertReminders(harness.library, media)
                 harness.assertSearchAndTransfer(harness.library, media)
                 harness.assertTrashAndSelection(harness.library)
+                harness.assertArrangeAndOpenFiles(harness.library)
                 const extras = harness.library.createNote()
                 harness.assertEditorExtras(extras)
                 harness.check(extras.deleteConfirmed(), "Editor extras note could not be deleted")

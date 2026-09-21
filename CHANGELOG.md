@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Reminder notifications have **Open note** and **Snooze 10 min** buttons (snooze is offered for one-time reminders), where the desktop's notification service supports buttons.
 - A note's title bar shows its reminder; click it to edit.
+- **Arrange notes** (sidebar, command palette, tray) lines the open notes up on the library's screen. X11 and KDE Plasma (Wayland) move them; other Wayland desktops do not let apps place windows, so the notes are only brought on screen there.
+- Open text, Markdown and image files with BetterNotes from a file manager's **Open with**, or `betternotes --open FILE...`: each becomes a new note. A running BetterNotes receives them.
 - A **Trash**: deleting a note moves it there, where it can be restored for 30 days before it is deleted for good (with its attached files). Trashed notes stay out of search, reminders, exports and restored windows. Emptying the trash or deleting a note for good asks first.
 - Select several notes in the library (Ctrl+click, Shift+click for a range, Ctrl+A, or **Select** in a card's menu) to pin, archive, tag, move to the trash, restore or delete them together. Esc clears the selection.
 - Export asks where to save (a JSON file, or a folder for Markdown), and **Import notes** in the command palette adds notes from JSON exports or Markdown files.

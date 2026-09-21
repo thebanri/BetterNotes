@@ -19,6 +19,9 @@ use std::{
 /// Marks a desktop entry written by [`install`], so uninstalling never removes
 /// one that a package or the user put there.
 const MARKER: &str = "X-BetterNotes-Installed=true";
+/// Files BetterNotes offers to open as notes ("Open with" in file managers).
+const MIME_TYPES: &str =
+    "text/plain;text/markdown;image/png;image/jpeg;image/gif;image/webp;image/bmp;image/svg+xml;";
 
 const SVG_ICON: &[u8] = include_bytes!("../../../assets/icons/org.betternotes.BetterNotes.svg");
 /// The bundled icon notifications show when no theme provides one.
@@ -248,6 +251,13 @@ fn notify_desktop(layout: &InstallLayout) {
         ],
     );
     run("kbuildsycoca6", &[]);
+    // GNOME and others find "Open with" apps through this cache.
+    if let Some(applications) = layout.desktop_entry.parent() {
+        run(
+            "update-desktop-database",
+            &[applications.to_string_lossy().as_ref()],
+        );
+    }
 }
 
 /// Removes what [`install`] added. Notes, settings and attachments stay.
@@ -265,7 +275,11 @@ pub fn uninstall(layout: &InstallLayout) -> Result<()> {
     }
     // Only a binary this entry launches is ours to delete.
     let binary = autostart::desktop_exec_quote(&layout.binary.to_string_lossy());
-    if entry.lines().any(|line| line == format!("Exec={binary}")) {
+    if entry.lines().any(|line| {
+        line.strip_prefix("Exec=")
+            .and_then(|exec| exec.strip_prefix(binary.as_str()))
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
+    }) {
         remove_if_present(&layout.binary)?;
     }
     Ok(())
@@ -278,7 +292,7 @@ Type=Application
 Name=BetterNotes
 GenericName=Sticky Notes
 Comment=Sticky notes for the Linux desktop
-Exec={exec}
+Exec={exec} --open %F
 Icon={APPLICATION_ID}
 Terminal=false
 Categories=Utility;
@@ -286,6 +300,7 @@ StartupNotify=true
 StartupWMClass=betternotes
 Keywords=notes;sticky;workspace;markdown;reminders;todo;scratchpad;
 Actions=NewNote;QuickCapture;
+MimeType={MIME_TYPES}
 {MARKER}
 
 [Desktop Action NewNote]
@@ -410,7 +425,8 @@ mod tests {
         let mode = fs::metadata(&layout.binary).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o755);
         let entry = fs::read_to_string(&layout.desktop_entry).unwrap();
-        assert!(entry.contains(&format!("Exec={exec}\n")));
+        assert!(entry.contains(&format!("Exec={exec} --open %F\n")));
+        assert!(entry.contains("MimeType=text/plain;"));
         assert!(entry.contains("Icon=org.betternotes.BetterNotes\n"));
         for icon in layout.icon_files() {
             assert!(icon.is_file(), "missing {}", icon.display());
@@ -436,7 +452,7 @@ mod tests {
         let appimage = PathBuf::from("/home/me/My Apps/BetterNotes.AppImage");
         install(&layout, &InstallSource::AppImage(appimage)).unwrap();
         let entry = fs::read_to_string(&layout.desktop_entry).unwrap();
-        assert!(entry.contains("Exec=\"/home/me/My Apps/BetterNotes.AppImage\"\n"));
+        assert!(entry.contains("Exec=\"/home/me/My Apps/BetterNotes.AppImage\" --open %F\n"));
         assert!(!layout.binary.exists());
         uninstall(&layout).unwrap();
 

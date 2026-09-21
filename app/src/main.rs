@@ -71,6 +71,7 @@ fn print_help() {
         "  -b, --background        Start in background (restore notes and tray, hide main window)"
     );
     println!("  -q, --quick-capture     Open Quick Capture scratchpad (or focus running instance)");
+    println!("  -o, --open FILE...      Open text, Markdown or image files as new notes");
     println!(
         "  -d, --diagnostics       Print desktop, compositor and display server diagnostic report"
     );
@@ -543,8 +544,25 @@ fn main() -> std::process::ExitCode {
         }
     }
 
+    // Files to open as notes ("Open with" passes them after --open).
+    let open_paths: Vec<String> = match args.iter().position(|a| a == "-o" || a == "--open") {
+        Some(index) => betternotes_core::open_files::requested_paths(
+            &args[index + 1..],
+            &std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
+        )
+        .iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect(),
+        None => Vec::new(),
+    };
+
     // Single-instance coordination for GUI launch
     if is_server_running(&socket_path) {
+        if !open_paths.is_empty() {
+            let _ = send_request(&socket_path, &IpcRequest::OpenFiles { paths: open_paths });
+            println!("BetterNotes: opened the files in the running instance.");
+            return std::process::ExitCode::SUCCESS;
+        }
         if args.iter().any(|a| a == "-q" || a == "--quick-capture") {
             let _ = send_request(&socket_path, &IpcRequest::QuickCapture);
             println!("BetterNotes: opened Quick Capture in running instance.");
@@ -594,6 +612,24 @@ fn main() -> std::process::ExitCode {
                     }
                 }
                 res
+            }
+            // Paths from another process: absolute, and not too many. The GUI
+            // checks each file before reading it.
+            IpcRequest::OpenFiles { paths } => {
+                let paths: Vec<String> = paths
+                    .iter()
+                    .filter(|path| Path::new(path).is_absolute())
+                    .take(betternotes_core::open_files::MAX_FILES)
+                    .cloned()
+                    .collect();
+                if paths.is_empty() {
+                    return IpcResponse::err("No absolute file paths to open");
+                }
+                betternotes_core::global_ipc_queue()
+                    .lock()
+                    .unwrap()
+                    .push_back(IpcAction::OpenFiles(paths));
+                IpcResponse::ok_msg("Opening files", None)
             }
             IpcRequest::ArchiveNote { .. } => {
                 let res = betternotes_core::handle_domain_request(&mut store, &req);

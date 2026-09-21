@@ -336,6 +336,13 @@ pub mod ffi {
         #[cxx_name = "clearRecentSearches"]
         fn clear_recent_searches(self: Pin<&mut Self>);
 
+        /// Creates a note from each file (text, Markdown or image) and
+        /// returns the new note ids; files that cannot be opened are skipped
+        /// and reported in errorMessage.
+        #[qinvokable]
+        #[cxx_name = "openFiles"]
+        fn open_files(self: Pin<&mut Self>, paths: QStringList) -> QStringList;
+
         #[qinvokable]
         #[cxx_name = "pollIpcAction"]
         fn poll_ipc_action(self: Pin<&mut Self>) -> QString;
@@ -1300,6 +1307,56 @@ impl ffi::NotesBackend {
         triggered
     }
 
+    pub fn open_files(mut self: Pin<&mut Self>, paths: QStringList) -> QStringList {
+        let paths: Vec<String> = paths.iter().map(|path| path.to_string()).collect();
+        let opened = self.as_mut().open_file_paths(&paths);
+        opened
+            .iter()
+            .map(|id| QString::from(&id.to_string()))
+            .collect()
+    }
+
+    fn open_file_paths(mut self: Pin<&mut Self>, paths: &[String]) -> Vec<i64> {
+        let mut ids = Vec::new();
+        let mut failures = Vec::new();
+        let result = paths::data_directory(
+            std::env::var_os("XDG_DATA_HOME").as_deref(),
+            std::env::var_os("HOME").as_deref(),
+        );
+        if let (Some(session), Ok(data_dir)) = (self.as_mut().rust_mut().session.as_mut(), result) {
+            for path in paths.iter().take(betternotes_core::open_files::MAX_FILES) {
+                match betternotes_core::open_files::note_from_file(
+                    session.store(),
+                    &data_dir,
+                    std::path::Path::new(path),
+                ) {
+                    Ok(id) => ids.push(id),
+                    Err(error) => failures.push(format!(
+                        "{}: {error}",
+                        std::path::Path::new(path)
+                            .file_name()
+                            .map(|name| name.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| path.clone())
+                    )),
+                }
+            }
+        }
+        let result = if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(Error::Ipc(format!(
+                "Could not open {}: {}",
+                failures.len(),
+                failures.join("; ")
+            )))
+        };
+        self.as_mut().perform(false, |session| {
+            session.reload()?;
+            result
+        });
+        ids
+    }
+
     pub fn recent_searches(&self) -> QStringList {
         self.session
             .as_ref()
@@ -1433,6 +1490,13 @@ impl ffi::NotesBackend {
             Some(betternotes_core::IpcAction::Reload) => {
                 self.as_mut().reload();
                 QString::from("reload")
+            }
+            Some(betternotes_core::IpcAction::OpenFiles(paths)) => {
+                let ids = self.as_mut().open_file_paths(&paths);
+                QString::from(&format!(
+                    "opened:{}",
+                    ids.iter().map(i64::to_string).collect::<Vec<_>>().join(",")
+                ))
             }
             Some(betternotes_core::IpcAction::SnoozeReminder(id)) => {
                 let at = std::time::SystemTime::now()

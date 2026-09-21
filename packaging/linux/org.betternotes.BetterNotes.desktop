@@ -3,7 +3,7 @@ Type=Application
 Name=BetterNotes
 GenericName=Sticky Notes
 Comment=Sticky notes for the Linux desktop
-Exec=betternotes
+Exec=betternotes --open %F
 Icon=org.betternotes.BetterNotes
 Terminal=false
 Categories=Utility;
@@ -11,6 +11,7 @@ StartupNotify=true
 StartupWMClass=betternotes
 Keywords=notes;sticky;workspace;markdown;reminders;todo;scratchpad;
 Actions=NewNote;QuickCapture;
+MimeType=text/plain;text/markdown;image/png;image/jpeg;image/gif;image/webp;image/bmp;image/svg+xml;
 
 [Desktop Action NewNote]
 Name=New Note

@@ -5,6 +5,8 @@ pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+        include!("cxx-qt-lib/qstringlist.h");
+        type QStringList = cxx_qt_lib::QStringList;
     }
 
     extern "RustQt" {
@@ -29,6 +31,11 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "startQuickCapture"]
         fn start_quick_capture(&self) -> bool;
+
+        /// Files given with --open when the app started, as absolute paths.
+        #[qinvokable]
+        #[cxx_name = "startFiles"]
+        fn start_files(&self) -> QStringList;
 
         #[qinvokable]
         #[cxx_name = "desktopEnvironment"]
@@ -92,6 +99,20 @@ impl ffi::ApplicationInfo {
 
     pub fn start_in_background(&self) -> bool {
         std::env::args().any(|arg| arg == "--background" || arg == "-b")
+    }
+
+    pub fn start_files(&self) -> cxx_qt_lib::QStringList {
+        let args: Vec<String> = std::env::args().collect();
+        let Some(index) = args.iter().position(|a| a == "-o" || a == "--open") else {
+            return cxx_qt_lib::QStringList::default();
+        };
+        betternotes_core::open_files::requested_paths(
+            &args[index + 1..],
+            &std::env::current_dir().unwrap_or_else(|_| "/".into()),
+        )
+        .iter()
+        .map(|path| cxx_qt_lib::QString::from(path.to_string_lossy().as_ref()))
+        .collect()
     }
 
     pub fn start_quick_capture(&self) -> bool {

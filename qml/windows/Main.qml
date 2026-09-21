@@ -87,6 +87,8 @@ ApplicationWindow {
         if (applicationInfo.startQuickCapture()) {
             openQuickCapture()
         }
+        const files = applicationInfo.startFiles()
+        if (files.length > 0) openNotesFrom(backend.openFiles(files))
     }
     Component.onCompleted: initialize()
 
@@ -125,6 +127,12 @@ ApplicationWindow {
         return sticky
     }
 
+    // Opens the notes made from files ("Open with BetterNotes").
+    function openNotesFrom(ids) {
+        for (let i = 0; i < ids.length; ++i) openNote(ids[i])
+        if (backend.errorMessage.length > 0) showToast(backend.errorMessage)
+    }
+
     function createNote() {
         if (backend.createNote()) return openNote(backend.currentId)
         return null
@@ -151,6 +159,60 @@ ApplicationWindow {
             else if (sticky.visibility === Window.Minimized) sticky.showNormal()
             else if (!sticky.visible) sticky.show()
         }
+    }
+
+    // Lays the open notes out in rows on the library's screen, largest gaps
+    // closed, so notes scattered or lost on the desktop are easy to reach.
+    // X11 lets the app place windows itself; on KDE Plasma under Wayland the
+    // desktop integration moves them; other Wayland desktops allow neither,
+    // so the notes are only brought on screen there.
+    function arrangeNotes() {
+        const ids = Object.keys(noteWindows).sort(function(a, b) { return Number(a) - Number(b) })
+        // Only the notes already open; closed notes stay closed.
+        for (const id of ids) {
+            const sticky = noteWindows[id]
+            if (sticky.visibility === Window.Minimized) sticky.showNormal()
+            else if (!sticky.visible) sticky.show()
+        }
+        if (ids.length === 0) return "none"
+        const direct = applicationInfo.canPositionWindows(Qt.platform.pluginName)
+        const viaDesktop = !direct && placementService.available && applicationInfo.supportsNoteLayers()
+        if (!direct && !viaDesktop) return "unsupported"
+        const area = window.screen
+        const margin = 24
+        const left = area.virtualX + margin
+        const right = area.virtualX + area.width - margin
+        let x = left
+        let y = area.virtualY + 64
+        let rowHeight = 0
+        for (const id of ids) {
+            const sticky = noteWindows[id]
+            const width = sticky.width
+            const height = sticky.height
+            if (x > left && x + width > right) {
+                x = left
+                y += rowHeight + margin
+                rowHeight = 0
+            }
+            if (direct) {
+                sticky.x = x
+                sticky.y = y
+            } else {
+                placementService.track(id, true, x, y)
+                sticky.moveReported(x, y)
+                sticky.arrangeMarker = !sticky.arrangeMarker
+            }
+            x += width + margin
+            rowHeight = Math.max(rowHeight, height)
+        }
+        return "arranged"
+    }
+
+    function arrangeNotesWithFeedback() {
+        const result = arrangeNotes()
+        if (result === "unsupported") showToast(qsTr("This desktop does not let apps arrange windows; the open notes were brought on screen instead."))
+        else if (result === "none") showToast(qsTr("No notes are open on the desktop."))
+        else showToast(qsTr("Notes arranged"))
     }
 
     function hideAllNotes() {
@@ -698,6 +760,13 @@ ApplicationWindow {
                     iconName: "eye"
                     enabled: backend.ready && backend.noteIds.length > 0
                     onClicked: window.showAllNotes()
+                }
+                SidebarItem {
+                    objectName: "arrangeNotesItem"
+                    text: qsTr("Arrange notes")
+                    iconName: "layout-grid"
+                    enabled: window.windowsRevision >= 0 && Object.keys(window.noteWindows).length > 0
+                    onClicked: window.arrangeNotesWithFeedback()
                 }
                 SidebarItem {
                     text: qsTr("Hide all")
@@ -1539,6 +1608,7 @@ ApplicationWindow {
             if (action === "new_note") window.createNote()
             else if (action === "quick_capture") window.openQuickCapture()
             else if (action === "show_all") window.showAllNotes()
+            else if (action === "arrange") window.arrangeNotesWithFeedback()
             else if (action === "hide_all") window.hideAllNotes()
             else if (action === "toggle_theme") {
                 if (backend.themeMode === "system") backend.setThemeMode("light")
@@ -1597,6 +1667,10 @@ ApplicationWindow {
             Platform.MenuItem {
                 text: qsTr("Show all notes")
                 onTriggered: window.showAllNotes()
+            }
+            Platform.MenuItem {
+                text: qsTr("Arrange notes")
+                onTriggered: window.arrangeNotesWithFeedback()
             }
             Platform.MenuItem {
                 text: qsTr("Hide all notes")
@@ -1709,6 +1783,8 @@ ApplicationWindow {
                 } else if (action.startsWith("open:")) {
                     let id = action.substring(5)
                     window.openNote(id)
+                } else if (action.startsWith("opened:")) {
+                    window.openNotesFrom(action.substring(7).split(",").filter(function(id) { return id.length > 0 }))
                 } else if (action.startsWith("snoozed:")) {
                     window.reminderChanged(action.substring(8))
                     window.showToast(qsTr("Reminder snoozed for 10 minutes"))

@@ -27,11 +27,27 @@ pub enum IpcRequest {
     Ping,
     Activate,
     QuickCapture,
-    NewNote { title: String, content: String },
-    ListNotes { include_archived: bool },
-    SearchNotes { query: String },
-    ShowNote { id: i64 },
-    ArchiveNote { id: i64, archived: bool },
+    NewNote {
+        title: String,
+        content: String,
+    },
+    ListNotes {
+        include_archived: bool,
+    },
+    SearchNotes {
+        query: String,
+    },
+    ShowNote {
+        id: i64,
+    },
+    ArchiveNote {
+        id: i64,
+        archived: bool,
+    },
+    /// Files to open as new notes in the running app ("Open with").
+    OpenFiles {
+        paths: Vec<String>,
+    },
 }
 
 /// Standardized IPC response payload.
@@ -79,6 +95,8 @@ pub enum IpcAction {
     Reload,
     /// A reminder notification's Snooze button: remind again in 10 minutes.
     SnoozeReminder(i64),
+    /// Open these files as new notes.
+    OpenFiles(Vec<String>),
 }
 
 pub type SharedIpcQueue = Arc<Mutex<VecDeque<IpcAction>>>;
@@ -225,6 +243,9 @@ pub fn handle_domain_request(store: &mut NoteStore, request: &IpcRequest) -> Ipc
             Err(Error::NotFound(id)) => IpcResponse::err(format!("Note #{id} does not exist")),
             Err(e) => IpcResponse::err(format!("Failed to find note: {e}")),
         },
+        IpcRequest::OpenFiles { .. } => {
+            IpcResponse::err("Opening files needs the running BetterNotes window")
+        }
         IpcRequest::ArchiveNote { id, archived } => match store.get(*id) {
             Ok(mut note) => {
                 note.is_archived = *archived;

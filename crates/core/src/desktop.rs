@@ -287,8 +287,17 @@ function watch(win, isNew) {
         if (isNew) restore(win);
         win.interactiveMoveResizeFinished.connect(function() { report(win); });
     }
+    // "Arrange notes": the app gives each note a new position and flips an
+    // invisible caption marker (U+2062); the flip asks for the position again.
+    var arranged = (win.caption || "").indexOf("\u2062") !== -1;
     win.captionChanged.connect(function() {
-        if (isNote(win)) applyLayer(win);
+        if (!isNote(win)) return;
+        applyLayer(win);
+        var now = (win.caption || "").indexOf("\u2062") !== -1;
+        if (now !== arranged) {
+            arranged = now;
+            restore(win);
+        }
     });
 }
 
