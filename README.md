@@ -89,7 +89,7 @@ sha256sum --check --ignore-missing SHA256SUMS
 Your package must appear with `OK`. Checksums detect damaged or mismatched downloads;
 these packages are not independently signed.
 
-If no release has been published yet, successful
+For builds between releases, successful
 [Packages runs](https://github.com/thebanri/BetterNotes/actions/workflows/packages.yml)
 provide build artifacts (GitHub sign-in required), or you can build locally.
 
@@ -190,8 +190,7 @@ cargo test --locked
 cargo build --release --locked
 ```
 
-See [architecture](docs/architecture.md), [contributing](CONTRIBUTING.md),
-[release procedure](docs/releasing.md), [packaging validation](docs/phase-10-validation.md)
+See [contributing](CONTRIBUTING.md), [packaging](packaging/linux/README.md)
 and [security reporting](SECURITY.md).
 
 ## License

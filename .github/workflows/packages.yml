@@ -10,7 +10,6 @@ on:
       - 'packaging/**'
       - '.github/workflows/packages.yml'
       - '.github/workflows/ci.yml'
-      - 'docs/release-notes.md'
   workflow_dispatch:
 
 permissions:
@@ -275,7 +274,22 @@ jobs:
       - uses: softprops/action-gh-release@v3
         with:
           name: BetterNotes v${{ needs.prepare.outputs.version }}
-          body_path: docs/release-notes.md
+          body: |
+            Linux preview of BetterNotes: independent sticky windows, autosave,
+            rich text, search, tags, themes, reminders, attachments, import/export,
+            backups and a CLI. Notes stay on your machine without an account.
+
+            **Downloads (x86_64 / amd64):** Debian `.deb`, Fedora `.rpm`,
+            Arch `.pkg.tar.zst`, portable `.AppImage`, and a `.flatpak` bundle.
+            The source archive and `SHA256SUMS` are included below.
+
+            Download your package and `SHA256SUMS` together, then run
+            `sha256sum --check --ignore-missing SHA256SUMS` and confirm `OK`.
+
+            See the [README](https://github.com/thebanri/BetterNotes#install)
+            for installation and desktop limitations. Flatpak currently lacks
+            host KWin integration and working host autostart. Desktop-wide Quick
+            Capture needs a custom shortcut; reminders need the app running.
           prerelease: ${{ startsWith(needs.prepare.outputs.version, '0.') }}
           fail_on_unmatched_files: true
           files: |

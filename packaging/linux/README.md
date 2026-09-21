@@ -20,9 +20,10 @@ and no session bus, and fails if any QML module or plugin is missing. CI runs
 it against the native packages and AppImage on clean systems. Flatpak currently
 has build coverage only; its GUI and sandbox integration need manual testing.
 
-For tagged publication, checksums and release notes, see the
-[release procedure](../../docs/releasing.md). A manual workflow run on `main`
-uploads Actions artifacts but does not publish a GitHub Release.
+Pushing a `vMAJOR.MINOR.PATCH` tag matching `Cargo.toml` publishes a GitHub Release
+after CI and package checks pass. All five formats, a source archive and
+`SHA256SUMS` are attached; `0.x` versions are marked as prereleases. A manual
+workflow run on `main` uploads Actions artifacts but does not publish a release.
 
 ## Formats
 
