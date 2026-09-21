@@ -7,6 +7,8 @@ fn main() {
         .cpp_file("src/platform_helper.cpp")
         .cpp_file("src/text_formatter.h")
         .cpp_file("src/text_formatter.cpp")
+        .cpp_file("src/language_support.h")
+        .cpp_file("src/language_support.cpp")
         .cpp_file("src/key_sequences.h")
         .cpp_file("src/key_sequences.cpp")
         .cpp_file("src/image_animator.h")

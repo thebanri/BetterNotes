@@ -17,6 +17,8 @@
         <file>components/Reminders.js</file>
         <file>components/ImagePreview.qml</file>
         <file>components/PasswordDialog.qml</file>
+        <file>windows/i18n/qml_tr.qm</file>
+        <file>windows/i18n/qml_en.qm</file>
         <file alias="icons/app-16.png">../assets/icons/hicolor/org.betternotes.BetterNotes-16.png</file>
         <file alias="icons/app-22.png">../assets/icons/hicolor/org.betternotes.BetterNotes-22.png</file>
         <file alias="icons/app-24.png">../assets/icons/hicolor/org.betternotes.BetterNotes-24.png</file>

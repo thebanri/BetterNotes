@@ -121,3 +121,19 @@ QString platformClipboardImageUrls() {
     }
     return urls.join(u'\n');
 }
+
+// Puts an image file on the clipboard as a picture, so other apps can paste
+// it, together with its file URL for file managers.
+bool platformCopyImageFile(const QString& path) {
+    auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
+    if (!app || !app->clipboard())
+        return false;
+    const QImage image(path);
+    if (image.isNull())
+        return false;
+    auto *data = new QMimeData;
+    data->setImageData(image);
+    data->setUrls({QUrl::fromLocalFile(path)});
+    app->clipboard()->setMimeData(data);
+    return true;
+}

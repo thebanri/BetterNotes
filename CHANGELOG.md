@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Reminder notifications have **Open note** and **Snooze 10 min** buttons (snooze is offered for one-time reminders), where the desktop's notification service supports buttons.
 - A note's title bar shows its reminder; click it to edit.
+- The interface is available in **Turkish** as well as English, following the desktop's language or chosen in Settings; switching needs no restart. Qt's own dialog buttons follow when the system has Qt's translations. Some error messages from the core are still English.
 - **Locked notes**: lock a note with one master password (from its ⋯ menu or its card). Its text is encrypted (XChaCha20-Poly1305 with an Argon2id-derived key) and left out of search and previews; it opens only after the password is entered, and **Lock Now** in Settings closes it again. Titles, attached files and images are not encrypted, and a forgotten password cannot be recovered. Exports and backups keep locked text encrypted.
 - Two more themes, **Sepia** (warm paper) and **Black** (pure black for OLED screens), and a choice of accent colour. Theme and accent changes reach open notes at once.
 - Keyboard shortcuts can be changed in Settings: click one, press the new keys. Shortcuts that clash within the library or within a note are refused, and **Reset All** restores the defaults. Tooltips show the current keys.
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Find and replace in a note (Ctrl+F / Ctrl+H) with match counts, match case, replace and replace all.
 - A **⋯** toolbar menu with paragraph alignment (left, center, right, justify; also Ctrl+Shift+L/E/R/J), find and replace, and the note's word and character count (or the selection's).
 - Paste images with Ctrl+V: a screenshot or copied picture, or image files copied in a file manager.
+- **Copy Image** in an image's right-click menu puts the picture on the clipboard, ready to paste into other apps.
 - Right-click an image to align it or view it full size; double-clicking an image also opens it full size, with GIFs playing.
 - Code blocks have a copy button.
 - Attach any file to a note (**⋯ → Attach File…**, or drop it on the note). Attached files show under the text; double-click to open, or save or remove them from their menu. Programs, scripts and launchers are never opened from a note, only saved, and attachments are stored without execute permission.
@@ -36,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backups are written under a temporary name and renamed when complete, so an interrupted backup never looks finished, and a backup folder whose path contains a quote no longer breaks the backup.
 - The search field and other text fields show their placeholder hint; the library search box read as empty before.
 - The tag field's hint is no longer cut off.
+- English texts with a count read naturally ("1 day", "2 days") instead of "day(s)".
 
 ## [0.1.3] - 2026-09-21
 

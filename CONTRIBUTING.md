@@ -66,3 +66,12 @@ We follow Conventional Commits:
 2. Keep commits atomic and focused.
 3. Ensure all tests pass and formatting conforms to `cargo fmt`.
 4. Document any new desktop/compositor interactions or limitations.
+
+## Translations
+
+Interface texts are marked with `qsTr()` in QML. After adding or changing
+texts, run `translations/update.sh` (needs Qt's `lupdate` and `lrelease`),
+translate the new entries in `translations/qml_<lang>.ts` (Qt Linguist, or by
+hand), and run the script again. It rebuilds `qml/windows/i18n/qml_<lang>.qm`,
+which the app embeds. `qml_en.ts` holds only English plural forms, so write
+texts with a count as `qsTr("%n note(s)", "", count)`.

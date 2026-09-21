@@ -46,6 +46,16 @@ ApplicationWindow {
 
     Themes.Theme { id: theme; themeMode: backend.themeMode; accentColor: backend.accentColor }
     KeySequences { id: keySequences }
+    LanguageSupport { id: languageSupport }
+
+    // Applies the chosen interface language; the engine retranslates every
+    // window when Qt.uiLanguage changes.
+    function applyLanguage() {
+        const language = backend.language === "system" || !backend.language
+            ? languageSupport.systemLanguage() : backend.language
+        languageSupport.apply(language)
+        Qt.uiLanguage = language
+    }
     // Configurable shortcuts {action: sequence}, shared with the note windows.
     readonly property var keys: {
         try {
@@ -93,6 +103,7 @@ ApplicationWindow {
 
     function initialize() {
         if (!backend.initialize()) return
+        applyLanguage()
         backend.runAutoBackup()
         backend.setReminderTexts(qsTr("Reminder from BetterNotes"), qsTr("Open note"), qsTr("Snooze 10 min"))
         const ids = backend.restoreIds
@@ -1612,6 +1623,36 @@ ApplicationWindow {
                             variant: backend.themeMode === modelData.mode ? "accent" : "secondary"
                             implicitHeight: 32
                             onClicked: backend.setThemeMode(modelData.mode)
+                        }
+                    }
+                }
+
+                Label {
+                    text: qsTr("Language")
+                    font.pixelSize: 12
+                    color: theme.textSecondary
+                    Layout.topMargin: 4
+                }
+                Flow {
+                    objectName: "languageChoice"
+                    spacing: 6
+                    Layout.fillWidth: true
+                    Repeater {
+                        // Language names are written in their own language.
+                        model: [
+                            {code: "system", label: qsTr("System")},
+                            {code: "en", label: "English"},
+                            {code: "tr", label: "Türkçe"}
+                        ]
+                        delegate: UI.StyledButton {
+                            required property var modelData
+                            text: modelData.label
+                            theme: window.theme
+                            variant: backend.language === modelData.code ? "accent" : "secondary"
+                            implicitHeight: 32
+                            onClicked: {
+                                if (backend.setLanguage(modelData.code)) window.applyLanguage()
+                            }
                         }
                     }
                 }

@@ -26,6 +26,7 @@ an account or a cloud service. Notes stay on your machine.
 - JSON/Markdown import and export, database and attachment backups, and restore.
 - A CLI sharing the Rust core with the GUI, plus local single-instance IPC.
 - Locked notes: encrypt a note's text with a master password (see below).
+- English and Turkish interface.
 - Offline use without accounts, telemetry or a remote server.
 
 Desktop integration depends on the session and package format; see

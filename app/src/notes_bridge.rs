@@ -21,6 +21,7 @@ pub mod ffi {
         fn platformPicturesFolder() -> QString;
         fn platformDocumentsFolder() -> QString;
         fn platformClipboardImageToFile() -> QString;
+        fn platformCopyImageFile(path: &QString) -> bool;
         fn platformClipboardImageUrls() -> QString;
     }
     extern "RustQt" {
@@ -63,6 +64,8 @@ pub mod ffi {
         #[qproperty(bool, autostart_enabled, READ, NOTIFY = autostart_changed, cxx_name = "autostartEnabled")]
         #[qproperty(bool, notes_stay_below, READ, NOTIFY = layer_changed, cxx_name = "notesStayBelow")]
         #[qproperty(QString, accent_color, READ, NOTIFY = theme_changed, cxx_name = "accentColor")]
+        /// "system", "en" or "tr".
+        #[qproperty(QString, language, READ, NOTIFY = theme_changed)]
         /// Per listed note: "true" when its content is locked.
         #[qproperty(QStringList, locked_states, READ, NOTIFY = list_changed, cxx_name = "lockedStates")]
         /// The selected note is locked.
@@ -246,6 +249,10 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "attachmentOpenUrl"]
         fn attachment_open_url(&self, id: QString) -> QString;
+        /// Copies a note image (file URL) to the clipboard as a picture.
+        #[qinvokable]
+        #[cxx_name = "copyImage"]
+        fn copy_image(&self, image_url: QString) -> bool;
         #[qinvokable]
         #[cxx_name = "pasteClipboardImage"]
         fn paste_clipboard_image(self: Pin<&mut Self>) -> QString;
@@ -405,6 +412,9 @@ pub mod ffi {
         fn refresh_state(self: Pin<&mut Self>);
 
         #[qinvokable]
+        #[cxx_name = "setLanguage"]
+        fn set_language(self: Pin<&mut Self>, language: QString) -> bool;
+        #[qinvokable]
         #[cxx_name = "setAccentColor"]
         fn set_accent_color(self: Pin<&mut Self>, color: QString) -> bool;
         /// Sets a shortcut; returns "" or why it was refused.
@@ -448,6 +458,7 @@ pub struct NotesBackendRust {
     note_colors: QStringList,
     note_reminders: QStringList,
     accent_color: QString,
+    language: QString,
     locked_states: QStringList,
     is_locked: bool,
     vault_set: bool,
@@ -496,6 +507,7 @@ impl Default for NotesBackendRust {
             note_colors: QStringList::default(),
             note_reminders: QStringList::default(),
             accent_color: QString::from(betternotes_core::settings::DEFAULT_ACCENT),
+            language: QString::from("system"),
             locked_states: QStringList::default(),
             is_locked: false,
             vault_set: false,
@@ -801,6 +813,10 @@ impl ffi::NotesBackend {
                     .store()
                     .accent_color()
                     .unwrap_or_else(|_| betternotes_core::settings::DEFAULT_ACCENT.to_string());
+                let language = session
+                    .store()
+                    .language()
+                    .unwrap_or_else(|_| "system".to_string());
                 let locked_states = session
                     .summaries()
                     .iter()
@@ -841,6 +857,7 @@ impl ffi::NotesBackend {
                 state.autostart_enabled = autostart_enabled;
                 state.notes_stay_below = notes_stay_below;
                 state.accent_color = QString::from(&accent_color);
+                state.language = QString::from(&language);
                 state.locked_states = locked_states;
                 state.is_locked = is_locked;
                 state.vault_set = vault_set;
@@ -1267,6 +1284,15 @@ impl ffi::NotesBackend {
             .unwrap_or_default()
     }
 
+    pub fn copy_image(&self, image_url: QString) -> bool {
+        // Only local files: a note's content must not make the app fetch
+        // anything from the network.
+        match QUrl::from(&image_url).to_local_file() {
+            Some(path) => ffi::platformCopyImageFile(&path),
+            None => false,
+        }
+    }
+
     pub fn paste_clipboard_image(self: Pin<&mut Self>) -> QString {
         let path = ffi::platformClipboardImageToFile().to_string();
         if path.is_empty() {
@@ -1606,6 +1632,12 @@ impl ffi::NotesBackend {
 
     pub fn refresh_state(self: Pin<&mut Self>) {
         self.finish(Ok(()), false);
+    }
+
+    pub fn set_language(self: Pin<&mut Self>, language: QString) -> bool {
+        self.perform(false, |session| {
+            session.store().set_language(&language.to_string())
+        })
     }
 
     pub fn set_accent_color(self: Pin<&mut Self>, color: QString) -> bool {

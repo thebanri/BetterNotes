@@ -563,6 +563,23 @@ Window {
         check(sticky.deleteConfirmed(), "Could not clean up the locked note")
     }
 
+    // The interface switches to Turkish and back without a restart.
+    function assertLanguage(library) {
+        const backend = library.libraryBackend
+        check(backend.setLanguage("tr"), "Choosing Turkish failed")
+        library.applyLanguage()
+        check(library.sectionTitle === "Tüm notlar", "The library did not switch to Turkish: " + library.sectionTitle)
+        check(qsTranslate("NoteCard", "Deleted %n day(s) ago", "", 3) === "3 gün önce silindi", "Turkish plural form missing")
+        check(!backend.setLanguage("klingon"), "An unknown language was accepted")
+        check(backend.setLanguage("en"), "Choosing English failed")
+        library.applyLanguage()
+        check(library.sectionTitle === "All notes", "The library did not switch back to English")
+        check(qsTranslate("NoteCard", "Deleted %n day(s) ago", "", 1) === "Deleted 1 day ago", "English singular form missing")
+        check(qsTranslate("NoteCard", "Deleted %n day(s) ago", "", 2) === "Deleted 2 days ago", "English plural form missing")
+        check(backend.setLanguage("system"), "Choosing the system language failed")
+        library.applyLanguage()
+    }
+
     // A reminder set on a note shows in the library, can be edited there and
     // fires once when due.
     function assertReminders(library, note) {
@@ -756,6 +773,9 @@ Window {
         const stored = formatter.imageAt(body.textDocument, position).name
         check(backend.imageFileName(stored) === "still.png", "Save did not suggest the original file name")
         check(backend.saveImageAs(stored, fixtures + "saved.png"), "Saving the image failed")
+        check(window.copySelectedImage(), "Copy Image failed")
+        check(backend.clipboardFileUrls().indexOf("attachments/") >= 0, "The copied image is not on the clipboard")
+        check(!backend.copyImage("https://example.com/x.png"), "Copied a remote image")
         check(!backend.saveImageAs(stored, "https://example.com/x.png"), "Saved to a non-local URL")
 
         check(window.insertImages([fixtures + "animated.gif"], body.length) === 1, "GIF insert failed")
@@ -871,6 +891,7 @@ Window {
                 harness.assertBackups(harness.library)
                 harness.assertAppearanceAndShortcuts(harness.library)
                 harness.assertLockedNotes(harness.library)
+                harness.assertLanguage(harness.library)
                 const extras = harness.library.createNote()
                 harness.assertEditorExtras(extras)
                 harness.check(extras.deleteConfirmed(), "Editor extras note could not be deleted")

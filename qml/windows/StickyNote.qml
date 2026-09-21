@@ -1227,8 +1227,19 @@ ApplicationWindow {
         if (source) imagePreview.show(source, backend.imageFileName(source))
     }
 
+    function copySelectedImage() {
+        if (selectedImage < 0) return false
+        const source = formatter.imageAt(contentEditor.textDocument, selectedImage).name
+        return !!source && backend.copyImage(source)
+    }
+
     Menu {
         id: imageMenu
+        MenuItem {
+            objectName: "copyImageItem"
+            text: qsTr("Copy Image")
+            onTriggered: noteWindow.copySelectedImage()
+        }
         MenuItem {
             text: qsTr("View Full Size")
             onTriggered: noteWindow.previewSelectedImage()
@@ -2357,6 +2368,8 @@ ApplicationWindow {
         id: removeAttachmentDialog
         property var attachment: ({})
         anchors.centerIn: parent
+        // Fixed, so retranslating its buttons cannot resize it in a loop.
+        implicitWidth: Math.min(340, noteWindow.width - 24)
         title: qsTr("Remove this file?")
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
@@ -2374,6 +2387,8 @@ ApplicationWindow {
     Dialog {
         id: deleteDialog
         anchors.centerIn: parent
+        // Fixed, so retranslating its buttons cannot resize it in a loop.
+        implicitWidth: Math.min(340, noteWindow.width - 24)
         title: qsTr("Move this note to the trash?")
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
@@ -2383,6 +2398,8 @@ ApplicationWindow {
     Dialog {
         id: discardDialog
         anchors.centerIn: parent
+        // Fixed, so retranslating its buttons cannot resize it in a loop.
+        implicitWidth: Math.min(340, noteWindow.width - 24)
         title: qsTr("Discard changes and close?")
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
@@ -2400,6 +2417,8 @@ ApplicationWindow {
     Dialog {
         id: reloadDialog
         anchors.centerIn: parent
+        // Fixed, so retranslating its buttons cannot resize it in a loop.
+        implicitWidth: Math.min(340, noteWindow.width - 24)
         title: qsTr("Discard unsaved changes?")
         modal: true
         standardButtons: Dialog.Yes | Dialog.No

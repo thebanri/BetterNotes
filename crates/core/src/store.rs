@@ -466,6 +466,26 @@ impl NoteStore {
         self.set_setting(NOTES_STAY_BELOW_KEY, if enabled { "true" } else { "false" })
     }
 
+    /// The interface language: "system", "en" or "tr".
+    pub fn language(&self) -> Result<String> {
+        Ok(match self.get_setting("language")?.as_deref() {
+            Some("en") => "en",
+            Some("tr") => "tr",
+            _ => "system",
+        }
+        .to_string())
+    }
+
+    pub fn set_language(&self, language: &str) -> Result<()> {
+        if !["system", "en", "tr"].contains(&language) {
+            return Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Unknown language",
+            )));
+        }
+        self.set_setting("language", language)
+    }
+
     /// The chosen accent colour ("#rrggbb").
     pub fn accent_color(&self) -> Result<String> {
         Ok(self

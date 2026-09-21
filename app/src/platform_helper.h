@@ -9,4 +9,5 @@ bool platformSetApplicationIcon();
 QString platformPicturesFolder();
 QString platformDocumentsFolder();
 QString platformClipboardImageToFile();
+bool platformCopyImageFile(const QString& path);
 QString platformClipboardImageUrls();
