@@ -13,9 +13,11 @@ finish-args:
   - --device=dri
   # Desktop notifications for reminders.
   - --talk-name=org.freedesktop.Notifications
-  # System tray icon (StatusNotifierItem).
+  # System tray icon (StatusNotifierItem). Qt names its item
+  # org.kde.StatusNotifierItem-<pid>-<n>, which no own-name wildcard can
+  # express short of all of org.kde.*; without it the item registers with
+  # the watcher under the connection's unique name.
   - --talk-name=org.kde.StatusNotifierWatcher
-  - --own-name=org.kde.StatusNotifierItem-*
   # The app's own bus name (org.betternotes.BetterNotes) needs no permission.
 
 build-options:

@@ -15,4 +15,6 @@ installer, so they run on distributions from 2022 onwards. A build against a
 distribution's own Qt can pull in that distribution's extra Qt plugins, which
 is why releases use the upstream Qt.
 
+The host provides the graphics driver libraries (libEGL, libGL) and
+fontconfig, as every desktop system does; AppImages never bundle those.
 Run without FUSE with `APPIMAGE_EXTRACT_AND_RUN=1`.

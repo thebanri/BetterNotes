@@ -170,6 +170,12 @@ jobs:
         with:
           name: appimage
           path: dist
+      - name: Install what every desktop has
+        # AppImages leave out the graphics driver libraries on purpose; the
+        # headless runner lacks them, unlike any desktop system.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libopengl0 libfontconfig1
       - run: |
           chmod +x dist/*.AppImage
           packaging/linux/smoke-test.sh "$(ls "$PWD"/dist/*.AppImage)"

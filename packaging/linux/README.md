@@ -41,7 +41,8 @@ where they were left, through a KWin script it loads over D-Bus with `busctl`.
 - **Flatpak: not yet.** The sandbox has no `busctl`, so the KWin script is not
   loaded: notes appear in the taskbar, stay ordinary windows and are placed by
   KWin. "Start at login" also writes inside the sandbox, where the desktop
-  never reads it; it needs the Background portal instead.
+  never reads it; it needs the Background portal instead. The tray icon
+  registers without owning a well-known bus name there, which is untested.
 
 ## Flathub
 
