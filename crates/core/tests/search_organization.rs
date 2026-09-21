@@ -142,3 +142,95 @@ fn tags_priorities_pinning_and_archiving() {
     assert!(session.search("Critical").unwrap().is_empty());
     assert!(session.search("bug").unwrap().is_empty());
 }
+
+#[test]
+fn search_matches_text_not_markup_and_marks_matches() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("notes.sqlite3");
+    let mut session = NotesSession::open(&path).unwrap();
+
+    session.create().unwrap();
+    session.edit_title("Rich".to_string());
+    session.edit_content(
+        "<html><body><p style=\"margin-top:0px; text-indent:0px;\">GIF ler oynamıyor, resim seçme</p></body></html>"
+            .to_string(),
+    );
+    session.save().unwrap();
+
+    // Formatting is not text: nothing matches the markup.
+    assert!(session.search("margin").unwrap().is_empty());
+    assert!(session.search("indent").unwrap().is_empty());
+    let results = session.search("oynamıyor").unwrap();
+    assert_eq!(results.len(), 1);
+    assert!(!results[0].snippet.contains('<') && !results[0].snippet.contains("style"));
+    assert!(results[0].snippet.contains("\u{E000}oynamıyor\u{E001}"));
+}
+
+#[test]
+fn upgrade_to_v6_reindexes_existing_notes_as_plain_text() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("notes.sqlite3");
+    let connection = Connection::open(&path).unwrap();
+    for schema in [
+        include_str!("../../../migrations/0001_notes.sql"),
+        include_str!("../../../migrations/0002_note_windows.sql"),
+        include_str!("../../../migrations/0003_settings.sql"),
+        include_str!("../../../migrations/0004_search_and_organization.sql"),
+        include_str!("../../../migrations/0005_productivity.sql"),
+    ] {
+        connection.execute_batch(schema).unwrap();
+    }
+    connection
+        .execute_batch(
+            "INSERT INTO notes (title, content, created_at, updated_at)
+             VALUES ('Old', '<p style=\"text-indent:0px\">kept words</p>', 1000, 2000);
+             PRAGMA application_id = 0x424e4f54;
+             PRAGMA user_version = 5;",
+        )
+        .unwrap();
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT count(*) FROM notes_fts WHERE notes_fts MATCH 'indent'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+        1,
+        "the old index held markup"
+    );
+    drop(connection);
+
+    let store = NoteStore::open(&path).unwrap();
+    assert!(store.search("indent").unwrap().is_empty());
+    assert_eq!(store.search("kept").unwrap().len(), 1);
+    assert_eq!(
+        store.get(1).unwrap().content,
+        "<p style=\"text-indent:0px\">kept words</p>"
+    );
+    let version: i64 = Connection::open(&path)
+        .unwrap()
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 6);
+}
+
+#[test]
+fn recent_searches_are_newest_first_unique_and_bounded() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = NoteStore::open(&directory.path().join("notes.sqlite3")).unwrap();
+    assert!(store.recent_searches().unwrap().is_empty());
+    store.remember_search("  rust   wayland ").unwrap();
+    store.remember_search("").unwrap();
+    store.remember_search("nginx").unwrap();
+    store.remember_search("Rust Wayland").unwrap();
+    assert_eq!(store.recent_searches().unwrap(), ["Rust Wayland", "nginx"]);
+    for i in 0..20 {
+        store.remember_search(&format!("query {i}")).unwrap();
+    }
+    let recent = store.recent_searches().unwrap();
+    assert_eq!(recent.len(), betternotes_core::RECENT_SEARCH_LIMIT);
+    assert_eq!(recent[0], "query 19");
+    store.clear_recent_searches().unwrap();
+    assert!(store.recent_searches().unwrap().is_empty());
+}

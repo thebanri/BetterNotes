@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Export asks where to save (a JSON file, or a folder for Markdown), and **Import notes** in the command palette adds notes from JSON exports or Markdown files.
+- The library remembers recent searches and offers them in the empty search field.
+- Search results highlight where the searched words appear.
 - Code blocks: type ``` (optionally with a language name) at the start of a line and press Enter to start one; Enter continues it and ``` on a line of its own ends it. A toolbar button turns selected lines into code and back. Code is monospace in a grey box and survives saving and reopening.
+
+### Fixed
+- Search matches the text of notes instead of their HTML: searching for words like "indent" no longer finds every formatted note, and result previews no longer show markup such as `text-indent:0px;">`. Existing notes are reindexed on first start.
+- Export no longer writes into the directory BetterNotes was started from.
+- The search field and other text fields show their placeholder hint; the library search box read as empty before.
 
 ## [0.1.3] - 2026-09-21
 

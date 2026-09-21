@@ -73,3 +73,10 @@ QString platformPicturesFolder() {
                QStandardPaths::writableLocation(QStandardPaths::PicturesLocation))
         .toString();
 }
+
+// The user's Documents folder as a file URL, where exports are offered.
+QString platformDocumentsFolder() {
+    return QUrl::fromLocalFile(
+               QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation))
+        .toString();
+}

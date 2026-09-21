@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import Qt.labs.platform as Platform
 import BetterNotes.App
 import "../themes" as Themes
@@ -300,6 +301,8 @@ ApplicationWindow {
     function noteAction(id, action) {
         const sticky = noteWindows[id]
         if (action === "open") {
+            // Opening a result is what makes a search worth remembering.
+            if (searchFilter.length > 0) backend.rememberSearch(searchFilter)
             openNote(id)
         } else if (action === "locate") {
             openNote(id, true)
@@ -640,7 +643,7 @@ ApplicationWindow {
                         Layout.preferredHeight: 36
                         leftPadding: 34
                         rightPadding: 32
-                        placeholderText: qsTr("Search notes…")
+                        placeholderText: qsTr("Search all notes: titles, text and tags")
                         // Typing in the library searches straight away.
                         focus: true
                         Accessible.name: qsTr("Search notes")
@@ -658,6 +661,88 @@ ApplicationWindow {
                         }
                         Keys.onEscapePressed: clear()
                         Keys.onDownPressed: noteGrid.forceActiveFocus()
+                        onAccepted: if (window.searchFilter.length > 0) backend.rememberSearch(window.searchFilter)
+                        onActiveFocusChanged: if (activeFocus && text.length === 0) recentSearches.refresh()
+
+                        // Recent searches, offered while the field is empty.
+                        Popup {
+                            id: recentSearches
+                            objectName: "recentSearches"
+                            property var items: []
+                            function refresh() {
+                                items = backend.recentSearches()
+                                if (items.length > 0) open()
+                            }
+                            y: searchField.height + 4
+                            width: searchField.width
+                            padding: 4
+                            visible: false
+                            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+                            background: Rectangle {
+                                radius: 10
+                                color: theme.surface
+                                border.width: 1
+                                border.color: theme.border
+                            }
+                            Connections {
+                                target: searchField
+                                function onTextChanged() { if (searchField.text.length > 0) recentSearches.close() }
+                            }
+                            contentItem: ColumnLayout {
+                                spacing: 0
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: 8
+                                    Label {
+                                        text: qsTr("Recent searches")
+                                        font.pixelSize: 11
+                                        color: theme.textMuted
+                                        Layout.fillWidth: true
+                                    }
+                                    UI.StyledButton {
+                                        text: qsTr("Clear")
+                                        theme: window.theme
+                                        variant: "ghost"
+                                        font.pixelSize: 11
+                                        implicitHeight: 24
+                                        focusPolicy: Qt.NoFocus
+                                        onClicked: {
+                                            backend.clearRecentSearches()
+                                            recentSearches.close()
+                                        }
+                                    }
+                                }
+                                Repeater {
+                                    model: recentSearches.items
+                                    delegate: ItemDelegate {
+                                        required property string modelData
+                                        Layout.fillWidth: true
+                                        implicitHeight: 30
+                                        focusPolicy: Qt.NoFocus
+                                        contentItem: RowLayout {
+                                            spacing: 8
+                                            UI.AppIcon { name: "clock"; size: 13; color: theme.textMuted }
+                                            Label {
+                                                text: parent.parent.modelData
+                                                textFormat: Text.PlainText
+                                                elide: Text.ElideRight
+                                                color: theme.textPrimary
+                                                font.pixelSize: 13
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                        background: Rectangle {
+                                            radius: 6
+                                            color: parent.hovered ? theme.surfaceHover : "transparent"
+                                        }
+                                        onClicked: {
+                                            recentSearches.close()
+                                            searchField.text = modelData
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         UI.AppIcon {
                             name: "search"
@@ -1105,6 +1190,61 @@ ApplicationWindow {
         }
     }
 
+    // ---- Export and import --------------------------------------------------
+
+    function fileName(url) {
+        return decodeURIComponent(url.toString().replace(/^.*\//, ""))
+    }
+
+    FileDialog {
+        id: exportJsonDialog
+        title: qsTr("Export Notes")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+        nameFilters: [qsTr("JSON files (*.json)")]
+        currentFolder: backend.documentsFolder()
+        selectedFile: currentFolder + "/betternotes-notes.json"
+        onAccepted: {
+            if (backend.exportNotesJson(selectedFile.toString())) {
+                window.showToast(qsTr("Notes exported to %1").arg(window.fileName(selectedFile)))
+            } else {
+                window.showToast(qsTr("Export failed: %1").arg(backend.errorMessage))
+            }
+        }
+    }
+
+    FolderDialog {
+        id: exportMarkdownDialog
+        title: qsTr("Export Notes as Markdown — choose a folder")
+        onAccepted: {
+            if (backend.exportNotesMarkdown(selectedFolder.toString())) {
+                window.showToast(qsTr("Notes exported to %1").arg(window.fileName(selectedFolder)))
+            } else {
+                window.showToast(qsTr("Export failed: %1").arg(backend.errorMessage))
+            }
+        }
+    }
+
+    FileDialog {
+        id: importDialog
+        title: qsTr("Import Notes")
+        fileMode: FileDialog.OpenFiles
+        nameFilters: [qsTr("BetterNotes exports and Markdown (*.json *.md *.markdown *.txt)")]
+        onAccepted: {
+            let imported = 0
+            const failed = []
+            for (let i = 0; i < selectedFiles.length; ++i) {
+                const url = selectedFiles[i].toString()
+                const count = /\.json$/i.test(url) ? backend.importNotesJson(url) : backend.importNoteMarkdown(url)
+                if (count < 0) failed.push(window.fileName(url) + ": " + backend.errorMessage)
+                else imported += count
+            }
+            backend.reload()
+            if (failed.length > 0) window.showToast(qsTr("Imported %1 notes; could not import %2").arg(imported).arg(failed.join("; ")))
+            else window.showToast(qsTr("Imported %1 notes").arg(imported))
+        }
+    }
+
     UI.ReminderEditor {
         id: reminderEditor
         objectName: "libraryReminderEditor"
@@ -1140,14 +1280,9 @@ ApplicationWindow {
                 else backend.setThemeMode("system")
             }
             else if (action === "diagnostics") diagnosticsDialog.open()
-            else if (action === "export_json") {
-                backend.exportNotesJson("betternotes_export.json")
-                backend.sendNotification(qsTr("Export complete"), qsTr("Notes exported to betternotes_export.json"))
-            }
-            else if (action === "export_markdown") {
-                backend.exportNotesMarkdown("betternotes_markdown_export")
-                backend.sendNotification(qsTr("Export complete"), qsTr("Notes exported to betternotes_markdown_export"))
-            }
+            else if (action === "export_json") exportJsonDialog.open()
+            else if (action === "export_markdown") exportMarkdownDialog.open()
+            else if (action === "import") importDialog.open()
         }
     }
 
@@ -1224,10 +1359,11 @@ ApplicationWindow {
                 }
             }
             Platform.MenuItem {
-                text: qsTr("Export notes (JSON)")
+                text: qsTr("Export notes…")
                 onTriggered: {
-                    backend.exportNotesJson("betternotes_export.json")
-                    backend.sendNotification(qsTr("Export complete"), qsTr("Notes exported to betternotes_export.json"))
+                    window.showNormal()
+                    window.requestActivate()
+                    exportJsonDialog.open()
                 }
             }
             Platform.MenuSeparator {}

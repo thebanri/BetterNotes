@@ -19,6 +19,7 @@ pub mod ffi {
         fn platformCursorGlobalY() -> i32;
         fn platformSetApplicationIcon() -> bool;
         fn platformPicturesFolder() -> QString;
+        fn platformDocumentsFolder() -> QString;
     }
     extern "RustQt" {
         #[qobject]
@@ -194,6 +195,9 @@ pub mod ffi {
         #[cxx_name = "picturesFolder"]
         fn pictures_folder(&self) -> QString;
         #[qinvokable]
+        #[cxx_name = "documentsFolder"]
+        fn documents_folder(&self) -> QString;
+        #[qinvokable]
         #[cxx_name = "attachImage"]
         fn attach_image(self: Pin<&mut Self>, file_url: QString) -> QString;
         #[qinvokable]
@@ -262,9 +266,30 @@ pub mod ffi {
         #[cxx_name = "importNoteMarkdown"]
         fn import_note_markdown(self: Pin<&mut Self>, file_path: QString) -> i32;
 
+        /// Recent library searches, newest first.
+        #[qinvokable]
+        #[cxx_name = "recentSearches"]
+        fn recent_searches(&self) -> QStringList;
+
+        #[qinvokable]
+        #[cxx_name = "rememberSearch"]
+        fn remember_search(self: Pin<&mut Self>, query: QString);
+
+        #[qinvokable]
+        #[cxx_name = "clearRecentSearches"]
+        fn clear_recent_searches(self: Pin<&mut Self>);
+
         #[qinvokable]
         #[cxx_name = "pollIpcAction"]
         fn poll_ipc_action(self: Pin<&mut Self>) -> QString;
+    }
+}
+
+/// A path from QML, which passes file dialog results as file URLs.
+fn local_path(path_or_url: &QString) -> String {
+    match QUrl::from(path_or_url).to_local_file() {
+        Some(path) if path_or_url.to_string().starts_with("file:") => path.to_string(),
+        _ => path_or_url.to_string(),
     }
 }
 
@@ -889,6 +914,10 @@ impl ffi::NotesBackend {
         ffi::platformPicturesFolder()
     }
 
+    pub fn documents_folder(&self) -> QString {
+        ffi::platformDocumentsFolder()
+    }
+
     pub fn attach_image(mut self: Pin<&mut Self>, file_url: QString) -> QString {
         // Dropped and chosen files arrive as percent-encoded file URLs.
         let url = QUrl::from(&file_url);
@@ -1005,6 +1034,30 @@ impl ffi::NotesBackend {
         triggered
     }
 
+    pub fn recent_searches(&self) -> QStringList {
+        self.session
+            .as_ref()
+            .and_then(|session| session.store().recent_searches().ok())
+            .unwrap_or_default()
+            .iter()
+            .map(QString::from)
+            .collect()
+    }
+
+    pub fn remember_search(self: Pin<&mut Self>, query: QString) {
+        if let Some(session) = self.session.as_ref() {
+            if let Err(error) = session.store().remember_search(&query.to_string()) {
+                eprintln!("BetterNotes: could not remember the search: {error}");
+            }
+        }
+    }
+
+    pub fn clear_recent_searches(self: Pin<&mut Self>) {
+        if let Some(session) = self.session.as_ref() {
+            let _ = session.store().clear_recent_searches();
+        }
+    }
+
     pub fn note_reminder(&self, id: QString) -> QString {
         let Some((session, id)) = self.session.as_ref().zip(id.to_string().parse().ok()) else {
             return QString::default();
@@ -1048,18 +1101,18 @@ impl ffi::NotesBackend {
 
     pub fn export_notes_json(self: Pin<&mut Self>, file_path: QString) -> bool {
         self.perform(false, |session| {
-            session.export_json(std::path::Path::new(&file_path.to_string()))
+            session.export_json(std::path::Path::new(&local_path(&file_path)))
         })
     }
 
     pub fn export_notes_markdown(self: Pin<&mut Self>, dir_path: QString) -> bool {
         self.perform(false, |session| {
-            session.export_markdown(std::path::Path::new(&dir_path.to_string()))
+            session.export_markdown(std::path::Path::new(&local_path(&dir_path)))
         })
     }
 
     pub fn import_notes_json(mut self: Pin<&mut Self>, file_path: QString) -> i32 {
-        let path = file_path.to_string();
+        let path = local_path(&file_path);
         let mut count = 0;
         let success = self.as_mut().perform(true, |session| {
             count = session.import_json(std::path::Path::new(&path))? as i32;
@@ -1073,7 +1126,7 @@ impl ffi::NotesBackend {
     }
 
     pub fn import_note_markdown(mut self: Pin<&mut Self>, file_path: QString) -> i32 {
-        let path = file_path.to_string();
+        let path = local_path(&file_path);
         let mut count = 0;
         let success = self.as_mut().perform(true, |session| {
             count = session.import_markdown(std::path::Path::new(&path))? as i32;

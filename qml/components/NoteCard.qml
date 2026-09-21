@@ -34,6 +34,7 @@ FocusScope {
     readonly property color edge: theme ? theme.noteTint(tint, "border") : "#fde047"
     readonly property color ink: theme ? theme.noteText : "#1c1917"
     readonly property color inkSoft: theme ? theme.noteTextSecondary : "#78716c"
+    readonly property string highlight: theme && theme.isDark ? "#806a1f" : "#fde68a"
     readonly property color priorityColor: {
         if (priority === 3) return theme ? theme.danger : "#ef4444"
         if (priority === 2) return theme ? theme.warning : "#f59e0b"
@@ -115,8 +116,20 @@ FocusScope {
             // Previews arrive as plain text from the core; rendering them as
             // plain text keeps any stray markup in a note body inert.
             Label {
-                text: card.snippet.length ? card.snippet : qsTr("Empty note")
-                textFormat: Text.PlainText
+                // Search results mark each match with U+E000/U+E001. The note
+                // text is escaped first, so only the highlight is markup.
+                readonly property bool marked: card.snippet.indexOf("\ue000") >= 0
+                text: {
+                    if (!card.snippet.length) return qsTr("Empty note")
+                    if (!marked) return card.snippet
+                    const escaped = card.snippet.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                    const mark = "<span style=\"background-color:" + card.highlight + "; font-weight:600;\">"
+                    let html = escaped.replace(/\ue000/g, mark).replace(/\ue001/g, "</span>")
+                    // A preview cut short can end inside a match.
+                    if ((html.match(/<span/g) || []).length > (html.match(/<\/span>/g) || []).length) html += "</span>"
+                    return html
+                }
+                textFormat: marked ? Text.RichText : Text.PlainText
                 wrapMode: Text.Wrap
                 elide: Text.ElideRight
                 font.pixelSize: 12

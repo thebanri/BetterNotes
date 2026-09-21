@@ -6,16 +6,20 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x424e4f54; // BNOT, an internal identifier, not a public app ID.
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 const INITIAL_SCHEMA: &str = include_str!("../../../migrations/0001_notes.sql");
 const WINDOW_SCHEMA: &str = include_str!("../../../migrations/0002_note_windows.sql");
 const SETTINGS_SCHEMA: &str = include_str!("../../../migrations/0003_settings.sql");
 const SEARCH_ORG_SCHEMA: &str =
     include_str!("../../../migrations/0004_search_and_organization.sql");
 const PRODUCTIVITY_SCHEMA: &str = include_str!("../../../migrations/0005_productivity.sql");
+const PLAIN_SEARCH_SCHEMA: &str = include_str!("../../../migrations/0006_plain_search_text.sql");
 /// Preview length for list rows and search results, in characters.
 const PREVIEW_CHARS: usize = 140;
 const NOTES_STAY_BELOW_KEY: &str = "notes_stay_below";
+const RECENT_SEARCHES_KEY: &str = "recent_searches";
+/// How many recent library searches are remembered.
+pub const RECENT_SEARCH_LIMIT: usize = 8;
 
 pub struct NoteStore {
     connection: Connection,
@@ -144,7 +148,7 @@ impl NoteStore {
         let updated_at = now_millis()?.max(draft.updated_at);
         let changed = self.connection.execute(
             "UPDATE notes SET title = ?1, content = ?2, updated_at = ?3, revision = ?4,
-                    priority = ?5, is_archived = ?6, is_pinned = ?7
+                    priority = ?5, is_archived = ?6, is_pinned = ?7, search_text = ?10
              WHERE id = ?8 AND revision = ?9",
             params![
                 draft.title,
@@ -155,7 +159,8 @@ impl NoteStore {
                 if draft.is_archived { 1 } else { 0 },
                 if draft.is_pinned { 1 } else { 0 },
                 draft.id,
-                draft.revision
+                draft.revision,
+                crate::preview::to_plain_text(&draft.content)
             ],
         )?;
         if changed != 1 {
@@ -200,7 +205,9 @@ impl NoteStore {
             return Ok(Vec::new());
         }
         let mut statement = self.connection.prepare(
-            "SELECT n.id, n.title, snippet(notes_fts, 1, '', '', '…', 24)
+            // U+E000/U+E001 mark each match; they are private-use characters
+            // no note contains, and the library turns them into highlights.
+            "SELECT n.id, n.title, snippet(notes_fts, 1, char(57344), char(57345), '…', 24)
              FROM notes_fts
              JOIN notes n ON notes_fts.rowid = n.id
              WHERE notes_fts MATCH ?1
@@ -342,6 +349,36 @@ impl NoteStore {
         self.set_setting(NOTES_STAY_BELOW_KEY, if enabled { "true" } else { "false" })
     }
 
+    /// Recent library searches, newest first. Searches are single lines, so
+    /// they are stored one per line.
+    pub fn recent_searches(&self) -> Result<Vec<String>> {
+        Ok(self
+            .get_setting(RECENT_SEARCHES_KEY)?
+            .unwrap_or_default()
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(str::to_string)
+            .collect())
+    }
+
+    /// Puts a search first in the recent list, once, keeping the newest few.
+    pub fn remember_search(&self, query: &str) -> Result<()> {
+        let query = query.split_whitespace().collect::<Vec<_>>().join(" ");
+        if query.is_empty() {
+            return Ok(());
+        }
+        let lower = query.to_lowercase();
+        let mut searches = self.recent_searches()?;
+        searches.retain(|search| search.to_lowercase() != lower);
+        searches.insert(0, query);
+        searches.truncate(RECENT_SEARCH_LIMIT);
+        self.set_setting(RECENT_SEARCHES_KEY, &searches.join("\n"))
+    }
+
+    pub fn clear_recent_searches(&self) -> Result<()> {
+        self.set_setting(RECENT_SEARCHES_KEY, "")
+    }
+
     pub fn raw_connection(&self) -> &Connection {
         &self.connection
     }
@@ -423,11 +460,30 @@ fn migrate(connection: &mut Connection, initial_schema: &str) -> Result<()> {
     transaction.prepare("SELECT note_id, tag_id FROM note_tags LIMIT 0")?;
     if version < 5 {
         transaction.execute_batch(PRODUCTIVITY_SCHEMA)?;
-        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     }
     transaction
         .prepare("SELECT id, note_id, remind_at, recurrence, dismissed FROM reminders LIMIT 0")?;
     transaction.prepare("SELECT id, note_id, filename, mime_type, byte_size, stored_rel_path FROM attachments LIMIT 0")?;
+    if version < 6 {
+        transaction.execute_batch(PLAIN_SEARCH_SCHEMA)?;
+        // Fill search_text from the stored bodies; the update trigger then
+        // reindexes each note from its plain text.
+        let notes: Vec<(i64, String)> = {
+            let mut statement = transaction.prepare("SELECT id, content FROM notes")?;
+            let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        for (id, content) in notes {
+            transaction.execute(
+                "UPDATE notes SET search_text = ?1 WHERE id = ?2",
+                params![crate::preview::to_plain_text(&content), id],
+            )?;
+        }
+    }
+    transaction.prepare("SELECT search_text FROM notes LIMIT 0")?;
+    if version < SCHEMA_VERSION {
+        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    }
     transaction.commit()?;
     Ok(())
 }

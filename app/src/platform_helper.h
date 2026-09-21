@@ -7,3 +7,4 @@ int platformCursorGlobalX();
 int platformCursorGlobalY();
 bool platformSetApplicationIcon();
 QString platformPicturesFolder();
+QString platformDocumentsFolder();

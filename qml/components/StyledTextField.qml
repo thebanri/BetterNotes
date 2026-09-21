@@ -22,6 +22,21 @@ T.TextField {
     selectionColor: control.theme ? control.theme.accent : control.palette.highlight
     verticalAlignment: TextInput.AlignVCenter
 
+    // The template draws no placeholder of its own.
+    Text {
+        x: control.leftPadding
+        y: control.topPadding
+        width: control.width - control.leftPadding - control.rightPadding
+        height: control.height - control.topPadding - control.bottomPadding
+        text: control.placeholderText
+        font: control.font
+        color: control.placeholderTextColor
+        verticalAlignment: control.verticalAlignment
+        elide: Text.ElideRight
+        visible: control.length === 0 && control.preeditText.length === 0
+        Accessible.ignored: true
+    }
+
     background: Rectangle {
         implicitWidth: 160
         implicitHeight: 32

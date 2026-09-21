@@ -266,6 +266,40 @@ Window {
         check(window.deleteConfirmed(), "Formatting test cleanup failed")
     }
 
+    // Search matches written text, never the HTML that formats it, and marks
+    // the match; searches are remembered; notes export and import by URL.
+    function assertSearchAndTransfer(library, note) {
+        const backend = library.libraryBackend
+        const body = findItem(note.contentItem, "contentEditor")
+        body.text = "<p style=\"text-indent:0px\">zeppelin <b>margins</b> here</p>"
+        check(note.flush(), "Search note did not save")
+        backend.reload()
+        backend.search("indent")
+        check(backend.searchResultIds.indexOf(note.noteId) < 0, "Search matched HTML markup")
+        backend.search("zeppelin")
+        const at = backend.searchResultIds.indexOf(note.noteId)
+        check(at >= 0, "Search did not find the note text")
+        const snippet = backend.searchResultSnippets[at]
+        check(snippet.indexOf("\ue000zeppelin\ue001") >= 0 && snippet.indexOf("<") < 0, "Snippet is not marked plain text: " + snippet)
+
+        backend.clearRecentSearches()
+        backend.rememberSearch("zeppelin")
+        backend.rememberSearch("nginx")
+        check(backend.recentSearches().length === 2 && backend.recentSearches()[0] === "nginx", "Recent searches not remembered")
+
+        const folder = backend.picturesFolder() + "/"
+        check(backend.exportNotesJson(folder + "export%20test.json"), "JSON export to a URL failed: " + backend.errorMessage)
+        const existing = Array.from(backend.noteIds)
+        check(backend.importNotesJson(folder + "export%20test.json") === existing.length, "Importing the export did not add every note")
+        backend.reload()
+        check(backend.noteIds.length === existing.length * 2, "Imported notes are missing from the library")
+        check(backend.importNotesJson(folder + "missing.json") === -1 && backend.errorMessage.length > 0, "A missing import file was not reported")
+        // Leave the library as it was for the checks that follow.
+        const imported = Array.from(backend.noteIds).filter(function(id) { return existing.indexOf(id) < 0 })
+        for (const id of imported) check(backend.deleteNoteById(id), "Could not remove an imported note")
+        check(backend.noteIds.length === existing.length, "Imported notes were not cleaned up")
+    }
+
     // A reminder set on a note shows in the library, can be edited there and
     // fires once when due.
     function assertReminders(library, note) {
@@ -562,6 +596,7 @@ Window {
                 const media = harness.library.createNote()
                 harness.assertMediaAndLists(media)
                 harness.assertReminders(harness.library, media)
+                harness.assertSearchAndTransfer(harness.library, media)
                 harness.check(media.deleteConfirmed(), "Media test note could not be deleted")
                 harness.first.toggleCollapsed()
                 harness.check(harness.first.collapsed && harness.first.height === harness.first.collapsedHeight, "Collapse failed")

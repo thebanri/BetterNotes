@@ -55,8 +55,9 @@ Popup {
         { id: "toggle_pin", title: qsTr("📌 Toggle pin"), subtitle: qsTr("Pin or unpin active note"), shortcut: "" },
         { id: "toggle_archive", title: qsTr("📦 Toggle archive"), subtitle: qsTr("Archive or unarchive active note"), shortcut: "" },
         { id: "diagnostics", title: qsTr("🖥️ Desktop diagnostics"), subtitle: qsTr("View display server, compositor and capabilities"), shortcut: "" },
-        { id: "export_json", title: qsTr("💾 Export notes to JSON"), subtitle: qsTr("Save all notes to betternotes_export.json"), shortcut: "" },
-        { id: "export_markdown", title: qsTr("📝 Export notes to Markdown"), subtitle: qsTr("Export notes to markdown folder"), shortcut: "" },
+        { id: "export_json", title: qsTr("💾 Export notes to JSON"), subtitle: qsTr("Choose where to save a JSON file of all notes"), shortcut: "" },
+        { id: "export_markdown", title: qsTr("📝 Export notes to Markdown"), subtitle: qsTr("Choose a folder for one Markdown file per note"), shortcut: "" },
+        { id: "import", title: qsTr("📥 Import notes"), subtitle: qsTr("Add notes from a JSON export or Markdown files"), shortcut: "" },
         { id: "delete_note", title: qsTr("🗑️ Delete active note"), subtitle: qsTr("Remove note permanently"), shortcut: "" }
     ]
 
