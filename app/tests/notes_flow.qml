@@ -368,6 +368,41 @@ Window {
         // empty family resolves to.
         check(body.font.family === Qt.application.font.family, "Default note font is not the desktop font")
 
+        // ``` then Enter starts a code block, Enter continues it, and ``` on
+        // a line of its own ends it; the block survives saving and reopening.
+        body.text = ""
+        body.forceActiveFocus()
+        const typeText = function(text) {
+            for (const key of text) {
+                input.keyClick(key === "\n" ? Qt.Key_Return : key)
+                input.wait(1)
+            }
+        }
+        typeText("```\nlet x = 1;\n- y\n```\nafter")
+        check(window.plainContent === "let x = 1;\n- y\nafter", "Fences were not consumed: " + JSON.stringify(window.plainContent))
+        const codeLine = function(line) {
+            const at = window.plainContent.split("\n").slice(0, line).join("\n").length + (line > 0 ? 1 : 0)
+            return formatter.codeActive(body.textDocument, at, at)
+        }
+        check(codeLine(0) && codeLine(1), "Lines typed after ``` are not code")
+        check(body.text.indexOf("<li") < 0, "Typing - inside a code block started a list")
+        body.select(1, 2)
+        check(body.cursorSelection.font.family === "monospace", "Text typed in a code block is not monospace")
+        const afterAt = window.plainContent.indexOf("after")
+        body.select(afterAt + 1, afterAt + 2)
+        check(body.cursorSelection.font.family !== "monospace", "Text typed after the code block is still monospace")
+        check(!codeLine(2), "``` did not end the code block")
+        input.wait(20)
+        let boxes = 0
+        for (let i = 0; i < body.children.length; ++i) if (body.children[i].objectName === "codeBox") ++boxes
+        check(boxes === 1, "The code block has no box behind it")
+        check(body.text.indexOf("rgba(128,128,128") >= 0 && body.text.indexOf("monospace") >= 0, "Code block formatting is not saved")
+        body.select(0, 0)
+        check(window.codeActive(), "Code button does not show the code block")
+        clickTool(window, "codeBlockButton")
+        check(!codeLine(0) && codeLine(1), "The code button did not turn the caret's line back into text")
+        body.text = ""
+
         // The toolbar buttons turn existing lines into a list and back.
         // The note is rich text by now, so each line is its own paragraph,
         // as pressing Enter makes them.

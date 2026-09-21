@@ -283,6 +283,79 @@ int TextFormatter::linkify(QQuickTextDocument *quickDocument,
 }
 
 namespace {
+// A code block's background: grey, part transparent, so it reads on light
+// and dark notes alike. HTML keeps it as rgba(), which is how a code block is
+// recognised when a note is opened again.
+const QColor codeBackground(128, 128, 128, 46);
+
+bool isCodeBlock(const QTextBlock &block) {
+    const auto brush = block.blockFormat().background();
+    if (brush.style() == Qt::NoBrush)
+        return false;
+    const auto color = brush.color();
+    return color.red() == codeBackground.red() &&
+           color.green() == codeBackground.green() &&
+           color.blue() == codeBackground.blue() && color.alpha() > 0 &&
+           color.alpha() < 255;
+}
+
+QTextCharFormat codeFont() {
+    QTextCharFormat format;
+    format.setFontFamilies(QStringList{QStringLiteral("monospace")});
+    format.setFontFixedPitch(true);
+    return format;
+}
+
+// Makes one paragraph code, or plain text again, keeping its other formats.
+void setCode(const QTextBlock &block, bool code) {
+    QTextCursor cursor(block);
+    auto blockFormat = cursor.blockFormat();
+    // The margin keeps code clear of the edge of the box drawn behind it.
+    if (code) {
+        blockFormat.setBackground(codeBackground);
+        blockFormat.setLeftMargin(8);
+        blockFormat.setRightMargin(8);
+    } else {
+        blockFormat.clearBackground();
+        blockFormat.setLeftMargin(0);
+        blockFormat.setRightMargin(0);
+    }
+    cursor.setBlockFormat(blockFormat);
+
+    // Collect before editing: changing formats invalidates fragment iterators.
+    QList<QPair<QPair<int, int>, QTextCharFormat>> runs;
+    for (auto it = block.begin(); !it.atEnd(); ++it) {
+        const auto fragment = it.fragment();
+        auto format = fragment.charFormat();
+        if (format.isImageFormat())
+            continue;
+        if (code) {
+            format.merge(codeFont());
+        } else {
+            format.clearProperty(QTextFormat::FontFamilies);
+            format.clearProperty(QTextFormat::FontFixedPitch);
+        }
+        runs.append({{fragment.position(), fragment.position() + fragment.length()},
+                     format});
+    }
+    for (const auto &run : runs) {
+        QTextCursor part(cursor.document());
+        part.setPosition(run.first.first);
+        part.setPosition(run.first.second, QTextCursor::KeepAnchor);
+        part.setCharFormat(run.second);
+    }
+    auto charFormat = block.charFormat();
+    if (code) {
+        charFormat.merge(codeFont());
+    } else {
+        charFormat.clearProperty(QTextFormat::FontFamilies);
+        charFormat.clearProperty(QTextFormat::FontFixedPitch);
+    }
+    cursor.setBlockCharFormat(charFormat);
+    // Typing continues in the paragraph's own format.
+    cursor.setCharFormat(charFormat);
+}
+
 // "- ", "* ", "• " and ". " start a bulleted list; "1. " or "1) " starts a
 // numbered list at that number. Anything else is ordinary text.
 bool listStyleFor(const QString &prefix, QTextListFormat::Style *style,
@@ -354,7 +427,7 @@ int TextFormatter::autoList(QQuickTextDocument *quickDocument, int position) {
     if (!document || position < 0 || position >= document->characterCount())
         return -1;
     const auto block = document->findBlock(position);
-    if (!block.isValid() || block.textList())
+    if (!block.isValid() || block.textList() || isCodeBlock(block))
         return -1;
     QTextListFormat::Style style;
     int start;
@@ -509,4 +582,109 @@ void TextFormatter::toggleList(QQuickTextDocument *quickDocument, int start,
             list->add(blocks.at(i));
     }
     cursor.endEditBlock();
+}
+
+int TextFormatter::codeFence(QQuickTextDocument *quickDocument, int position) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || position < 0 || position >= document->characterCount())
+        return -1;
+    static const QRegularExpression fence(QStringLiteral(R"(^\s*```[\w+#.-]*\s*$)"));
+    const auto block = document->findBlock(position);
+    if (!block.isValid() || block.textList() || !fence.match(block.text()).hasMatch())
+        return -1;
+    const bool inside = isCodeBlock(block);
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    cursor.setPosition(block.position());
+    cursor.setPosition(block.position() + block.length() - 1,
+                       QTextCursor::KeepAnchor);
+    cursor.removeSelectedText();
+    // The block handle stays valid; the old position may now be past it.
+    setCode(block, !inside);
+    cursor.endEditBlock();
+    return block.position();
+}
+
+bool TextFormatter::codeActive(QQuickTextDocument *quickDocument, int start,
+                               int end) const {
+    const auto blocks = blocksIn(
+        quickDocument ? quickDocument->textDocument() : nullptr, start, end);
+    if (blocks.isEmpty())
+        return false;
+    for (const auto &block : blocks) {
+        if (!isCodeBlock(block))
+            return false;
+    }
+    return true;
+}
+
+void TextFormatter::toggleCode(QQuickTextDocument *quickDocument, int start,
+                               int end) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    const auto blocks = blocksIn(document, start, end);
+    if (blocks.isEmpty())
+        return;
+    const bool code = !codeActive(quickDocument, start, end);
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    for (const auto &block : blocks) {
+        // Code is not a list item; take it out of any list first.
+        if (code) {
+            if (auto *list = block.textList()) {
+                list->remove(block);
+                QTextCursor paragraph(block);
+                auto format = paragraph.blockFormat();
+                format.setIndent(0);
+                paragraph.setBlockFormat(format);
+            }
+        }
+        setCode(block, code);
+    }
+    cursor.endEditBlock();
+}
+
+void TextFormatter::restoreCodeFont(QQuickTextDocument *quickDocument) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document)
+        return;
+    bool changed = false;
+    for (auto block = document->begin(); block.isValid(); block = block.next()) {
+        if (!isCodeBlock(block) || !block.text().isEmpty() ||
+            block.charFormat().fontFixedPitch())
+            continue;
+        QTextCursor cursor(block);
+        auto format = block.charFormat();
+        format.merge(codeFont());
+        cursor.setBlockCharFormat(format);
+        changed = true;
+    }
+    // Called right after a note loads, when there is nothing to undo yet;
+    // this repair must not become the first undo step.
+    if (changed)
+        document->clearUndoRedoStacks();
+}
+
+QVariantList TextFormatter::codeBlocks(QQuickTextDocument *quickDocument) const {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    QVariantList runs;
+    if (!document)
+        return runs;
+    int start = -1;
+    int end = -1;
+    for (auto block = document->begin(); block.isValid(); block = block.next()) {
+        if (isCodeBlock(block)) {
+            if (start < 0)
+                start = block.position();
+            end = block.position() + block.length() - 1;
+            continue;
+        }
+        if (start >= 0)
+            runs.append(QVariantMap{{QStringLiteral("start"), start},
+                                    {QStringLiteral("end"), end}});
+        start = -1;
+    }
+    if (start >= 0)
+        runs.append(QVariantMap{{QStringLiteral("start"), start},
+                                {QStringLiteral("end"), end}});
+    return runs;
 }

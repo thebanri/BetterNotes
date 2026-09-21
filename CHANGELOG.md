@@ -4,6 +4,11 @@ All notable changes to the BetterNotes project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Code blocks: type ``` (optionally with a language name) at the start of a line and press Enter to start one; Enter continues it and ``` on a line of its own ends it. A toolbar button turns selected lines into code and back. Code is monospace in a grey box and survives saving and reopening.
+
 ## [0.1.3] - 2026-09-21
 
 ### Added

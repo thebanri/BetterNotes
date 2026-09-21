@@ -89,7 +89,9 @@ ApplicationWindow {
         isRichText = checkRichText(backend.draftContent)
         contentEditor.textFormat = isRichText ? TextEdit.RichText : TextEdit.PlainText
         contentEditor.text = backend.draftContent
+        if (isRichText) formatter.restoreCodeFont(contentEditor.textDocument)
         loadingContent = false
+        Qt.callLater(updateCodeBoxes)
         selectedImage = -1
         gifs.refresh()
     }
@@ -695,6 +697,67 @@ ApplicationWindow {
         autosave.restart()
     }
 
+    // Code blocks: a line of ``` then Enter starts one, and the same line in
+    // a block ends it; the toolbar button turns selected lines into code.
+    readonly property var fencePattern: /^\s*```[\w+#.-]*\s*$/
+
+    function codeFence() {
+        const position = contentEditor.cursorPosition
+        const text = plainContent
+        const lineStart = text.lastIndexOf("\n", position - 1) + 1
+        let lineEnd = text.indexOf("\n", position)
+        if (lineEnd < 0) lineEnd = text.length
+        if (!fencePattern.test(text.substring(lineStart, lineEnd))) return false
+        ensureRichText()
+        const caret = formatter.codeFence(contentEditor.textDocument, contentEditor.cursorPosition)
+        if (caret < 0) return false
+        contentEditor.cursorPosition = caret
+        typingFont(formatter.codeActive(contentEditor.textDocument, caret, caret))
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+        return true
+    }
+
+    // The editor keeps the format for the next typed character with its own
+    // caret, so a change to the paragraph alone would not reach new text.
+    function typingFont(code) {
+        const selection = contentEditor.cursorSelection
+        if (!selection) return
+        const font = selection.font
+        font.family = code ? "monospace" : editorFontFamily
+        font.fixedPitch = code
+        selection.font = font
+    }
+
+    // Boxes behind code blocks, in editor coordinates; see codeBlocks().
+    property var codeBoxes: []
+
+    function updateCodeBoxes() {
+        const boxes = []
+        const runs = isRichText ? formatter.codeBlocks(contentEditor.textDocument) : []
+        for (let i = 0; i < runs.length; ++i) {
+            const top = contentEditor.positionToRectangle(runs[i].start)
+            const bottom = contentEditor.positionToRectangle(runs[i].end)
+            boxes.push({ y: top.y - 4, height: bottom.y + bottom.height - top.y + 8 })
+        }
+        codeBoxes = boxes
+    }
+
+    function codeActive() {
+        // Reading text keeps the button state in step with edits.
+        if (!isRichText || !contentEditor.text.length) return false
+        return formatter.codeActive(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd)
+    }
+
+    function toggleCode() {
+        contentEditor.forceActiveFocus()
+        ensureRichText()
+        formatter.toggleCode(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd)
+        typingFont(formatter.codeActive(contentEditor.textDocument, contentEditor.cursorPosition, contentEditor.cursorPosition))
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+    }
+
     // ---- Tags -------------------------------------------------------------
 
     function addTags(text) {
@@ -1218,6 +1281,25 @@ ApplicationWindow {
                     onClicked: noteWindow.toggleList("number")
                 }
 
+                UI.StyledButton {
+                    objectName: "codeBlockButton"
+                    visible: formatToolbar.width >= 300
+                    iconName: "code"
+                    iconSize: 14
+                    theme: noteWindow.theme
+                    variant: noteWindow.codeActive() ? "accent" : "ghost"
+                    implicitWidth: 24
+                    implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
+                    padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Code block — or type ``` and press Enter")
+                    onClicked: noteWindow.toggleCode()
+                }
+
                 Rectangle {
                     visible: formatToolbar.width >= 300
                     implicitWidth: 1
@@ -1373,16 +1455,42 @@ ApplicationWindow {
                         Qt.callLater(noteWindow.continueList)
                     }
                     noteWindow.updateImageSelection()
+                    // Layout settles after this signal.
+                    Qt.callLater(noteWindow.updateCodeBoxes)
                 }
-                onWidthChanged: noteWindow.updateImageSelection()
+                onWidthChanged: {
+                    noteWindow.updateImageSelection()
+                    Qt.callLater(noteWindow.updateCodeBoxes)
+                }
+
+                // Code block boxes, drawn beneath the text.
+                Repeater {
+                    model: noteWindow.codeBoxes
+                    delegate: Rectangle {
+                        required property var modelData
+                        objectName: "codeBox"
+                        z: -1
+                        x: contentEditor.leftPadding
+                        y: modelData.y
+                        width: contentEditor.width - contentEditor.leftPadding - contentEditor.rightPadding
+                        height: modelData.height
+                        radius: 6
+                        color: theme.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
+                        border.width: 1
+                        border.color: theme.isDark ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(0, 0, 0, 0.08)
+                    }
+                }
                 // Any other selection ends image resizing.
                 onSelectionStartChanged: if (noteWindow.selectedImage >= 0 && selectionStart !== noteWindow.selectedImage) noteWindow.selectedImage = -1
                 onSelectionEndChanged: if (noteWindow.selectedImage >= 0 && selectionEnd !== noteWindow.selectedImage + 1) noteWindow.selectedImage = -1
 
                 // Enter on an empty list item ends the list.
+                // Enter on a ``` line opens or closes a code block, and on an
+                // empty list item ends the list.
                 Keys.onReturnPressed: function(event) {
-                    event.accepted = noteWindow.isRichText && event.modifiers === Qt.NoModifier
-                        && formatter.endEmptyListItem(contentEditor.textDocument, contentEditor.cursorPosition)
+                    event.accepted = event.modifiers === Qt.NoModifier
+                        && (noteWindow.codeFence() || (noteWindow.isRichText
+                            && formatter.endEmptyListItem(contentEditor.textDocument, contentEditor.cursorPosition)))
                 }
                 Keys.onEscapePressed: function(event) {
                     event.accepted = noteWindow.selectedImage >= 0

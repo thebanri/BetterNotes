@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QQuickTextDocument>
 #include <QUrl>
+#include <QVariantList>
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
@@ -49,6 +50,23 @@ class TextFormatter : public QObject {
     // them out of it when they already are one.
     Q_INVOKABLE void toggleList(QQuickTextDocument *document, int start, int end,
                                 const QString &kind);
+    // Code blocks: paragraphs in a monospace font on a grey background, which
+    // survives the note's HTML. Enter on a line holding only ``` (optionally
+    // with a language name) starts a code block there, or inside one ends it.
+    // Returns the caret position, or -1 when the line is not a fence.
+    Q_INVOKABLE int codeFence(QQuickTextDocument *document, int position);
+    Q_INVOKABLE bool codeActive(QQuickTextDocument *document, int start,
+                                int end) const;
+    // Makes the paragraphs from start to end code, or plain text again.
+    Q_INVOKABLE void toggleCode(QQuickTextDocument *document, int start,
+                                int end);
+    // Restores the font of empty code lines, which HTML does not keep, so text
+    // typed there after reopening a note is code too.
+    Q_INVOKABLE void restoreCodeFont(QQuickTextDocument *document);
+    // Each run of consecutive code paragraphs as {start, end} positions. Qt
+    // Quick does not paint paragraph backgrounds, so the editor draws the
+    // code boxes itself.
+    Q_INVOKABLE QVariantList codeBlocks(QQuickTextDocument *document) const;
     // Enter on an empty list item ends the list instead of adding an item.
     Q_INVOKABLE bool endEmptyListItem(QQuickTextDocument *document, int position);
 
