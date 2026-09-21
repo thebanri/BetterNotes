@@ -31,6 +31,8 @@ ApplicationWindow {
     signal quitRequested()
     signal libraryRequested()
     signal newNoteRequested()
+    // Emitted for every clicked link, before deciding whether it may open.
+    signal linkClicked(string link)
 
     property bool alwaysOnTop: false
     // Library-wide preference: unpinned notes stay beneath ordinary windows.
@@ -341,6 +343,12 @@ ApplicationWindow {
     }
 
     Timer { id: geometrySave; interval: 500; onTriggered: noteWindow.persist(true) }
+    // Links are formatted a moment after typing pauses, not on every keystroke.
+    Timer {
+        id: linkScan
+        interval: 350
+        onTriggered: noteWindow.linkifyContent()
+    }
     Timer {
         id: autosave
         interval: 500
@@ -484,6 +492,49 @@ ApplicationWindow {
                 onClicked: noteWindow.close()
             }
         }
+    }
+
+    // Formats web addresses in the note as links. Links need character formats,
+    // so a plain-text note that gains an address becomes rich text first.
+    function linkifyContent() {
+        if (loadingContent || collapsed) return
+        if (!isRichText) {
+            if (!formatter.containsLink(plainContent)) return
+            ensureRichText()
+        }
+        if (formatter.linkify(contentEditor.textDocument, theme.link) > 0) {
+            backend.editContent(contentEditor.text)
+            autosave.restart()
+        }
+    }
+
+    // The link under a point in the editor's own coordinates, or "".
+    //
+    // Not TextEdit.linkAt(): in this editor it answers about 16px up and to the
+    // left of where the text is drawn. positionAt()/positionToRectangle() map
+    // correctly, but positionAt() snaps to the nearest caret position, so check
+    // that the point really lies on the character before or after it --
+    // otherwise clicking past the end of a line would open a link at its end.
+    function linkAt(x, y) {
+        const position = contentEditor.positionAt(x, y)
+        for (const character of [position - 1, position]) {
+            if (character < 0 || character >= contentEditor.length) continue
+            const from = contentEditor.positionToRectangle(character)
+            const to = contentEditor.positionToRectangle(character + 1)
+            if (from.y !== to.y) continue // the character ends a wrapped line
+            if (x >= Math.min(from.x, to.x) && x < Math.max(from.x, to.x)
+                    && y >= from.y && y < from.y + from.height)
+                return formatter.anchorAt(contentEditor.textDocument, character)
+        }
+        return ""
+    }
+
+    // Opens a clicked link in the desktop's browser or mail client. Note
+    // content is untrusted, so the core decides which links may open at all.
+    function openLink(link) {
+        linkClicked(link)
+        const url = platformInfo.externalUrl(link)
+        if (url.length > 0) Qt.openUrlExternally(url)
     }
 
     function requestDeleteNote() {
@@ -939,7 +990,23 @@ ApplicationWindow {
                     if (!noteWindow.loadingContent && text !== backend.draftContent) {
                         backend.editContent(text)
                         autosave.restart()
+                        linkScan.restart()
                     }
+                }
+
+                // A plain click on a link opens it; anywhere else the click
+                // places the caret as usual.
+                TapHandler {
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: function(eventPoint) {
+                        const link = noteWindow.linkAt(eventPoint.position.x, eventPoint.position.y)
+                        if (link.length > 0) noteWindow.openLink(link)
+                    }
+                }
+                HoverHandler {
+                    id: linkHover
+                    cursorShape: noteWindow.linkAt(linkHover.point.position.x, linkHover.point.position.y).length > 0
+                        ? Qt.PointingHandCursor : Qt.IBeamCursor
                 }
             }
         }

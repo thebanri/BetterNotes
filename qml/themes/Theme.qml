@@ -30,6 +30,8 @@ QtObject {
     readonly property color accentActive: "#4338ca"
     readonly property color accentText: "#ffffff"
     readonly property color accentSubtle: isDark ? "#312e81" : "#e0e7ff"
+    // Links in note text: blue that stays readable on the tinted note colours.
+    readonly property color link: isDark ? "#8ab4ff" : "#1d4ed8"
 
     // Feedback
     readonly property color danger: "#ef4444"

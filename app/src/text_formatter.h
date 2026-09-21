@@ -23,4 +23,12 @@ class TextFormatter : public QObject {
                              int pixelSize, bool enabled);
     Q_INVOKABLE void color(QQuickTextDocument *document, int start, int end,
                            const QColor &color, bool reset);
+    // Turns every web address in the document into an underlined link and
+    // stops a link's formatting from spreading into text typed after it.
+    // Returns how many ranges changed, so the caller only saves real changes.
+    Q_INVOKABLE int linkify(QQuickTextDocument *document, const QColor &color);
+    // Whether plain text contains something linkify would turn into a link.
+    Q_INVOKABLE bool containsLink(const QString &text) const;
+    // The link target of the character at a document position, or empty.
+    Q_INVOKABLE QString anchorAt(QQuickTextDocument *document, int position) const;
 };

@@ -86,6 +86,55 @@ Window {
         input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton)
     }
 
+    // Typed addresses become real, underlined links; typing after one does not
+    // extend it; a click reaches the link handler. The clicked link is a file:
+    // URL the core refuses, so the test never opens a browser.
+    function assertLinks(window) {
+        const body = findItem(window.contentItem, "contentEditor")
+        body.forceActiveFocus()
+        body.text = "Docs at https://example.com/guide. Thanks"
+        window.linkifyContent()
+        const start = window.plainContent.indexOf("https://")
+        const end = start + "https://example.com/guide".length
+        check(window.isRichText, "A note with an address did not switch to rich text")
+        check(body.text.indexOf('href="https://example.com/guide"') >= 0, "Address was not linked: " + body.text)
+        body.select(start, end)
+        check(body.cursorSelection.font.underline, "Link is not underlined")
+        body.select(end, end + 1)
+        check(!body.cursorSelection.font.underline, "Trailing punctuation joined the link")
+        body.deselect()
+        body.cursorPosition = end
+        body.insert(end, "xyz")
+        window.linkifyContent()
+        check(body.text.indexOf('href="https://example.com/guidexyz"') >= 0, "Editing an address did not update its link: " + body.text)
+        // Type as a user would: key presses right after a link inherit its format.
+        window.requestActivate()
+        body.forceActiveFocus()
+        input.wait(30)
+        body.cursorPosition = end + 3
+        input.keyClick(Qt.Key_Space)
+        for (const character of "after") input.keyClick(character)
+        window.linkifyContent()
+        body.select(end + 4, end + 9)
+        check(!body.cursorSelection.font.underline, "Text typed after a link became part of it")
+        check(window.plainContent.indexOf(" after") > 0, "Linking changed the note text: " + JSON.stringify(window.plainContent))
+
+        let clicked = ""
+        const record = function(link) { clicked = link }
+        window.linkClicked.connect(record)
+        body.text = '<a href="file:///etc/hosts">local file</a> text'
+        const rect = body.positionToRectangle(2)
+        check(window.linkAt(rect.x + 2, rect.y + rect.height / 2) === "file:///etc/hosts", "No link under the click point")
+        input.mouseClick(body, rect.x + 2, rect.y + rect.height / 2)
+        window.linkClicked.disconnect(record)
+        check(clicked === "file:///etc/hosts", "Clicking a link did not reach the handler: " + clicked)
+        check(platformInfo.externalUrl(clicked) === "", "A file: link was allowed to open")
+        // Past the end of the line is not on the link.
+        const lineEnd = body.positionToRectangle(body.length)
+        check(window.linkAt(lineEnd.x + 40, lineEnd.y + lineEnd.height / 2) === "", "Empty space opened a link")
+        body.text = ""
+    }
+
     function assertEditorFormatting(window) {
         const body = findItem(window.contentItem, "contentEditor")
         const original = "repeat repeat <b>literal</b> & İstanbul 🦀\nSecond line"
@@ -297,6 +346,9 @@ Window {
                 harness.second.close()
                 harness.check(!harness.library.noteWindows[harness.secondId], "Closed window stayed registered")
                 harness.check(harness.library.libraryBackend.titles.length === 2, "Close deleted the note")
+                const linkNote = harness.library.createNote()
+                harness.assertLinks(linkNote)
+                harness.check(linkNote.deleteConfirmed(), "Link test note could not be deleted")
                 const disposable = harness.library.createNote()
                 harness.assertEditorFormatting(disposable)
                 harness.check(harness.library.libraryBackend.titles.length === 2, "Delete failed to update library")

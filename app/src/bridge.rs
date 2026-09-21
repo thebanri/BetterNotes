@@ -39,6 +39,10 @@ pub mod ffi {
         fn display_server(&self) -> QString;
 
         #[qinvokable]
+        #[cxx_name = "externalUrl"]
+        fn external_url(&self, link: QString) -> QString;
+
+        #[qinvokable]
         #[cxx_name = "supportsNoteLayers"]
         fn supports_note_layers(&self) -> bool;
 
@@ -91,6 +95,13 @@ impl ffi::ApplicationInfo {
         betternotes_core::DisplayServer::detect()
             .name()
             .to_string()
+            .into()
+    }
+
+    /// The URL a clicked note link may open, or empty when it must not open.
+    pub fn external_url(&self, link: cxx_qt_lib::QString) -> cxx_qt_lib::QString {
+        betternotes_core::external_url(&link.to_string())
+            .unwrap_or_default()
             .into()
     }
 

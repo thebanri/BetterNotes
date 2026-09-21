@@ -6,6 +6,7 @@ pub mod backup;
 pub mod desktop;
 pub mod export_import;
 pub mod ipc;
+pub mod links;
 mod notes;
 pub mod notifications;
 pub mod paths;
@@ -29,6 +30,7 @@ pub use ipc::{
     global_ipc_queue, handle_domain_request, is_server_running, send_request, IpcAction,
     IpcRequest, IpcResponse, IpcServer, SharedIpcQueue,
 };
+pub use links::external_url;
 pub use notes::{Error, Note, NoteSummary, Result, SearchResult};
 pub use notifications::NotificationService;
 pub use preview::{plain_preview, to_plain_text};

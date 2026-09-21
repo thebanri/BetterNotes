@@ -1,5 +1,6 @@
 #include "text_formatter.h"
 
+#include <QRegularExpression>
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTextFragment>
@@ -142,4 +143,137 @@ void TextFormatter::color(QQuickTextDocument *document, int start, int end,
         }
     }
     cursor.endEditBlock();
+}
+
+namespace {
+// Addresses start with a web scheme or "www." and run to the next space or
+// character that cannot appear unquoted in a URL.
+const QRegularExpression &linkPattern() {
+    static const QRegularExpression pattern(
+        QStringLiteral(R"((?:https?://|www\.)[^\s<>"'`]+)"),
+        QRegularExpression::CaseInsensitiveOption);
+    return pattern;
+}
+
+// Sentence punctuation right after an address belongs to the sentence:
+// "see https://example.com." links "https://example.com".
+qsizetype trimmedLength(const QString &match) {
+    qsizetype length = match.size();
+    while (length > 0) {
+        const QChar last = match.at(length - 1);
+        if (QStringLiteral(".,;:!?'\"").contains(last)) {
+            --length;
+        } else if (last == u')' &&
+                   match.left(length).count(u'(') <
+                       match.left(length).count(u')')) {
+            --length; // "(https://example.com)" keeps its own parenthesis.
+        } else {
+            break;
+        }
+    }
+    return length;
+}
+
+struct Run {
+    int start;
+    int end;
+    QTextCharFormat format;
+};
+} // namespace
+
+bool TextFormatter::containsLink(const QString &text) const {
+    return linkPattern().match(text).hasMatch();
+}
+
+QString TextFormatter::anchorAt(QQuickTextDocument *quickDocument,
+                                int position) const {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || position < 0 || position >= document->characterCount() - 1)
+        return {};
+    const auto block = document->findBlock(position);
+    for (auto it = block.begin(); !it.atEnd(); ++it) {
+        const auto fragment = it.fragment();
+        if (position >= fragment.position() &&
+            position < fragment.position() + fragment.length()) {
+            const auto format = fragment.charFormat();
+            return format.isAnchor() ? format.anchorHref() : QString();
+        }
+    }
+    return {};
+}
+
+int TextFormatter::linkify(QQuickTextDocument *quickDocument,
+                           const QColor &color) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document)
+        return 0;
+    QList<Run> runs;
+    for (auto block = document->begin(); block.isValid(); block = block.next()) {
+        const QString text = block.text();
+        auto matches = linkPattern().globalMatch(text);
+        while (matches.hasNext()) {
+            const auto match = matches.next();
+            const qsizetype length = trimmedLength(match.captured());
+            if (length == 0)
+                continue;
+            const int start = block.position() + int(match.capturedStart());
+            const int end = start + int(length);
+            QString href = match.captured().left(length);
+            if (href.startsWith(QStringLiteral("www."), Qt::CaseInsensitive))
+                href.prepend(QStringLiteral("https://"));
+
+            // Collect before editing: changing formats invalidates fragment
+            // iterators.
+            bool linked = true;
+            for (auto it = block.begin(); !it.atEnd(); ++it) {
+                const auto fragment = it.fragment();
+                const int fragmentStart = fragment.position();
+                const int fragmentEnd = fragmentStart + fragment.length();
+                const auto format = fragment.charFormat();
+                if (fragmentEnd > start && fragmentStart < end &&
+                    (!format.isAnchor() || format.anchorHref() != href))
+                    linked = false;
+                // Text typed right after a link inherits its format. Anything
+                // that carries this link's href beyond the address is spill.
+                if (fragmentEnd > end && format.isAnchor() &&
+                    format.anchorHref() == href && fragmentStart <= end + 1) {
+                    auto plain = format;
+                    plain.setAnchor(false);
+                    plain.clearProperty(QTextFormat::AnchorHref);
+                    plain.setFontUnderline(false);
+                    plain.clearForeground();
+                    runs.append({qMax(end, fragmentStart), fragmentEnd, plain});
+                }
+            }
+            if (!linked) {
+                QTextCharFormat format;
+                format.setAnchor(true);
+                format.setAnchorHref(href);
+                format.setFontUnderline(true);
+                if (color.isValid())
+                    format.setForeground(color);
+                // Marks a merge rather than a replacement, below.
+                format.setProperty(QTextFormat::UserProperty, true);
+                runs.append({start, end, format});
+            }
+        }
+    }
+    if (runs.isEmpty())
+        return 0;
+    QTextCursor cursor(document);
+    // Fold into the edit that produced the address, so one undo removes both.
+    cursor.joinPreviousEditBlock();
+    for (auto run : runs) {
+        QTextCursor part(document);
+        part.setPosition(run.start);
+        part.setPosition(run.end, QTextCursor::KeepAnchor);
+        if (run.format.hasProperty(QTextFormat::UserProperty)) {
+            run.format.clearProperty(QTextFormat::UserProperty);
+            part.mergeCharFormat(run.format);
+        } else {
+            part.setCharFormat(run.format);
+        }
+    }
+    cursor.endEditBlock();
+    return int(runs.size());
 }
