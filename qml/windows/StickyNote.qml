@@ -42,6 +42,14 @@ ApplicationWindow {
     // KWin script reads it from the caption and applies keep-below/keep-above.
     // Must match the markers in crates/core/src/desktop.rs.
     readonly property string layerMarker: alwaysOnTop ? "\u2064" : (stayBelow ? "\u2063" : "")
+    // Invisible caption key naming this note (its id as Unicode tag digits,
+    // U+E0030..U+E0039). The KWin script uses it to ask WindowPlacement where
+    // the note belongs, since Wayland lets no client position its own windows.
+    readonly property string noteKeyMarker: noteId.split("").map(function(digit) {
+        return String.fromCodePoint(0xE0030 + Number(digit))
+    }).join("")
+    // Shared WindowPlacement service from the library; null in tests.
+    property var placement: null
     property string noteTint: "yellow"
     property string noteFontFamily: "default"
     property int noteFontSize: 13
@@ -122,7 +130,7 @@ ApplicationWindow {
     transientParent: null
     flags: Qt.Window | Qt.FramelessWindowHint
         | (alwaysOnTop ? Qt.WindowStaysOnTopHint : (stayBelow ? Qt.WindowStaysOnBottomHint : 0))
-    title: (titleEditor.text.trim().length ? titleEditor.text : qsTr("Untitled note")) + " — BetterNotes" + layerMarker
+    title: (titleEditor.text.trim().length ? titleEditor.text : qsTr("Untitled note")) + " — BetterNotes" + layerMarker + noteKeyMarker
     width: 380
     height: 360
     minimumWidth: 240
@@ -166,6 +174,9 @@ ApplicationWindow {
             height: backend.savedHeight(), screen: backend.savedScreen(),
             positioned: backend.savedPositioned()}, fallbackScreen, false)
         initialized = true
+        // Register before the window appears: the window manager asks for the
+        // saved position as soon as it maps the window.
+        if (placement) placement.track(noteId, backend.savedPositioned(), backend.savedX(), backend.savedY())
         show()
         if (!collapsed) titleEditor.forceActiveFocus()
         persist(true)
@@ -185,8 +196,16 @@ ApplicationWindow {
             x = fitted.x
             y = fitted.y
         }
-        normalX = (x !== 0 || y !== 0) ? x : (state.x || fitted.x)
-        normalY = (x !== 0 || y !== 0) ? y : (state.y || fitted.y)
+        if (canPosition) {
+            normalX = (x !== 0 || y !== 0) ? x : (state.x || fitted.x)
+            normalY = (x !== 0 || y !== 0) ? y : (state.y || fitted.y)
+        } else {
+            // Where the window really is comes only from the window manager
+            // (WindowPlacement); a computed default must not be saved as if
+            // the user had put the note there.
+            normalX = state.positioned ? state.x : 0
+            normalY = state.positioned ? state.y : 0
+        }
         normalScreen = screen.name
         placing = false
     }
@@ -214,12 +233,21 @@ ApplicationWindow {
         if (!initialized || placing || retiring || visibility !== Window.Windowed) return
         expandedWidth = width
         if (!collapsed) expandedHeight = height
-        if (x !== 0 || y !== 0) {
+        // On Wayland x and y are not the window's position, so they must not
+        // overwrite one reported by the window manager.
+        if (canPosition && (x !== 0 || y !== 0)) {
             normalX = x
             normalY = y
         }
         normalScreen = screen ? screen.name : ""
         geometrySave.restart()
+    }
+
+    // The window manager reports where the note is (see WindowPlacement).
+    function moveReported(reportedX, reportedY) {
+        normalX = reportedX
+        normalY = reportedY
+        if (initialized && !retiring) persist(true)
     }
 
     function persist(open) {

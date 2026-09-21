@@ -34,10 +34,20 @@ ApplicationWindow {
     Themes.Theme { id: theme; themeMode: backend.themeMode }
     ApplicationInfo { id: applicationInfo }
     NotesBackend { id: backend; objectName: "notesBackend" }
+    // Saves and restores note positions on KDE Plasma under Wayland, where the
+    // app cannot see or set window positions itself.
+    WindowPlacement {
+        id: placementService
+        onMoved: function(noteId, x, y) {
+            const sticky = window.noteWindows[noteId]
+            if (sticky) sticky.moveReported(x, y)
+        }
+    }
     Component {
         id: stickyComponent
         StickyNote {
             stayBelow: backend.notesStayBelow
+            placement: placementService
             onSaved: backend.reload()
             onDismissed: function(id) { window.releaseWindow(id) }
             onQuitRequested: window.quitApplication()
@@ -112,6 +122,7 @@ ApplicationWindow {
     function releaseWindow(id) {
         const sticky = noteWindows[id]
         delete noteWindows[id]
+        placementService.forget(id)
         windowsRevision += 1
         if (sticky) sticky.destroy()
     }

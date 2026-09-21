@@ -167,40 +167,104 @@ impl DesktopEnvironment {
 // Must match `layerMarker` in StickyNote.qml.
 fn setup_kde_plasma_taskbar_integration() {
     let script_content = r#"
-function checkAndHide(win) {
-    if (!win) return;
+// Talks to WindowPlacement in the app (app/src/window_placement.h).
+var PLACEMENT = ["io.github.thebanri.BetterNotes", "/Placement",
+                 "io.github.thebanri.BetterNotes.Placement"];
+
+function isNote(win) {
+    if (!win) return false;
     var cls = (win.resourceClass || "").toLowerCase();
     var name = (win.resourceName || "").toLowerCase();
-    if (cls !== "betternotes" && name !== "betternotes") return;
+    if (cls !== "betternotes" && name !== "betternotes") return false;
     var cap = win.caption || "";
-    if (cap.indexOf("All notes") === -1 && cap.indexOf("Quick Capture") === -1) {
-        win.skipTaskbar = true;
-        win.skipPager = true;
-        win.skipSwitcher = true;
-        // The note names its layer with an invisible caption marker; no marker
-        // means an ordinary window. Re-evaluated on every caption change, so
-        // pinning or the global setting takes effect immediately.
-        var below = cap.indexOf("\u2063") !== -1;
-        var above = cap.indexOf("\u2064") !== -1;
-        if (win.keepBelow !== below) win.keepBelow = below;
-        if (win.keepAbove !== above) win.keepAbove = above;
-    }
+    return cap.indexOf("All notes") === -1 && cap.indexOf("Quick Capture") === -1;
 }
 
-function onWindowAdded(win) {
+// A note's id, written into its caption as invisible Unicode tag digits
+// (U+E0030..U+E0039), which arrive here as surrogate pairs.
+function noteKey(win) {
+    var cap = win.caption || "";
+    var key = "";
+    for (var i = 0; i + 1 < cap.length; i++) {
+        if (cap.charCodeAt(i) !== 0xDB40) continue;
+        var digit = cap.charCodeAt(i + 1) - 0xDC30;
+        if (digit >= 0 && digit <= 9) { key += digit; i++; }
+    }
+    return key;
+}
+
+function applyLayer(win) {
+    var cap = win.caption || "";
+    win.skipTaskbar = true;
+    win.skipPager = true;
+    win.skipSwitcher = true;
+    // The note names its layer with an invisible caption marker; no marker
+    // means an ordinary window. Re-evaluated on every caption change, so
+    // pinning or the global setting takes effect immediately.
+    var below = cap.indexOf("⁣") !== -1;
+    var above = cap.indexOf("⁤") !== -1;
+    if (win.keepBelow !== below) win.keepBelow = below;
+    if (win.keepAbove !== above) win.keepAbove = above;
+}
+
+// Somewhere a user can still grab the note's header, on a screen that exists
+// now: a note saved on a monitor that has since been unplugged is left to
+// normal placement instead of disappearing off-screen.
+function reachable(x, y, width) {
+    var screens = workspace.screens;
+    for (var i = 0; i < screens.length; i++) {
+        var g = screens[i].geometry;
+        if (x + width - 40 >= g.x && x + 40 <= g.x + g.width &&
+            y >= g.y && y + 30 <= g.y + g.height) return true;
+    }
+    return false;
+}
+
+function report(win) {
+    var key = noteKey(win);
+    if (!key) return;
+    var g = win.frameGeometry;
+    callDBus(PLACEMENT[0], PLACEMENT[1], PLACEMENT[2], "Moved",
+             key, Math.round(g.x), Math.round(g.y));
+}
+
+function restore(win) {
+    var key = noteKey(win);
+    if (!key) return;
+    callDBus(PLACEMENT[0], PLACEMENT[1], PLACEMENT[2], "Placement", key,
+             function(position) {
+        var parts = ("" + (position || "")).split(",");
+        var g = win.frameGeometry;
+        if (parts.length === 2) {
+            var x = parseInt(parts[0], 10), y = parseInt(parts[1], 10);
+            if (!isNaN(x) && !isNaN(y) && reachable(x, y, g.width)) {
+                win.frameGeometry = {x: x, y: y, width: g.width, height: g.height};
+                return;
+            }
+        }
+        // Nothing usable saved: keep where KWin placed it this time.
+        report(win);
+    });
+}
+
+function watch(win, isNew) {
     if (!win) return;
-    checkAndHide(win);
-    if (win.captionChanged) {
-        win.captionChanged.connect(function() {
-            checkAndHide(win);
-        });
+    if (isNote(win)) {
+        applyLayer(win);
+        // Only a newly opened note is moved; notes already on screen when this
+        // script (re)loads stay where the user has them.
+        if (isNew) restore(win);
+        win.interactiveMoveResizeFinished.connect(function() { report(win); });
     }
+    win.captionChanged.connect(function() {
+        if (isNote(win)) applyLayer(win);
+    });
 }
 
-workspace.windowAdded.connect(onWindowAdded);
+workspace.windowAdded.connect(function(win) { watch(win, true); });
 var existing = workspace.windowList();
 for (var i = 0; i < existing.length; i++) {
-    onWindowAdded(existing[i]);
+    watch(existing[i], false);
 }
 "#;
 
