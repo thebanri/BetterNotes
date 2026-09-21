@@ -1,158 +1,199 @@
 # BetterNotes
 
-Linux-first desktop notes application.
-BetterNotes is an open-source, native, lightweight, Linux-first sticky notes and desktop workspace application built with Rust and Qt 6/QML.
+[![CI](https://github.com/thebanri/BetterNotes/actions/workflows/ci.yml/badge.svg)](https://github.com/thebanri/BetterNotes/actions/workflows/ci.yml)
+[![Packages](https://github.com/thebanri/BetterNotes/actions/workflows/packages.yml/badge.svg)](https://github.com/thebanri/BetterNotes/actions/workflows/packages.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Create, edit and organize notes in independent floating windows, with autosave, SQLite persistence, saved window geometry, light/dark/system themes, FTS5 full-text search, system tray, global quick capture, desktop notifications, Wayland/X11 compositor compatibility, always-on-top window pinning, one-time and recurring reminders, safe file attachments, JSON/Markdown import/export, crash-safe atomic backup & restore, unified CLI, and single-instance local IPC.
+Sticky notes for the Linux desktop, built with **Rust and Qt 6/QML**.
+Keep notes in independent windows, search your library, and capture ideas without
+an account or a cloud service. Notes stay on your machine.
 
----
+**[Download releases](https://github.com/thebanri/BetterNotes/releases)** ·
+[Build from source](#build-from-source) · [Contribute](CONTRIBUTING.md)
 
-## Key Features
+> BetterNotes is a working project name. The current version is **0.1.0**, a
+> Linux preview; desktop compatibility still needs testing across environments.
+> Windows and macOS are not current release targets.
 
-- **Native Linux Experience:** First-class Wayland and X11 support with compositor integration for KDE Plasma, GNOME, XFCE, Cinnamon, MATE, Budgie, Hyprland, and Sway.
-- **Independent Sticky Windows:** Edit multiple notes simultaneously. Position, size, collapsed state, and always-on-top pins are remembered across restarts.
-- **Instant Full-Text Search (FTS5):** Search through note titles and bodies instantly with keyboard navigation (`Ctrl+K`).
-- **Productivity & Reminders:** Set one-time or recurring reminders (Daily, Weekly, Monthly, Yearly) with Freedesktop notification alerts.
-- **Data Sovereignty & Safety:** 100% offline-first, no telemetry, no cloud dependency. Full JSON and Markdown (with YAML frontmatter) import/export.
-- **Crash-Safe Backup & Recovery:** Atomic SQLite backups (`VACUUM INTO`) and safe snapshot restore.
-- **Single-Instance & Unified CLI:** Run commands directly from the terminal (`betternotes new`, `list`, `search`, `show`, `archive`, `backup`, `restore`, `export`, `import`) which automatically communicate with the running GUI over a private Unix domain socket.
+## Features
 
----
+- Independent sticky windows with autosave, resizing, collapse and saved window state.
+- Rich text editing, checklists, links, colors, and light, dark or system themes.
+- SQLite storage, FTS5 search, tags, priorities and archiving.
+- Quick Capture, a command palette, a system tray and start-at-login settings.
+- Reminders, desktop notifications and file attachments.
+- JSON/Markdown import and export, database and attachment backups, and restore.
+- A CLI sharing the Rust core with the GUI, plus local single-instance IPC.
+- Offline use without accounts, telemetry or a remote server.
 
-## Architecture
+Desktop integration depends on the session and package format; see
+[Linux desktop behavior](#linux-desktop-behavior).
 
-Rust owns application logic and persistence; QML owns presentation. A Qt-independent `betternotes-core` crate manages notes, SQLite migrations, search, reminders, attachments, and IPC. A CXX-Qt adapter exposes this state to QML:
+## Install
 
-```text
-Cargo.toml              Rust workspace
-crates/core/src/lib.rs  Qt-independent core
-crates/core/src/store.rs SQLite persistence and migrations (v1 - v5)
-crates/core/src/session.rs Draft state and save-before-navigation rules
-crates/core/src/settings.rs Theme preferences and settings
-crates/core/src/window_state.rs Validated per-note window state
-crates/core/src/reminders.rs One-time and recurring reminders
-crates/core/src/attachments.rs Safe attachment storage and isolation
-crates/core/src/backup.rs Atomic backup and safe restore
-crates/core/src/export_import.rs JSON and Markdown export/import
-crates/core/src/ipc.rs Single-instance Unix socket server and client
-crates/core/src/paths.rs Linux XDG data and runtime path resolution
-app/src/main.rs         CLI command router, IPC dispatch, Qt lifecycle
-app/src/notes_bridge.rs CXX-Qt bridge connecting Rust core to QML
-qml/themes/Theme.qml    Design system with Light/Dark/System palettes
-qml/components/         Reusable UI components (buttons, badges, command palette)
-qml/windows/Main.qml   Notes library, system tray, and window ownership
-qml/windows/StickyNote.qml Independent sticky note editor
-qml/windows/QuickCapture.qml Floating scratchpad window
-packaging/linux/        .deb, .rpm, Arch, AppImage and Flatpak recipes
-```
+Open **[GitHub Releases](https://github.com/thebanri/BetterNotes/releases)** and
+expand **Assets** on the release you want. Preview releases appear on this page,
+so use it even when GitHub has no “latest” stable release. Packages are currently
+built for **x86_64 / amd64**.
 
----
+| Format | Target | Install the downloaded file |
+| --- | --- | --- |
+| `.deb` | Debian 13; Ubuntu compatibility checked on the rolling image | `sudo apt install ./betternotes_<version>_amd64.deb` |
+| `.rpm` | Fedora; built and checked on the current Fedora image | `sudo dnf install ./betternotes-<version>-1.fc<release>.x86_64.rpm` |
+| `.pkg.tar.zst` | Arch Linux; check dependency versions on derivatives | `sudo pacman -U ./betternotes-<version>-1-x86_64.pkg.tar.zst` |
+| `.AppImage` | Linux with glibc 2.35+ and compatible desktop libraries | Make executable and run; see below |
+| `.flatpak` | Distributions with Flatpak and the KDE runtime | Install the bundle; see below |
 
-## Installation & Packaging
+Replace placeholders with the actual asset filename. Native packages use system
+Qt and their package manager installs dependencies. The AppImage bundles Qt;
+Flatpak uses the KDE runtime. The AppImage is built on Ubuntu 22.04 and smoke-tested
+on Ubuntu 24.04. These checks do not certify every distribution or desktop session.
 
-Every tagged release on GitHub carries ready-made packages, built and
-install-tested by `.github/workflows/packages.yml`:
+### AppImage
 
-| Format | For | Install |
-|---|---|---|
-| `.deb` | Debian 13+, Ubuntu 25.04+ | `sudo apt install ./betternotes_<version>_amd64.deb` |
-| `.rpm` | Fedora | `sudo dnf install ./betternotes-<version>-1.fc*.x86_64.rpm` |
-| `.pkg.tar.zst` | Arch Linux, CachyOS, Manjaro | `sudo pacman -U betternotes-<version>-1-x86_64.pkg.tar.zst` |
-| AppImage | most distributions from 2022 on | `chmod +x BetterNotes-*.AppImage && ./BetterNotes-*.AppImage` |
-| Flatpak | any distribution with Flatpak | `flatpak install --user BetterNotes-*.flatpak` |
-
-The app needs Qt 6.5 or newer, which is why the `.deb` targets Debian 13 and
-Ubuntu 25.04 onwards. The AppImage and Flatpak bring their own Qt.
-
-To build a package yourself, run the matching script on that distribution;
-each writes to `dist/`. See [packaging/linux/README.md](packaging/linux/README.md)
-for dependencies and per-format notes.
+For the current preview:
 
 ```bash
-packaging/linux/deb/build-deb.sh              # Debian / Ubuntu
-packaging/linux/rpm/build-rpm.sh              # Fedora
-packaging/linux/arch/build-arch.sh            # Arch Linux
-packaging/linux/appimage/build-appimage.sh    # AppImage
+chmod +x BetterNotes-0.1.0-x86_64.AppImage
+./BetterNotes-0.1.0-x86_64.AppImage
 ```
 
-### Build from Source
+If FUSE is unavailable, run with extraction enabled:
+
 ```bash
+APPIMAGE_EXTRACT_AND_RUN=1 ./BetterNotes-0.1.0-x86_64.AppImage
+```
+
+### Flatpak
+
+Add Flathub as a source for the KDE runtime, then install the downloaded bundle:
+
+```bash
+flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install --user ./BetterNotes-0.1.0-x86_64.flatpak
+flatpak run org.betternotes.BetterNotes
+```
+
+BetterNotes itself is **not published on Flathub**. The bundle has additional
+[KDE integration and autostart limitations](packaging/linux/README.md#desktop-integration-per-format).
+
+### Verify a download
+
+Download `SHA256SUMS` from the same release into the directory containing your
+package, then run:
+
+```bash
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+Your package must appear with `OK`. Checksums detect damaged or mismatched downloads;
+these packages are not independently signed.
+
+If no release has been published yet, successful
+[Packages runs](https://github.com/thebanri/BetterNotes/actions/workflows/packages.yml)
+provide build artifacts (GitHub sign-in required), or you can build locally.
+
+## Linux desktop behavior
+
+Wayland and X11 are both targets. Positioning, stacking, focus and tray availability
+vary between desktops; headless CI tests verify startup, not compositor behavior.
+
+- **X11:** saved positions are restored and Qt window hints are used.
+- **Wayland:** the compositor generally controls placement and activation.
+  KDE Plasma has optional KWin integration for note placement and layering;
+  this requires host tools that are unavailable in the Flatpak sandbox.
+- **System tray:** requires a tray host. The library window remains available
+  when the session has none.
+- **Global Quick Capture:** bind `betternotes --quick-capture` in your desktop's
+  shortcut settings. The in-app shortcut does not register a desktop-wide hotkey.
+- **Reminders:** require BetterNotes to remain running; notification delivery
+  depends on the desktop notification service.
+
+Use `betternotes --diagnostics` when reporting desktop integration issues.
+
+## Keyboard shortcuts
+
+| Shortcut | Action / scope |
+| --- | --- |
+| `Ctrl+N` | New note in the library |
+| `Ctrl+F` | Focus library search |
+| `Ctrl+K` / `Ctrl+Shift+P` | Open the library command palette |
+| `Ctrl+Alt+Space` | Quick Capture while the library is active |
+| `Ctrl+S` | Save the active sticky note immediately |
+| `Ctrl+W` | Close the active sticky window, preserving its note |
+| `Ctrl+Q` | Save and quit |
+| `Ctrl+B` / `Ctrl+I` / `Ctrl+U` | Bold / italic / underline in the editor |
+
+## CLI and local data
+
+```bash
+betternotes new "Configure nginx" "Check the server configuration"
+betternotes list
+betternotes search nginx
+betternotes show 1
+betternotes archive 1
+betternotes archive 1 --unarchive
+betternotes --quick-capture
+betternotes export notes.json
+betternotes export ./markdown-notes/
+betternotes import notes.json
+betternotes backup ~/Backups
+betternotes restore /path/to/betternotes-backup-directory
+betternotes --help
+```
+
+Notes are stored in `$XDG_DATA_HOME/betternotes/notes.sqlite3`, falling back to
+`~/.local/share/betternotes/notes.sqlite3`. Attachments live alongside the database.
+Flatpak uses its own sandbox data directory. Back up before switching builds or
+restoring older data.
+
+## Build from source
+
+Use a current stable Rust toolchain, a C++17 compiler, `pkg-config`, SQLite
+headers, and **Qt 6.5+** with Qt Quick, QML, Quick Controls and the appropriate
+Wayland/X11 plugins. GUI tests additionally need **Qt 6.7+** and the QtTest QML
+module. Cargo invokes CXX-Qt and Qt build tools; no separate CMake invocation is
+needed.
+
+On Arch Linux / CachyOS:
+
+```bash
+sudo pacman -S --needed base-devel rust pkgconf sqlite qt6-base qt6-declarative qt6-wayland
+```
+
+For Debian 13, use the complete development and QML dependency list in
+[CI](.github/workflows/ci.yml). Fedora dependencies are listed in the
+[RPM recipe](packaging/linux/rpm/betternotes.spec). Distribution Qt packages older
+than 6.5 need a newer Qt installation to build the app.
+
+```bash
+git clone https://github.com/thebanri/BetterNotes.git
+cd BetterNotes
 cargo build --release --locked
 ./target/release/betternotes
 ```
 
----
+Set `QMAKE=/path/to/qt6/bin/qmake` if Qt is not discovered automatically.
+To create distributable packages, follow the [packaging guide](packaging/linux/README.md).
 
-## CLI Usage
+## Development
 
-The CLI and GUI share the same domain engine. If BetterNotes is running, CLI commands update the GUI live:
-
-```bash
-# Create a note (opens in GUI if running)
-betternotes new "Configure nginx" "server { listen 80; }"
-
-# List notes
-betternotes list
-betternotes list --archived
-
-# Search notes with FTS5
-betternotes search nginx
-
-# View note details
-betternotes show 1
-
-# Archive or unarchive
-betternotes archive 1
-betternotes archive 1 --unarchive
-
-# Backup & Restore
-betternotes backup ~/Backups
-betternotes restore ~/Backups/betternotes-backup-1789924274
-
-# Import & Export
-betternotes export notes.json
-betternotes export ./markdown_notes/
-betternotes import notes.json
-
-# Platform & Compositor Diagnostics
-betternotes --diagnostics
-```
-
----
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-| :--- | :--- |
-| `Ctrl + N` | New Note |
-| `Ctrl + K` or `Ctrl + Shift + P` | Command Palette |
-| `Ctrl + Alt + Space` | Quick Capture Scratchpad |
-| `Ctrl + S` | Save Current Note Immediately |
-| `Ctrl + W` | Close Active Window (preserves note) |
-| `Ctrl + Q` | Save All Notes and Quit |
-
----
-
-## Development & Verification
-
-Run the test suite and validation checks:
+Rust owns application logic, data and platform services. QML owns presentation
+and interaction. `crates/core` is Qt-independent; `app` provides the CXX-Qt bridge;
+`qml` contains windows, components and themes.
 
 ```bash
 cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
+cargo check --locked
+cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo test --locked
+cargo build --release --locked
 ```
 
-Refer to the validation reports in `docs/`:
-- [Phase 10 — Linux Release Packaging](docs/phase-10-validation.md)
-- [Phase 9 — CLI and IPC](docs/phase-9-validation.md)
-- [Phase 8 — Productivity](docs/phase-8-validation.md)
-- [Phase 7 — Wayland / X11 Compatibility](docs/phase-7-validation.md)
-- [Wayland & X11 Compatibility Guide](docs/wayland-x11-compatibility.md)
-- [Release Notes v1.0.0](docs/release-v1.0.md)
-
----
+See [architecture](docs/architecture.md), [contributing](CONTRIBUTING.md),
+[release procedure](docs/releasing.md), [packaging validation](docs/phase-10-validation.md)
+and [security reporting](SECURITY.md).
 
 ## License
 
-BetterNotes is open-source software licensed under the [MIT License](LICENSE).
+[MIT](LICENSE).

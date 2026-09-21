@@ -17,7 +17,12 @@ as the app's own exports.
 
 `smoke-test.sh` starts an installed build headless, with a throwaway profile
 and no session bus, and fails if any QML module or plugin is missing. CI runs
-it against every package on a clean system.
+it against the native packages and AppImage on clean systems. Flatpak currently
+has build coverage only; its GUI and sandbox integration need manual testing.
+
+For tagged publication, checksums and release notes, see the
+[release procedure](../../docs/releasing.md). A manual workflow run on `main`
+uploads Actions artifacts but does not publish a GitHub Release.
 
 ## Formats
 

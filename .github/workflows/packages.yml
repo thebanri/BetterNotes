@@ -1,8 +1,7 @@
 name: Packages
 
-# Builds every Linux package, installs each one on a clean system and starts
-# the app headless to prove it runs. Pushing a v* tag also publishes them as
-# a GitHub release.
+# Builds all five Linux formats. Native packages and AppImage get headless
+# install checks. A matching version tag publishes them after CI succeeds.
 on:
   push:
     tags: ['v*']
@@ -10,14 +9,51 @@ on:
     paths:
       - 'packaging/**'
       - '.github/workflows/packages.yml'
+      - '.github/workflows/ci.yml'
+      - 'docs/release-notes.md'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  prepare:
+    name: Validate release version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check version before building packages
+        id: version
+        shell: bash
+        run: |
+          version="$(packaging/linux/version.sh)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Packaging requires a numeric MAJOR.MINOR.PATCH version, got: $version" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match Cargo.toml version $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" != tag ]]; then
+            echo 'Build only: download packages from this run’s Artifacts section. To publish, push a matching vMAJOR.MINOR.PATCH tag.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  verify:
+    name: Release checks
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+
   deb:
     name: Debian package
+    needs: prepare
     runs-on: ubuntu-24.04
     # Debian 13 has Qt 6.8; the app needs 6.5 or newer.
     container: debian:trixie
@@ -40,6 +76,7 @@ jobs:
         with:
           name: deb
           path: dist/*.deb
+          if-no-files-found: error
 
   deb-install:
     name: Install .deb on ${{ matrix.image }}
@@ -64,6 +101,7 @@ jobs:
 
   rpm:
     name: Fedora package
+    needs: prepare
     runs-on: ubuntu-24.04
     container: fedora:latest
     steps:
@@ -79,6 +117,7 @@ jobs:
         with:
           name: rpm
           path: dist/*.rpm
+          if-no-files-found: error
 
   rpm-install:
     name: Install .rpm on Fedora
@@ -96,6 +135,7 @@ jobs:
 
   arch:
     name: Arch Linux package
+    needs: prepare
     runs-on: ubuntu-24.04
     container: archlinux:latest
     steps:
@@ -114,6 +154,7 @@ jobs:
         with:
           name: arch
           path: dist/*.pkg.tar.zst
+          if-no-files-found: error
 
   arch-install:
     name: Install package on Arch Linux
@@ -133,6 +174,7 @@ jobs:
 
   appimage:
     name: AppImage
+    needs: prepare
     # The AppImage runs where glibc is at least as new as here: 2022 onwards.
     runs-on: ubuntu-22.04
     steps:
@@ -159,6 +201,7 @@ jobs:
         with:
           name: appimage
           path: dist/*.AppImage
+          if-no-files-found: error
 
   appimage-run:
     name: Run AppImage on Ubuntu 24.04
@@ -185,6 +228,7 @@ jobs:
 
   flatpak:
     name: Flatpak bundle
+    needs: prepare
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.9
@@ -201,35 +245,45 @@ jobs:
         with:
           name: flatpak
           path: BetterNotes.flatpak
+          if-no-files-found: error
 
   release:
     name: Publish GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [deb-install, rpm-install, arch-install, appimage-run, flatpak]
+    needs: [prepare, verify, deb-install, rpm-install, arch-install, appimage-run, flatpak]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - name: Tag matches the version in Cargo.toml
-        run: |
-          version="$(packaging/linux/version.sh)"
-          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match Cargo.toml version $version" >&2
-            exit 1
-          fi
-          echo "VERSION=$version" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-      - name: Name the Flatpak bundle and write checksums
+      - name: Prepare source archive and checksums
+        shell: bash
         run: |
+          git archive --format=tar.gz --prefix="BetterNotes-$VERSION/" \
+            --output="dist/BetterNotes-$VERSION-source.tar.gz" HEAD
           cd dist
           mv BetterNotes.flatpak "BetterNotes-$VERSION-x86_64.flatpak"
-          sha256sum * > SHA256SUMS
-          ls -l
-      - uses: softprops/action-gh-release@v2
+          # Explicit globs fail if any format is missing and exclude unrelated artifacts.
+          sha256sum -- *.deb *.rpm *.pkg.tar.zst *.AppImage *.flatpak *-source.tar.gz > SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - uses: softprops/action-gh-release@v3
         with:
-          files: dist/*
+          name: BetterNotes v${{ needs.prepare.outputs.version }}
+          body_path: docs/release-notes.md
+          prerelease: ${{ startsWith(needs.prepare.outputs.version, '0.') }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.pkg.tar.zst
+            dist/*.AppImage
+            dist/*.flatpak
+            dist/*-source.tar.gz
+            dist/SHA256SUMS
           generate_release_notes: true
