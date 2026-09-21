@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Reminders for every note: the bell in a note's title bar sets, changes or removes its reminder, with a date, a time, one-click choices and daily, weekly or monthly repeats.
+- Bulleted and numbered list buttons in the note toolbar (Ctrl+Shift+8 / Ctrl+Shift+7) turn the selected lines, or the caret's line, into a list and back; typing `- ` or `1. ` still works too.
 - The library shows each reminder on its note card; clicking it (or the card's bell or menu) edits it there, and a new **Reminders** section lists every note that has one.
 
 ### Fixed

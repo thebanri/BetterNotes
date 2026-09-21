@@ -41,6 +41,14 @@ class TextFormatter : public QObject {
     // Whether plain text has a list marker at the start of the line ending at
     // position, so the caller knows to switch the note to rich text first.
     Q_INVOKABLE bool startsList(const QString &text, int position) const;
+    // Whether every paragraph from start to end is in a list of this kind,
+    // "bullet" or "number".
+    Q_INVOKABLE bool listActive(QQuickTextDocument *document, int start, int end,
+                                const QString &kind) const;
+    // Makes the paragraphs from start to end one list of this kind, or takes
+    // them out of it when they already are one.
+    Q_INVOKABLE void toggleList(QQuickTextDocument *document, int start, int end,
+                                const QString &kind);
     // Enter on an empty list item ends the list instead of adding an item.
     Q_INVOKABLE bool endEmptyListItem(QQuickTextDocument *document, int position);
 

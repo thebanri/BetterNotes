@@ -356,6 +356,25 @@ Window {
         body.select(0, body.length)
         body.remove(0, body.length)
 
+        // The toolbar buttons turn existing lines into a list and back.
+        // The note is rich text by now, so each line is its own paragraph,
+        // as pressing Enter makes them.
+        body.insert(0, "<p>milk</p><p>eggs</p><p>bread</p>")
+        body.select(0, body.length)
+        clickTool(window, "bulletListButton")
+        check((body.text.match(/<li/g) || []).length === 3 && body.text.indexOf("<ul") >= 0, "Bulleted list button did not list every selected line")
+        check(window.listActive("bullet") && !window.listActive("number"), "Bulleted list button state is wrong")
+        clickTool(window, "numberedListButton")
+        check(body.text.indexOf("<ol") >= 0 && body.text.indexOf("<ul") < 0, "Numbered list did not replace the bullets")
+        clickTool(window, "numberedListButton")
+        check(body.text.indexOf("<li") < 0 && window.plainContent === "milk\neggs\nbread", "Toggling the list off changed the text")
+        body.deselect()
+        body.cursorPosition = 6
+        clickTool(window, "bulletListButton")
+        check((body.text.match(/<li/g) || []).length === 1, "Without a selection only the caret's line should become a list item")
+        body.select(0, body.length)
+        body.remove(0, body.length)
+
         // The test points the XDG Pictures folder at its fixture images.
         const fixtures = backend.picturesFolder() + "/"
         check(fixtures.indexOf("/fixtures/") > 0, "Pictures folder not taken from the XDG user directories")

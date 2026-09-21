@@ -438,3 +438,75 @@ int TextFormatter::fittedImageWidth(const QUrl &url, int maxWidth) const {
         return 0;
     return qMax(16, qMin(size.width(), qMax(16, maxWidth)));
 }
+
+namespace {
+bool isBullet(QTextListFormat::Style style) {
+    return style == QTextListFormat::ListDisc ||
+           style == QTextListFormat::ListCircle ||
+           style == QTextListFormat::ListSquare;
+}
+
+bool matchesKind(const QTextList *list, const QString &kind) {
+    return list && isBullet(list->format().style()) == (kind == u"bullet");
+}
+
+// The paragraphs a selection touches; an empty selection is its paragraph.
+QList<QTextBlock> blocksIn(QTextDocument *document, int start, int end) {
+    QList<QTextBlock> blocks;
+    if (!document || start < 0 || end < start ||
+        end >= document->characterCount())
+        return blocks;
+    for (auto block = document->findBlock(start); block.isValid();
+         block = block.next()) {
+        blocks.append(block);
+        if (block.position() + block.length() > end)
+            break;
+    }
+    return blocks;
+}
+} // namespace
+
+bool TextFormatter::listActive(QQuickTextDocument *quickDocument, int start,
+                               int end, const QString &kind) const {
+    const auto blocks = blocksIn(
+        quickDocument ? quickDocument->textDocument() : nullptr, start, end);
+    if (blocks.isEmpty())
+        return false;
+    for (const auto &block : blocks) {
+        if (!matchesKind(block.textList(), kind))
+            return false;
+    }
+    return true;
+}
+
+void TextFormatter::toggleList(QQuickTextDocument *quickDocument, int start,
+                               int end, const QString &kind) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    const auto blocks = blocksIn(document, start, end);
+    if (blocks.isEmpty() || (kind != u"bullet" && kind != u"number"))
+        return;
+    const bool remove = listActive(quickDocument, start, end, kind);
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    // Take every paragraph out of whatever list it is in first, so a mixed
+    // selection becomes one list rather than several.
+    for (const auto &block : blocks) {
+        if (auto *list = block.textList())
+            list->remove(block);
+        QTextCursor paragraph(block);
+        auto format = paragraph.blockFormat();
+        format.setIndent(0);
+        paragraph.setBlockFormat(format);
+    }
+    if (!remove) {
+        QTextListFormat format;
+        format.setStyle(kind == u"bullet" ? QTextListFormat::ListDisc
+                                          : QTextListFormat::ListDecimal);
+        format.setIndent(1);
+        QTextCursor first(blocks.first());
+        auto *list = first.createList(format);
+        for (qsizetype i = 1; i < blocks.size(); ++i)
+            list->add(blocks.at(i));
+    }
+    cursor.endEditBlock();
+}

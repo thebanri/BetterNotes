@@ -675,6 +675,22 @@ ApplicationWindow {
         autosave.restart()
     }
 
+    // Bulleted ("bullet") or numbered ("number") lists for the selected lines,
+    // or the caret's line; the same button takes them out of the list again.
+    function listActive(kind) {
+        // Reading text keeps the button state in step with edits.
+        if (!isRichText || !contentEditor.text.length) return false
+        return formatter.listActive(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd, kind)
+    }
+
+    function toggleList(kind) {
+        contentEditor.forceActiveFocus()
+        ensureRichText()
+        formatter.toggleList(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd, kind)
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+    }
+
     // ---- Tags -------------------------------------------------------------
 
     function addTags(text) {
@@ -753,6 +769,16 @@ ApplicationWindow {
         sequence: "Ctrl+U"
         enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
         onActivated: noteWindow.toggleInlineStyle("u")
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+8"
+        enabled: contentEditor.activeFocus
+        onActivated: noteWindow.toggleList("bullet")
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+7"
+        enabled: contentEditor.activeFocus
+        onActivated: noteWindow.toggleList("number")
     }
     Shortcut {
         sequence: "Ctrl+1"
@@ -1143,6 +1169,53 @@ ApplicationWindow {
                 }
 
                 Rectangle {
+                    implicitWidth: 1
+                    implicitHeight: 14
+                    color: theme.border
+                    Layout.alignment: Qt.AlignVCenter
+                }
+
+                // Lists. Hidden on a narrow note, where the toolbar would
+                // overflow; the shortcuts and typing "- " or "1. " still work.
+                UI.StyledButton {
+                    objectName: "bulletListButton"
+                    visible: formatToolbar.width >= 300
+                    iconName: "list"
+                    iconSize: 14
+                    theme: noteWindow.theme
+                    variant: noteWindow.listActive("bullet") ? "accent" : "ghost"
+                    implicitWidth: 24
+                    implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
+                    padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Bulleted list (Ctrl+Shift+8) — or type \"- \"")
+                    onClicked: noteWindow.toggleList("bullet")
+                }
+                UI.StyledButton {
+                    objectName: "numberedListButton"
+                    visible: formatToolbar.width >= 300
+                    iconName: "list-ordered"
+                    iconSize: 14
+                    theme: noteWindow.theme
+                    variant: noteWindow.listActive("number") ? "accent" : "ghost"
+                    implicitWidth: 24
+                    implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
+                    padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Numbered list (Ctrl+Shift+7) — or type \"1. \"")
+                    onClicked: noteWindow.toggleList("number")
+                }
+
+                Rectangle {
+                    visible: formatToolbar.width >= 300
                     implicitWidth: 1
                     implicitHeight: 14
                     color: theme.border
