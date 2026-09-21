@@ -356,6 +356,18 @@ Window {
         body.select(0, body.length)
         body.remove(0, body.length)
 
+        // Starting an empty note with a list hides the placeholder hint,
+        // which would otherwise sit over the first bullet.
+        body.text = ""
+        check(body.length === 0 && body.placeholderText.length > 0, "An empty note lost its hint")
+        clickTool(window, "bulletListButton")
+        check(body.length === 0 && body.placeholderText === "", "The hint covers the bullet of an empty list")
+        clickTool(window, "bulletListButton")
+        check(body.placeholderText.length > 0, "The hint did not return after removing the list")
+        // "Default" is the desktop's font, never the monospace fallback an
+        // empty family resolves to.
+        check(body.font.family === Qt.application.font.family, "Default note font is not the desktop font")
+
         // The toolbar buttons turn existing lines into a list and back.
         // The note is rich text by now, so each line is its own paragraph,
         // as pressing Enter makes them.

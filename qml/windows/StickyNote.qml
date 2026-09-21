@@ -70,6 +70,10 @@ ApplicationWindow {
     property string noteTint: "yellow"
     property string noteFontFamily: "default"
     property int noteFontSize: 13
+    // The family the note text is drawn in. "default" means the desktop's own
+    // font: an empty family would fall back to a monospace font instead.
+    readonly property string editorFontFamily: noteFontFamily === "default" || noteFontFamily === ""
+        ? Qt.application.font.family : noteFontFamily
     property bool isRichText: false
 
     property bool loadingContent: false
@@ -1342,12 +1346,14 @@ ApplicationWindow {
                 objectName: "contentEditor"
                 width: contentScroll.availableWidth
                 textFormat: TextEdit.PlainText
-                placeholderText: qsTr("Write your note…")
+                // An empty list item still counts as no text, and the hint
+                // would sit over its bullet.
+                placeholderText: length === 0 && text.indexOf("<li") < 0 ? qsTr("Write your note…") : ""
                 Accessible.name: qsTr("Note content")
                 wrapMode: TextEdit.Wrap
                 selectByMouse: true
                 persistentSelection: true
-                font.family: (noteWindow.noteFontFamily === "default" || noteWindow.noteFontFamily === "") ? "" : noteWindow.noteFontFamily
+                font.family: noteWindow.editorFontFamily
                 font.pixelSize: noteWindow.noteFontSize > 0 ? noteWindow.noteFontSize : 13
                 color: theme.noteText
                 placeholderTextColor: theme.noteTextSecondary

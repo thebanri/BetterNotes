@@ -334,7 +334,7 @@ Window {
                                     Layout.fillWidth: true
                                     text: qsTr("A little space for your ideas.")
                                     wrapMode: Text.WordWrap
-                                    font.family: modalRoot.noteWindow.noteFontFamily === "default" ? "" : modalRoot.noteWindow.noteFontFamily
+                                    font.family: modalRoot.noteWindow.editorFontFamily
                                     font.pixelSize: modalRoot.noteWindow.noteFontSize
                                     color: modalRoot.theme.noteText
                                 }
