@@ -16,10 +16,13 @@ fn main() {
         .qt_module("DBus")
         .build();
 
-    // cxx-qt passes -lQt6DBus ahead of the static archive holding our C++,
-    // and window_placement.cpp is the only code that uses Qt D-Bus. With
-    // --as-needed, GNU ld (Fedora, Debian) drops the library before it sees
-    // the reference and then fails with "DSO missing from command line".
-    // Naming it again after the archives keeps it; lld is order-insensitive.
-    println!("cargo:rustc-link-arg-bins=-lQt6DBus");
+    // cxx-qt passes the Qt libraries ahead of the static archive holding our
+    // own C++ (QApplication in platform_helper.cpp, QQuickTextDocument in
+    // text_formatter.cpp, Qt D-Bus in window_placement.cpp). With
+    // --as-needed, GNU ld (Fedora) drops each one before it sees the
+    // reference and fails with "DSO missing from command line". Naming them
+    // again after the archives keeps them; lld (Arch) is order-insensitive.
+    for module in ["Widgets", "Quick", "DBus", "Qml", "Gui", "Core"] {
+        println!("cargo:rustc-link-arg-bins=-lQt6{module}");
+    }
 }
