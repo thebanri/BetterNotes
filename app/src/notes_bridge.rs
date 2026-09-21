@@ -201,6 +201,22 @@ pub mod ffi {
         fn documents_folder(&self) -> QString;
         /// Attaches an image on the clipboard to the note and returns its
         /// file URL, or "" when the clipboard holds no image data.
+        /// The note's file attachments (not its inline images) as a JSON
+        /// array of {id, name, size, url, openable}.
+        #[qinvokable]
+        #[cxx_name = "attachmentsJson"]
+        fn attachments_json(&self) -> QString;
+        #[qinvokable]
+        #[cxx_name = "attachFile"]
+        fn attach_file(self: Pin<&mut Self>, file_url: QString) -> bool;
+        #[qinvokable]
+        #[cxx_name = "removeAttachment"]
+        fn remove_attachment(self: Pin<&mut Self>, id: QString) -> bool;
+        /// The URL to open an attachment with, or "" when it must not be
+        /// opened because it could run code.
+        #[qinvokable]
+        #[cxx_name = "attachmentOpenUrl"]
+        fn attachment_open_url(&self, id: QString) -> QString;
         #[qinvokable]
         #[cxx_name = "pasteClipboardImage"]
         fn paste_clipboard_image(self: Pin<&mut Self>) -> QString;
@@ -927,6 +943,98 @@ impl ffi::NotesBackend {
 
     pub fn documents_folder(&self) -> QString {
         ffi::platformDocumentsFolder()
+    }
+
+    fn note_attachments(&self) -> Vec<(betternotes_core::Attachment, std::path::PathBuf)> {
+        let Some(session) = self.session.as_ref() else {
+            return Vec::new();
+        };
+        let (Some(note), Ok(data_dir)) = (
+            session.current(),
+            paths::data_directory(
+                std::env::var_os("XDG_DATA_HOME").as_deref(),
+                std::env::var_os("HOME").as_deref(),
+            ),
+        ) else {
+            return Vec::new();
+        };
+        session
+            .list_attachments(note.id)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|attachment| !attachment.mime_type.starts_with("image/"))
+            .map(|attachment| {
+                let path = betternotes_core::stored_path(&data_dir, &attachment);
+                (attachment, path)
+            })
+            .collect()
+    }
+
+    pub fn attachments_json(&self) -> QString {
+        let list: Vec<serde_json::Value> = self
+            .note_attachments()
+            .iter()
+            .map(|(attachment, path)| {
+                serde_json::json!({
+                    "id": attachment.id,
+                    "name": attachment.filename,
+                    "size": attachment.byte_size,
+                    "url": QUrl::from_local_file(&QString::from(path.to_string_lossy().as_ref()))
+                        .to_qstring()
+                        .to_string(),
+                    "openable": betternotes_core::can_open(&attachment.filename),
+                })
+            })
+            .collect();
+        QString::from(&serde_json::Value::Array(list).to_string())
+    }
+
+    pub fn attach_file(mut self: Pin<&mut Self>, file_url: QString) -> bool {
+        let path = local_path(&file_url);
+        let result = match self.as_mut().rust_mut().session.as_mut() {
+            Some(session) => session
+                .add_attachment_file(std::path::Path::new(&path))
+                .map(|_| ()),
+            None => Err(Error::NoSelection),
+        };
+        let message = match &result {
+            Ok(()) => String::new(),
+            Err(error) => format!("Could not attach the file: {error}"),
+        };
+        self.as_mut().rust_mut().error_message = QString::from(&message);
+        self.as_mut().status_changed();
+        result.is_ok()
+    }
+
+    pub fn remove_attachment(mut self: Pin<&mut Self>, id: QString) -> bool {
+        let id = id.to_string();
+        // Only an attachment of this note may be removed from it.
+        if !self.note_attachments().iter().any(|(a, _)| a.id == id) {
+            return false;
+        }
+        let Ok(data_dir) = paths::data_directory(
+            std::env::var_os("XDG_DATA_HOME").as_deref(),
+            std::env::var_os("HOME").as_deref(),
+        ) else {
+            return false;
+        };
+        match self.as_mut().rust_mut().session.as_mut() {
+            Some(session) => session.delete_attachment(&data_dir, &id).is_ok(),
+            None => false,
+        }
+    }
+
+    pub fn attachment_open_url(&self, id: QString) -> QString {
+        let id = id.to_string();
+        self.note_attachments()
+            .into_iter()
+            .find(|(attachment, _)| {
+                attachment.id == id && betternotes_core::can_open(&attachment.filename)
+            })
+            .map(|(_, path)| {
+                QUrl::from_local_file(&QString::from(path.to_string_lossy().as_ref())).to_qstring()
+            })
+            .unwrap_or_default()
     }
 
     pub fn paste_clipboard_image(self: Pin<&mut Self>) -> QString {

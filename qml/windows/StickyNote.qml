@@ -215,6 +215,7 @@ ApplicationWindow {
         if (!collapsed) titleEditor.forceActiveFocus()
         persist(true)
         refreshReminder()
+        refreshAttachments()
         return true
     }
 
@@ -819,6 +820,47 @@ ApplicationWindow {
         return { words: words, characters: text.replace(/\n/g, "").length }
     }
 
+    // ---- File attachments -------------------------------------------------
+
+    // The note's attached files (inline images are not listed here).
+    property var attachments: []
+
+    function refreshAttachments() {
+        try {
+            attachments = backend.ready ? JSON.parse(backend.attachmentsJson()) : []
+        } catch (error) {
+            attachments = []
+        }
+    }
+
+    function attachFiles(urls) {
+        let added = 0
+        for (let i = 0; i < urls.length; ++i) {
+            if (backend.attachFile(urls[i].toString())) ++added
+        }
+        refreshAttachments()
+        return added
+    }
+
+    function formatSize(bytes) {
+        if (bytes < 1024) return qsTr("%1 B").arg(bytes)
+        if (bytes < 1024 * 1024) return qsTr("%1 KB").arg((bytes / 1024).toFixed(bytes < 10240 ? 1 : 0))
+        return qsTr("%1 MB").arg((bytes / 1048576).toFixed(1))
+    }
+
+    function openAttachment(attachment) {
+        // The core refuses anything that could run as a program.
+        const url = backend.attachmentOpenUrl(attachment.id)
+        if (url.length > 0) Qt.openUrlExternally(url)
+    }
+
+    function saveAttachment(attachment) {
+        saveImageDialog.source = attachment.url
+        saveImageDialog.nameFilters = [qsTr("All files (*)")]
+        saveImageDialog.selectedFile = saveImageDialog.currentFolder + "/" + encodeURIComponent(attachment.name)
+        saveImageDialog.open()
+    }
+
     // ---- Pasting images ----------------------------------------------------
 
     // Ctrl+V with a picture or copied image files on the clipboard adds them
@@ -1070,6 +1112,40 @@ ApplicationWindow {
         onAccepted: {
             backend.saveImageAs(source, selectedFile.toString())
             currentFolder = selectedFile.toString().replace(/\/[^\/]*$/, "")
+        }
+    }
+
+    FileDialog {
+        id: attachDialog
+        title: qsTr("Attach Files")
+        fileMode: FileDialog.OpenFiles
+        currentFolder: backend.documentsFolder()
+        onAccepted: {
+            const urls = []
+            for (let i = 0; i < selectedFiles.length; ++i) urls.push(selectedFiles[i])
+            noteWindow.attachFiles(urls)
+        }
+    }
+
+    Menu {
+        id: attachmentMenu
+        property var attachment: ({})
+        MenuItem {
+            text: attachmentMenu.attachment.openable ? qsTr("Open") : qsTr("Open (not allowed for programs and scripts)")
+            enabled: !!attachmentMenu.attachment.openable
+            onTriggered: noteWindow.openAttachment(attachmentMenu.attachment)
+        }
+        MenuItem {
+            text: qsTr("Save As…")
+            onTriggered: noteWindow.saveAttachment(attachmentMenu.attachment)
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: qsTr("Remove…")
+            onTriggered: {
+                removeAttachmentDialog.attachment = attachmentMenu.attachment
+                noteWindow.showDialog(removeAttachmentDialog)
+            }
         }
     }
 
@@ -1693,6 +1769,12 @@ ApplicationWindow {
                         }
                         MenuSeparator {}
                         MenuItem {
+                            objectName: "attachFileItem"
+                            text: qsTr("Attach File…")
+                            onTriggered: attachDialog.open()
+                        }
+                        MenuSeparator {}
+                        MenuItem {
                             text: qsTr("Find… (Ctrl+F)")
                             onTriggered: noteWindow.openFind(false)
                         }
@@ -1967,6 +2049,65 @@ ApplicationWindow {
             }
         }
 
+        // Attached files; click one to open, save or remove it.
+        Flow {
+            id: attachmentFlow
+            objectName: "attachmentFlow"
+            visible: noteWindow.attachments.length > 0 && !noteWindow.collapsed
+            Layout.fillWidth: true
+            Layout.preferredHeight: implicitHeight
+            spacing: 4
+            Repeater {
+                model: noteWindow.attachments
+                delegate: Rectangle {
+                    id: fileChip
+                    required property var modelData
+                    objectName: "attachmentChip"
+                    height: 26
+                    width: Math.min(fileRow.implicitWidth + 16, attachmentFlow.width)
+                    radius: 8
+                    color: fileHover.hovered ? (theme.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.1))
+                        : (theme.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06))
+                    RowLayout {
+                        id: fileRow
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        spacing: 5
+                        UI.AppIcon { name: "paperclip"; size: 12; color: theme.noteTextSecondary }
+                        Label {
+                            text: fileChip.modelData.name
+                            textFormat: Text.PlainText
+                            elide: Text.ElideMiddle
+                            font.pixelSize: 11
+                            color: theme.noteText
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: attachmentFlow.width - 80
+                        }
+                        Label {
+                            text: noteWindow.formatSize(fileChip.modelData.size)
+                            font.pixelSize: 10
+                            color: theme.noteTextSecondary
+                        }
+                    }
+                    HoverHandler { id: fileHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler {
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        onTapped: function(eventPoint) {
+                            attachmentMenu.attachment = fileChip.modelData
+                            attachmentMenu.popup(fileChip, eventPoint.position.x, eventPoint.position.y)
+                        }
+                        onDoubleTapped: noteWindow.openAttachment(fileChip.modelData)
+                    }
+                    ToolTip.visible: fileHover.hovered
+                    ToolTip.text: fileChip.modelData.openable
+                        ? qsTr("Double-click to open; click for more")
+                        : qsTr("Programs and scripts are never opened from a note; save it to use it")
+                    ToolTip.delay: 500
+                }
+            }
+        }
+
         // Find and replace (Ctrl+F / Ctrl+H).
         Rectangle {
             id: findBar
@@ -2104,7 +2245,7 @@ ApplicationWindow {
         z: 30
         property bool acceptable: false
         onEntered: function(drag) {
-            acceptable = drag.hasUrls && drag.urls.some(function(url) { return noteWindow.isImageUrl(url) })
+            acceptable = drag.hasUrls && drag.urls.some(function(url) { return url.toString().startsWith("file:") })
             drag.accepted = acceptable
             if (acceptable) drag.acceptProposedAction()
         }
@@ -2114,7 +2255,13 @@ ApplicationWindow {
             const point = imageDrop.mapToItem(contentEditor, drop.x, drop.y)
             const inside = point.x >= 0 && point.y >= 0 && point.x <= contentEditor.width && point.y <= contentEditor.height
             const position = inside ? contentEditor.positionAt(point.x, point.y) : contentEditor.length
-            if (noteWindow.insertImages(drop.urls, position) > 0) drop.acceptProposedAction()
+            // Images go into the text; other files become attachments.
+            const files = drop.urls.filter(function(url) {
+                const text = url.toString()
+                return text.startsWith("file:") && !noteWindow.isImageUrl(text)
+            })
+            const added = noteWindow.insertImages(drop.urls, position) + noteWindow.attachFiles(files)
+            if (added > 0) drop.acceptProposedAction()
         }
 
         Rectangle {
@@ -2127,11 +2274,32 @@ ApplicationWindow {
             radius: 8
             Label {
                 anchors.centerIn: parent
-                text: qsTr("Drop to add to the note")
+                text: qsTr("Drop to add to the note — images go into the text, other files are attached")
+                width: parent.width - 24
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
                 color: theme.noteText
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
             }
+        }
+    }
+
+    Dialog {
+        id: removeAttachmentDialog
+        property var attachment: ({})
+        anchors.centerIn: parent
+        title: qsTr("Remove this file?")
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+        Label {
+            text: qsTr("“%1” will be removed from the note and deleted from BetterNotes' storage.").arg(removeAttachmentDialog.attachment.name || "")
+            wrapMode: Text.WordWrap
+            width: Math.min(300, noteWindow.width - 64)
+        }
+        onAccepted: {
+            backend.removeAttachment(attachment.id)
+            noteWindow.refreshAttachments()
         }
     }
 

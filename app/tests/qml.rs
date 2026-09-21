@@ -45,6 +45,8 @@ fn main() {
         include_bytes!("fixtures/still.png"),
     )
     .unwrap();
+    std::fs::write(fixtures.join("notes.txt"), "plain notes").unwrap();
+    std::fs::write(fixtures.join("tool.sh"), "#!/bin/sh\necho hi\n").unwrap();
     std::fs::write(
         fixtures.join("animated.gif"),
         include_bytes!("fixtures/animated.gif"),

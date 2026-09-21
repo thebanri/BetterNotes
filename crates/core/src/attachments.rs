@@ -105,6 +105,12 @@ pub fn add_attachment(
     let dest_file = dest_dir.join(&rel_path);
 
     fs::copy(source_path, &dest_file)?;
+    // fs::copy keeps the source's mode. An attachment is data: never
+    // executable, whatever it was before.
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&dest_file, fs::Permissions::from_mode(0o600))?;
+    }
     let meta = fs::metadata(&dest_file)?;
     let byte_size = meta.len() as i64;
     let created_at = (now / 1000) as i64;
@@ -165,6 +171,63 @@ pub fn delete_attachment(
 
     connection.execute("DELETE FROM attachments WHERE id = ?1", [attachment_id])?;
     Ok(())
+}
+
+/// Types that run code when "opened": desktop launchers, scripts, programs
+/// and installers. Opening an attachment hands it to the desktop's default
+/// app, so these are only ever saved, never opened.
+const RUNNABLE_EXTENSIONS: &[&str] = &[
+    "desktop",
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "csh",
+    "ksh",
+    "run",
+    "bin",
+    "appimage",
+    "flatpakref",
+    "exe",
+    "msi",
+    "bat",
+    "cmd",
+    "com",
+    "scr",
+    "ps1",
+    "vbs",
+    "jar",
+    "py",
+    "pyw",
+    "pl",
+    "rb",
+    "php",
+    "deb",
+    "rpm",
+    "pkg",
+    "apk",
+    "snap",
+    "x86_64",
+    "elf",
+    "so",
+    "out",
+];
+
+/// Whether an attachment may be opened with the desktop's default app.
+pub fn can_open(filename: &str) -> bool {
+    let name = filename.to_lowercase();
+    match name.rsplit_once('.') {
+        Some((_, extension)) => !RUNNABLE_EXTENSIONS.contains(&extension),
+        // No extension: the desktop decides by content, which may be a program.
+        None => false,
+    }
+}
+
+/// Where an attachment's file is stored.
+pub fn stored_path(data_dir: &Path, attachment: &Attachment) -> PathBuf {
+    data_dir
+        .join("attachments")
+        .join(&attachment.stored_rel_path)
 }
 
 /// The name an attachment had when it was added: its stored file name
@@ -234,6 +297,49 @@ mod tests {
         assert_eq!(guess_mime_type("photo.png"), "image/png");
         assert_eq!(guess_mime_type("doc.pdf"), "application/pdf");
         assert_eq!(guess_mime_type("notes.md"), "text/markdown");
+    }
+
+    #[test]
+    fn runnable_attachments_are_never_opened() {
+        for name in [
+            "report.pdf",
+            "photo.JPG",
+            "notes.md",
+            "data.tar.gz",
+            "clip.mp4",
+        ] {
+            assert!(can_open(name), "{name}");
+        }
+        for name in [
+            "evil.desktop",
+            "install.sh",
+            "App.AppImage",
+            "setup.EXE",
+            "run.py",
+            "tool",
+            "lib.so",
+            "script.fish",
+        ] {
+            assert!(!can_open(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn attachments_are_copied_without_execute_permission() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::NoteStore::open(&dir.path().join("notes.sqlite3")).unwrap();
+        let note = store.create().unwrap();
+        let source = dir.path().join("tool.sh");
+        fs::write(&source, "#!/bin/sh\n").unwrap();
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o755)).unwrap();
+        let attachment =
+            add_attachment(dir.path(), store.raw_connection(), note.id, &source).unwrap();
+        let mode = fs::metadata(stored_path(dir.path(), &attachment))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
     }
 
     #[test]

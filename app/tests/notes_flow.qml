@@ -301,8 +301,9 @@ Window {
     }
 
     // Checklists, list indentation, alignment, counts, find and replace,
-    // image preview and pasting.
+    // image preview, pasting and file attachments.
     function assertEditorExtras(window) {
+        const fixtures = window.editorBackend.picturesFolder() + "/"
         const body = findItem(window.contentItem, "contentEditor")
         const formatter = window.imageFormatter
         const type = function(text) {
@@ -366,10 +367,24 @@ Window {
         window.editorBackend.copyToClipboard("plain words")
         check(!window.pasteImages(), "Plain text was taken for an image")
 
+        // Files other than images are attachments: listed, opened only when
+        // they cannot run as programs, and removed with their stored copy.
+        check(window.attachFiles([fixtures + "notes.txt", fixtures + "tool.sh"]) === 2, "Attaching files failed")
+        check(window.attachments.length === 2, "Attachments not listed: " + JSON.stringify(window.attachments))
+        const text = window.attachments.find(function(a) { return a.name === "notes.txt" })
+        const script = window.attachments.find(function(a) { return a.name === "tool.sh" })
+        check(text && text.openable && window.editorBackend.attachmentOpenUrl(text.id).length > 0, "A text attachment cannot be opened")
+        check(script && !script.openable && window.editorBackend.attachmentOpenUrl(script.id) === "", "A script attachment could be opened")
+        check(window.editorBackend.saveImageAs(text.url, fixtures + "saved-notes.txt"), "Saving an attachment failed")
+        check(window.editorBackend.removeAttachment(script.id), "Removing an attachment failed")
+        check(!window.editorBackend.removeAttachment("not-an-id"), "Removed an attachment the note does not have")
+        window.refreshAttachments()
+        check(window.attachments.length === 1, "Removed attachment still listed")
+
         // Double-clicking an image opens it full size.
         body.text = ""
-        const fixtures = window.editorBackend.picturesFolder() + "/"
         check(window.insertImages([fixtures + "still.png"], 0) === 1, "Image insert failed")
+        check(window.attachments.length === 1, "An inline image was listed as a file attachment")
         const imageAt = body.positionToRectangle(window.plainContent.indexOf("\ufffc"))
         check(window.selectImageAt(imageAt.x + 4, imageAt.y + 4), "Image not selectable")
         window.previewSelectedImage()

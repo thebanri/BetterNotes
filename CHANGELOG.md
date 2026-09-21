@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Paste images with Ctrl+V: a screenshot or copied picture, or image files copied in a file manager.
 - Right-click an image to align it or view it full size; double-clicking an image also opens it full size, with GIFs playing.
 - Code blocks have a copy button.
+- Attach any file to a note (**⋯ → Attach File…**, or drop it on the note). Attached files show under the text; double-click to open, or save or remove them from their menu. Programs, scripts and launchers are never opened from a note, only saved, and attachments are stored without execute permission.
 - Code blocks: type ``` (optionally with a language name) at the start of a line and press Enter to start one; Enter continues it and ``` on a line of its own ends it. A toolbar button turns selected lines into code and back. Code is monospace in a grey box and survives saving and reopening.
 
 ### Fixed
