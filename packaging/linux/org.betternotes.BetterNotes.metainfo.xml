@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.3" date="2026-09-21">
+      <description>
+        <p>The applications menu shows the BetterNotes icon right after installing.</p>
+      </description>
+    </release>
     <release version="0.1.2" date="2026-09-21">
       <description>
         <p>One-command curl installer, saving images from a note, and the application icon in the Wayland taskbar for the AppImage.</p>

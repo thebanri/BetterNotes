@@ -200,6 +200,7 @@ pub fn refresh_autostart(exec: Option<&str>) -> Result<()> {
 pub fn install_for_current_user() -> Result<String> {
     let layout = InstallLayout::current()?;
     let exec = install(&layout, &InstallSource::detect()?)?;
+    notify_desktop(&layout);
     refresh_autostart(Some(&exec))?;
     Ok(format!(
         "BetterNotes was added to your applications menu; it launches {exec}"
@@ -208,9 +209,42 @@ pub fn install_for_current_user() -> Result<String> {
 
 /// Reverses [`install_for_current_user`].
 pub fn uninstall_for_current_user() -> Result<String> {
-    uninstall(&InstallLayout::current()?)?;
+    let layout = InstallLayout::current()?;
+    uninstall(&layout)?;
+    notify_desktop(&layout);
     refresh_autostart(None)?;
     Ok("BetterNotes was removed from your applications menu. Notes were kept.".into())
+}
+
+/// Tells running desktop shells that icons and menu entries changed, so the
+/// applications menu shows BetterNotes with its icon without logging out.
+/// Every step is optional: a missing tool or failure changes nothing else.
+fn notify_desktop(layout: &InstallLayout) {
+    // GTK and GNOME reread an icon theme whose directory time changed.
+    if let Ok(directory) = fs::File::open(&layout.icon_theme) {
+        let _ = directory.set_modified(std::time::SystemTime::now());
+    }
+    // KDE caches icon lookups, including misses, until told otherwise, and
+    // rebuilds its menu database on request. Fixed arguments, no shell.
+    let run = |program: &str, args: &[&str]| {
+        let _ = std::process::Command::new(program)
+            .args(args)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    };
+    run(
+        "dbus-send",
+        &[
+            "--session",
+            "--type=signal",
+            "/KIconLoader",
+            "org.kde.KIconLoader.iconChanged",
+            "int32:0",
+        ],
+    );
+    run("kbuildsycoca6", &[]);
 }
 
 /// Removes what [`install`] added. Notes, settings and attachments stay.
