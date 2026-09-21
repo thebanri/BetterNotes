@@ -3,6 +3,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QQuickTextDocument>
 #include <QtQml/qqmlregistration.h>
 
@@ -10,7 +11,9 @@ class QMovie;
 
 // Plays the animated GIFs shown in a text document. QTextDocument draws an
 // image resource as a single still frame, so each GIF's frames are fed back
-// into the document as that image resource while the animation runs.
+// into the document as that image resource while the animation runs. It also
+// registers the document's other local images, which Qt 6.8 would otherwise
+// fail to find by their file URL (see resourceKeys()).
 class ImageAnimator : public QObject {
     Q_OBJECT
     QML_ELEMENT
@@ -47,6 +50,7 @@ class ImageAnimator : public QObject {
 
     QPointer<QQuickTextDocument> m_document;
     QHash<QString, QMovie *> m_movies;
+    QSet<QString> m_loaded;
     bool m_running = true;
     bool m_updating = false;
 };

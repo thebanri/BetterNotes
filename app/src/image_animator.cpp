@@ -1,6 +1,7 @@
 #include "image_animator.h"
 
 #include <QAbstractTextDocumentLayout>
+#include <QImage>
 #include <QMovie>
 #include <QSet>
 #include <QTextBlock>
@@ -15,6 +16,29 @@ bool isLocalGif(const QString &name) {
     const QUrl url(name);
     return url.isLocalFile() &&
            url.path().endsWith(QStringLiteral(".gif"), Qt::CaseInsensitive);
+}
+
+// The keys a view may look an image up by. Qt 6.11 asks for the image's own
+// URL. Qt 6.8 strips the file scheme and resolves the bare path against the
+// document's base URL, which for a QML editor is its qrc: file, so a resource
+// stored only under the file URL is never found there.
+QList<QUrl> resourceKeys(const QTextDocument *document, const QString &name) {
+    const QUrl url(name);
+    QList<QUrl> keys{url};
+    if (url.isLocalFile()) {
+        const QUrl path(url.toLocalFile());
+        for (const auto &key : {path, document->baseUrl().resolved(path)}) {
+            if (!keys.contains(key))
+                keys.append(key);
+        }
+    }
+    return keys;
+}
+
+void addImage(QTextDocument *document, const QString &name,
+              const QImage &image) {
+    for (const auto &key : resourceKeys(document, name))
+        document->addResource(QTextDocument::ImageResource, key, image);
 }
 } // namespace
 
@@ -57,10 +81,18 @@ void ImageAnimator::refresh() {
     for (auto block = document->begin(); block.isValid(); block = block.next()) {
         for (auto it = block.begin(); !it.atEnd(); ++it) {
             const auto format = it.fragment().charFormat();
-            if (format.isImageFormat()) {
-                const QString name = format.toImageFormat().name();
-                if (isLocalGif(name))
-                    present.insert(name);
+            if (!format.isImageFormat())
+                continue;
+            const QString name = format.toImageFormat().name();
+            if (isLocalGif(name))
+                present.insert(name);
+            // Load each local image once under every key, so versions that
+            // miss the file URL do not reread the file on every redraw.
+            if (QUrl(name).isLocalFile() && !m_loaded.contains(name)) {
+                m_loaded.insert(name);
+                const QImage image(QUrl(name).toLocalFile());
+                if (!image.isNull())
+                    addImage(document, name, image);
             }
         }
     }
@@ -104,8 +136,7 @@ void ImageAnimator::showFrame(const QString &name) {
         return;
     m_updating = true;
     emit updatingChanged();
-    document->addResource(QTextDocument::ImageResource, QUrl(name),
-                          movie->currentImage());
+    addImage(document, name, movie->currentImage());
     // Ask the view to redraw the blocks showing this image. The text and its
     // layout are unchanged, so this is not an edit and adds no undo step.
     auto *layout = document->documentLayout();
@@ -125,6 +156,7 @@ void ImageAnimator::showFrame(const QString &name) {
 
 void ImageAnimator::clear() {
     const bool had = !m_movies.isEmpty();
+    m_loaded.clear();
     qDeleteAll(m_movies);
     m_movies.clear();
     if (had)
