@@ -1,6 +1,7 @@
 #include "text_formatter.h"
 
 #include <QImage>
+#include <algorithm>
 #include <QImageReader>
 #include <QPixmap>
 #include <QRegularExpression>
@@ -563,6 +564,29 @@ void setMarker(const QTextBlock &block, QTextBlockFormat::MarkerType marker) {
     cursor.setBlockFormat(format);
 }
 
+// A ticked checklist item's text is struck through; images are left alone.
+void setStruckOut(const QTextBlock &block, bool struck) {
+    QList<QPair<QPair<int, int>, QTextCharFormat>> runs;
+    for (auto it = block.begin(); !it.atEnd(); ++it) {
+        const auto fragment = it.fragment();
+        auto format = fragment.charFormat();
+        if (format.isImageFormat())
+            continue;
+        format.setFontStrikeOut(struck);
+        runs.append({{fragment.position(), fragment.position() + fragment.length()}, format});
+    }
+    QTextCursor cursor(block);
+    for (const auto &run : runs) {
+        QTextCursor part(cursor.document());
+        part.setPosition(run.first.first);
+        part.setPosition(run.first.second, QTextCursor::KeepAnchor);
+        part.setCharFormat(run.second);
+    }
+    auto blockCharFormat = block.charFormat();
+    blockCharFormat.setFontStrikeOut(struck);
+    cursor.setBlockCharFormat(blockCharFormat);
+}
+
 // The paragraphs a selection touches; an empty selection is its paragraph.
 QList<QTextBlock> blocksIn(QTextDocument *document, int start, int end) {
     QList<QTextBlock> blocks;
@@ -605,6 +629,8 @@ void TextFormatter::toggleList(QQuickTextDocument *quickDocument, int start,
     // Take every paragraph out of whatever list it is in first, so a mixed
     // selection becomes one list rather than several.
     for (const auto &block : blocks) {
+        const bool ticked =
+            block.blockFormat().marker() == QTextBlockFormat::MarkerType::Checked;
         if (auto *list = block.textList())
             list->remove(block);
         QTextCursor paragraph(block);
@@ -612,6 +638,8 @@ void TextFormatter::toggleList(QQuickTextDocument *quickDocument, int start,
         format.setIndent(0);
         format.setMarker(QTextBlockFormat::MarkerType::NoMarker);
         paragraph.setBlockFormat(format);
+        if (ticked)
+            setStruckOut(block, false);
     }
     if (!remove) {
         QTextListFormat format;
@@ -754,9 +782,13 @@ bool TextFormatter::toggleCheck(QQuickTextDocument *quickDocument,
     if (state == 0)
         return false;
     auto *document = quickDocument->textDocument();
-    setMarker(document->findBlock(position),
-              state == 2 ? QTextBlockFormat::MarkerType::Unchecked
-                         : QTextBlockFormat::MarkerType::Checked);
+    const auto block = document->findBlock(position);
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    setMarker(block, state == 2 ? QTextBlockFormat::MarkerType::Unchecked
+                                : QTextBlockFormat::MarkerType::Checked);
+    setStruckOut(block, state != 2);
+    cursor.endEditBlock();
     return true;
 }
 
@@ -766,8 +798,10 @@ void TextFormatter::uncheckNewItem(QQuickTextDocument *quickDocument,
     if (checkState(quickDocument, position) != 2)
         return;
     const auto block = quickDocument->textDocument()->findBlock(position);
-    if (block.text().isEmpty())
+    if (block.text().isEmpty()) {
         setMarker(block, QTextBlockFormat::MarkerType::Unchecked);
+        setStruckOut(block, false);
+    }
 }
 
 namespace {
@@ -929,4 +963,116 @@ void TextFormatter::setAlignment(QQuickTextDocument *quickDocument, int start,
         paragraph.setBlockFormat(format);
     }
     cursor.endEditBlock();
+}
+
+QVariantList TextFormatter::checkBoxes(QQuickTextDocument *quickDocument) const {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    QVariantList boxes;
+    if (!document)
+        return boxes;
+    for (auto block = document->begin(); block.isValid(); block = block.next()) {
+        if (!isChecklistItem(block))
+            continue;
+        boxes.append(QVariantMap{
+            {QStringLiteral("position"), block.position()},
+            {QStringLiteral("checked"),
+             block.blockFormat().marker() == QTextBlockFormat::MarkerType::Checked}});
+    }
+    return boxes;
+}
+
+int TextFormatter::insertImageParagraph(QQuickTextDocument *quickDocument,
+                                        int position, const QString &name,
+                                        int width) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || position < 0 || position >= document->characterCount() ||
+        name.isEmpty())
+        return -1;
+    QTextCursor cursor(document);
+    cursor.setPosition(position);
+    cursor.beginEditBlock();
+    // The image gets a plain paragraph of its own, so paragraph formats (code
+    // blocks, lists, alignment) of the text around it never take it along.
+    if (cursor.positionInBlock() > 0)
+        cursor.insertBlock(QTextBlockFormat(), QTextCharFormat());
+    else {
+        cursor.setBlockFormat(QTextBlockFormat());
+        if (auto *list = cursor.currentList())
+            list->remove(cursor.block());
+    }
+    QTextImageFormat image;
+    image.setName(name);
+    if (width > 0)
+        image.setWidth(width);
+    cursor.insertImage(image);
+    // Text after the image, if any, moves to the next paragraph with the caret.
+    cursor.insertBlock(QTextBlockFormat(), QTextCharFormat());
+    cursor.endEditBlock();
+    return cursor.position();
+}
+
+bool TextFormatter::separateImages(QQuickTextDocument *quickDocument) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document)
+        return false;
+    // Line breaks (U+2028) next to images become paragraph breaks. Collected
+    // first, then applied from the end so earlier positions stay valid.
+    QList<int> breaks;
+    for (auto block = document->begin(); block.isValid(); block = block.next()) {
+        for (auto it = block.begin(); !it.atEnd(); ++it) {
+            const auto fragment = it.fragment();
+            if (!fragment.charFormat().isImageFormat())
+                continue;
+            const QString text = block.text();
+            for (int i = 0; i < fragment.length(); ++i) {
+                const int inBlock = fragment.position() - block.position() + i;
+                if (inBlock > 0 && text.at(inBlock - 1) == QChar::LineSeparator)
+                    breaks.append(block.position() + inBlock - 1);
+                if (inBlock + 1 < text.size() && text.at(inBlock + 1) == QChar::LineSeparator)
+                    breaks.append(block.position() + inBlock + 1);
+            }
+        }
+    }
+    if (breaks.isEmpty())
+        return false;
+    std::sort(breaks.begin(), breaks.end());
+    breaks.erase(std::unique(breaks.begin(), breaks.end()), breaks.end());
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    for (auto it = breaks.crbegin(); it != breaks.crend(); ++it) {
+        QTextCursor at(document);
+        at.setPosition(*it);
+        at.setPosition(*it + 1, QTextCursor::KeepAnchor);
+        at.removeSelectedText();
+        at.insertBlock();
+    }
+    cursor.endEditBlock();
+    return true;
+}
+
+bool TextFormatter::clearEmptyFormatting(QQuickTextDocument *quickDocument) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || document->characterCount() > 1)
+        return false;
+    const auto block = document->begin();
+    const bool formatted = block.textList() || isCodeBlock(block) ||
+                           block.blockFormat().hasProperty(QTextFormat::BlockAlignment) ||
+                           block.charFormat().fontFixedPitch() ||
+                           block.charFormat().fontStrikeOut();
+    if (!formatted)
+        return false;
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    if (auto *list = block.textList())
+        list->remove(block);
+    cursor.setBlockFormat(QTextBlockFormat());
+    cursor.setBlockCharFormat(QTextCharFormat());
+    cursor.setCharFormat(QTextCharFormat());
+    cursor.endEditBlock();
+    return true;
+}
+
+void TextFormatter::prepare(QQuickTextDocument *quickDocument) {
+    if (auto *document = quickDocument ? quickDocument->textDocument() : nullptr)
+        document->setIndentWidth(22);
 }

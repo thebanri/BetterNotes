@@ -29,10 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Copy Image** in an image's right-click menu puts the picture on the clipboard, ready to paste into other apps.
 - Right-click an image to align it or view it full size; double-clicking an image also opens it full size, with GIFs playing.
 - Code blocks have a copy button.
-- Attach any file to a note (**⋯ → Attach File…**, or drop it on the note). Attached files show under the text; double-click to open, or save or remove them from their menu. Programs, scripts and launchers are never opened from a note, only saved, and attachments are stored without execute permission.
+- Attach any file to a note (the paperclip in the note toolbar, **⋯ → Attach File…**, or drop it on the note). Attached files show under the text; double-click to open, or save or remove them from their menu. Programs, scripts and launchers are never opened from a note, only saved, and attachments are stored without execute permission.
 - Code blocks: type ``` (optionally with a language name) at the start of a line and press Enter to start one; Enter continues it and ``` on a line of its own ends it. A toolbar button turns selected lines into code and back. Code is monospace in a grey box and survives saving and reopening.
 
 ### Fixed
+- A code block (or list, or alignment) started under an image no longer takes the image and the text around it along: images now sit in a paragraph of their own, and images in older notes are separated when the note opens.
+- Checklist items have proper checkboxes that are easy to click, and ticked items are struck through.
+- Selecting everything and deleting it no longer leaves an empty bullet, checkbox or code block behind.
 - Search matches the text of notes instead of their HTML: searching for words like "indent" no longer finds every formatted note, and result previews no longer show markup such as `text-indent:0px;">`. Existing notes are reindexed on first start.
 - Export no longer writes into the directory BetterNotes was started from.
 - Backups are written under a temporary name and renamed when complete, so an interrupted backup never looks finished, and a backup folder whose path contains a quote no longer breaks the backup.

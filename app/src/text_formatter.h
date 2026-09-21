@@ -90,6 +90,19 @@ class TextFormatter : public QObject {
                                     int position) const;
     Q_INVOKABLE void setAlignment(QQuickTextDocument *document, int start,
                                   int end, const QString &alignment);
+    // Every checklist item as {position, checked}, for drawing its box.
+    Q_INVOKABLE QVariantList checkBoxes(QQuickTextDocument *document) const;
+    // Inserts an image as a paragraph of its own; returns the caret position.
+    Q_INVOKABLE int insertImageParagraph(QQuickTextDocument *document,
+                                         int position, const QString &name,
+                                         int width);
+    // Gives images that share a paragraph with text (older notes) their own.
+    Q_INVOKABLE bool separateImages(QQuickTextDocument *document);
+    // After everything is deleted, the empty paragraph loses list, checklist,
+    // code and alignment formatting. Returns whether anything changed.
+    Q_INVOKABLE bool clearEmptyFormatting(QQuickTextDocument *document);
+    // Document settings the editor needs, such as a compact list indent.
+    Q_INVOKABLE void prepare(QQuickTextDocument *document);
     // Enter on an empty list item ends the list instead of adding an item.
     Q_INVOKABLE bool endEmptyListItem(QQuickTextDocument *document, int position);
 

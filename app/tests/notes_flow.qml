@@ -324,10 +324,20 @@ Window {
         type("\neggs")
         input.wait(5)
         check(formatter.checkState(body.textDocument, 5) === 1, "A new item after a ticked one started ticked")
-        const box = body.positionToRectangle(5)
-        check(window.toggleCheckAt(box.x - 12, box.y + box.height / 2), "Clicking the box did not tick it")
-        check(formatter.checkState(body.textDocument, 5) === 2, "Clicking the box left it open")
-        check(!window.toggleCheckAt(box.x + 10, box.y + box.height / 2), "Clicking the text ticked the box")
+        check(body.text.indexOf("line-through") >= 0, "A ticked item is not struck through")
+        input.wait(20)
+        const boxes = []
+        for (let i = 0; i < body.children.length; ++i) if (body.children[i].objectName === "checkBox") boxes.push(body.children[i])
+        check(boxes.length === 2, "Checklist items have no boxes: " + boxes.length)
+        const second = boxes.find(function(b) { return b.modelData.position === 5 })
+        input.mouseClick(second, second.width / 2, second.height / 2)
+        check(formatter.checkState(body.textDocument, 5) === 2, "Clicking the box did not tick it")
+        const itemText = body.positionToRectangle(6)
+        input.mouseClick(body, itemText.x + 4, itemText.y + itemText.height / 2)
+        check(formatter.checkState(body.textDocument, 5) === 2, "Clicking the text changed the box")
+        input.mouseClick(second, second.width / 2, second.height / 2)
+        check(formatter.checkState(body.textDocument, 5) === 1, "Clicking the box again did not untick it")
+        input.mouseClick(second, second.width / 2, second.height / 2)
 
         // Tab nests an item, Shift+Tab brings it back.
         input.keyClick(Qt.Key_Tab)
@@ -335,6 +345,15 @@ Window {
         input.keyClick(Qt.Key_Backtab, Qt.ShiftModifier)
         check(body.text.indexOf("-qt-list-indent: 2") < 0, "Shift+Tab did not bring the item back")
         check(formatter.checkState(body.textDocument, 5) === 2, "Indenting lost the tick")
+
+        // Select all and delete leaves a plain, empty note behind.
+        body.forceActiveFocus()
+        body.selectAll()
+        input.keyClick(Qt.Key_Backspace)
+        input.wait(5)
+        check(body.length === 0 && body.text.indexOf("<li") < 0 && !window.listActive("check"), "Deleting everything left the checklist behind")
+        type("[ ] a")
+        input.keyClick(Qt.Key_Tab)
 
         // Alignment and counts.
         body.text = ""
@@ -380,6 +399,23 @@ Window {
         check(!window.editorBackend.removeAttachment("not-an-id"), "Removed an attachment the note does not have")
         window.refreshAttachments()
         check(window.attachments.length === 1, "Removed attachment still listed")
+
+        // An image is a paragraph of its own: a code block started under it
+        // leaves it out.
+        body.text = ""
+        check(window.insertImages([fixtures + "still.png"], 0) === 1, "Image insert failed")
+        const imagePosition = window.plainContent.indexOf("\ufffc")
+        body.cursorPosition = body.length
+        type("```\ncode")
+        check(!formatter.codeActive(body.textDocument, imagePosition, imagePosition), "The image went into the code block")
+        check(formatter.codeActive(body.textDocument, body.length - 1, body.length - 1), "The code block did not start under the image")
+        check(findItem(window.contentItem, "attachButton"), "The toolbar has no attach button")
+        // Older notes kept images inside a paragraph of text; opening them
+        // gives each image its own paragraph.
+        body.text = "<p>before<br><img src=\"" + fixtures + "still.png\" width=\"40\" /><br>after</p>"
+        check(formatter.separateImages(body.textDocument), "An image inside a paragraph was not separated")
+        check(window.plainContent === "before\n\ufffc\nafter" && !formatter.separateImages(body.textDocument), "Separated wrongly: " + JSON.stringify(window.plainContent))
+        check(body.text.indexOf("<br />") < 0, "Line breaks around the image remain")
 
         // Double-clicking an image opens it full size.
         body.text = ""

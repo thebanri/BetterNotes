@@ -93,9 +93,15 @@ ApplicationWindow {
         isRichText = checkRichText(backend.draftContent)
         contentEditor.textFormat = isRichText ? TextEdit.RichText : TextEdit.PlainText
         contentEditor.text = backend.draftContent
-        if (isRichText) formatter.restoreCodeFont(contentEditor.textDocument)
+        formatter.prepare(contentEditor.textDocument)
+        if (isRichText) {
+            formatter.restoreCodeFont(contentEditor.textDocument)
+            // Older notes kept images inside paragraphs of text.
+            formatter.separateImages(contentEditor.textDocument)
+        }
         loadingContent = false
         Qt.callLater(updateCodeBoxes)
+        Qt.callLater(updateCheckBoxes)
         selectedImage = -1
         gifs.refresh()
     }
@@ -704,11 +710,8 @@ ApplicationWindow {
         if (width <= 0) return position
         ensureRichText()
         const at = Math.max(0, Math.min(position, contentEditor.length))
-        const lineStart = at === 0 || contentEditor.getText(at - 1, at) === "\n"
-            || contentEditor.getText(at - 1, at) === "\u2029"
-        const before = contentEditor.length
-        contentEditor.insert(at, (lineStart ? "" : "<br>") + "<img src=\"" + stored + "\" width=\"" + width + "\" /><br>")
-        const end = at + (contentEditor.length - before)
+        const end = formatter.insertImageParagraph(contentEditor.textDocument, at, stored, width)
+        if (end < 0) return position
         contentEditor.forceActiveFocus()
         contentEditor.cursorPosition = Math.min(end, contentEditor.length)
         backend.editContent(contentEditor.text)
@@ -795,6 +798,7 @@ ApplicationWindow {
         const font = selection.font
         font.family = code ? "monospace" : editorFontFamily
         font.fixedPitch = code
+        font.strikeout = false
         selection.font = font
     }
 
@@ -830,22 +834,28 @@ ApplicationWindow {
 
     // ---- Checklists, indentation, alignment -------------------------------
 
-    // Toggles the checkbox of the item at a point, if the point is on it:
-    // the marker sits in the margin left of the item's first character.
-    function toggleCheckAt(x, y) {
-        if (!isRichText) return false
-        const position = contentEditor.positionAt(x, y)
-        if (formatter.checkState(contentEditor.textDocument, position) === 0) return false
-        const lineStart = plainContent.lastIndexOf("\n", position - 1) + 1
-        const first = contentEditor.positionToRectangle(lineStart)
-        if (x >= first.x || x < first.x - 28 || y < first.y || y > first.y + first.height) return false
-        return toggleCheck(lineStart)
+    // Checkboxes drawn over checklist items, in editor coordinates. Qt only
+    // draws a character for them, which is small and hard to hit.
+    property var checkBoxes: []
+    // True while a key that deletes text is being handled.
+    property bool deleting: false
+
+    function updateCheckBoxes() {
+        const boxes = []
+        const items = isRichText ? formatter.checkBoxes(contentEditor.textDocument) : []
+        for (let i = 0; i < items.length; ++i) {
+            const line = contentEditor.positionToRectangle(items[i].position)
+            boxes.push({ x: line.x, y: line.y, height: line.height,
+                position: items[i].position, checked: items[i].checked })
+        }
+        checkBoxes = boxes
     }
 
     function toggleCheck(position) {
         if (!formatter.toggleCheck(contentEditor.textDocument, position)) return false
         backend.editContent(contentEditor.text)
         autosave.restart()
+        Qt.callLater(updateCheckBoxes)
         return true
     }
 
@@ -1796,6 +1806,24 @@ ApplicationWindow {
                     onClicked: imageDialog.open()
                 }
 
+                UI.StyledButton {
+                    objectName: "attachButton"
+                    iconName: "paperclip"
+                    iconSize: 14
+                    theme: noteWindow.theme
+                    variant: "ghost"
+                    implicitWidth: 24
+                    implicitHeight: 24
+                    focusPolicy: Qt.NoFocus
+                    padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    Layout.alignment: Qt.AlignVCenter
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Attach files — or drop them onto the note")
+                    onClicked: attachDialog.open()
+                }
+
                 Item { Layout.fillWidth: true }
 
                 // Alignment, find and replace, and counts.
@@ -1927,10 +1955,57 @@ ApplicationWindow {
                     noteWindow.updateImageSelection()
                     // Layout settles after this signal.
                     Qt.callLater(noteWindow.updateCodeBoxes)
+                    Qt.callLater(noteWindow.updateCheckBoxes)
+                    // Select all and delete clears lists, checklists and code
+                    // too, rather than leaving an empty bullet behind.
+                    if (length === 0 && noteWindow.deleting
+                            && formatter.clearEmptyFormatting(contentEditor.textDocument)) {
+                        noteWindow.typingFont(false)
+                        backend.editContent(text)
+                    }
                 }
                 onWidthChanged: {
                     noteWindow.updateImageSelection()
                     Qt.callLater(noteWindow.updateCodeBoxes)
+                    Qt.callLater(noteWindow.updateCheckBoxes)
+                }
+
+                // Checklist boxes. Each covers the character Qt draws for the
+                // item and toggles it when clicked.
+                Repeater {
+                    model: noteWindow.checkBoxes
+                    delegate: Rectangle {
+                        id: checkCell
+                        required property var modelData
+                        objectName: "checkBox"
+                        z: 6
+                        x: modelData.x - 22
+                        y: modelData.y
+                        width: 20
+                        height: modelData.height
+                        color: noteWindow.activeBg
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 15
+                            height: 15
+                            radius: 4
+                            color: checkCell.modelData.checked ? theme.accent : "transparent"
+                            border.width: checkCell.modelData.checked ? 0 : 1.5
+                            border.color: checkHover.hovered ? theme.accent : theme.noteTextSecondary
+                            UI.AppIcon {
+                                anchors.centerIn: parent
+                                visible: checkCell.modelData.checked
+                                name: "check"
+                                size: 11
+                                strokeWidth: 3.5
+                                color: "white"
+                            }
+                        }
+                        HoverHandler { id: checkHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler {
+                            onTapped: noteWindow.toggleCheck(checkCell.modelData.position)
+                        }
+                    }
                 }
 
                 // Code block boxes, drawn beneath the text.
@@ -2011,6 +2086,9 @@ ApplicationWindow {
                 Keys.onTabPressed: function(event) { event.accepted = noteWindow.indent(1) }
                 Keys.onBacktabPressed: function(event) { event.accepted = noteWindow.indent(-1) }
                 Keys.onPressed: function(event) {
+                    noteWindow.deleting = event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete
+                        || event.matches(StandardKey.Cut)
+                    if (noteWindow.deleting) Qt.callLater(function() { noteWindow.deleting = false })
                     if (event.matches(StandardKey.Paste)) {
                         event.accepted = noteWindow.pasteImages()
                     }
@@ -2026,7 +2104,7 @@ ApplicationWindow {
                         const y = eventPoint.position.y
                         const link = noteWindow.linkAt(x, y)
                         if (link.length > 0) noteWindow.openLink(link)
-                        else if (!noteWindow.toggleCheckAt(x, y)) noteWindow.selectImageAt(x, y)
+                        else noteWindow.selectImageAt(x, y)
                     }
                     // Double-clicking an image shows it at full size.
                     onDoubleTapped: function(eventPoint) {
