@@ -8,6 +8,7 @@ import BetterNotes.App
 import "../themes" as Themes
 import "../components" as UI
 import "WindowPlacement.js" as Placement
+import "../components/Reminders.js" as Reminders
 
 ApplicationWindow {
     id: noteWindow
@@ -16,6 +17,19 @@ ApplicationWindow {
     property alias imageAnimator: gifs
     property alias imageFormatter: formatter
     property alias imageMenu: imageMenu
+    property alias reminderEditor: reminderEditor
+    // "<unix seconds>|<recurrence>" or "", reread whenever it may have changed.
+    property string reminder: ""
+
+    function refreshReminder() {
+        reminder = initialized || backend.ready ? backend.noteReminder(noteId) : ""
+    }
+
+    function editReminder() {
+        if (collapsed) toggleCollapsed()
+        refreshReminder()
+        reminderEditor.openFor(titleEditor.text, reminder)
+    }
     property alias theme: theme
     property bool collapsed: false
     property bool initialized: false
@@ -192,6 +206,7 @@ ApplicationWindow {
         show()
         if (!collapsed) titleEditor.forceActiveFocus()
         persist(true)
+        refreshReminder()
         return true
     }
 
@@ -462,6 +477,24 @@ ApplicationWindow {
                 onClicked: {
                     noteWindow.alwaysOnTop = !noteWindow.alwaysOnTop
                 }
+            }
+
+            UI.StyledButton {
+                id: reminderBtn
+                objectName: "reminderButton"
+                iconName: "bell"
+                iconSize: 15
+                theme: noteWindow.theme
+                variant: noteWindow.reminder.length > 0 ? "accent" : "ghost"
+                implicitHeight: 28
+                implicitWidth: 28
+                padding: 0
+                ToolTip.visible: hovered
+                ToolTip.text: noteWindow.reminder.length > 0
+                    ? qsTr("Reminder: %1").arg(Reminders.describe(noteWindow.reminder))
+                    : qsTr("Add a reminder")
+                ToolTip.delay: 300
+                onClicked: noteWindow.editReminder()
             }
 
             UI.StyledButton {
@@ -773,6 +806,24 @@ ApplicationWindow {
             onTriggered: {
                 if (noteWindow.selectedImage < 0) return
                 contentEditor.remove(noteWindow.selectedImage, noteWindow.selectedImage + 1)
+            }
+        }
+    }
+
+    UI.ReminderEditor {
+        id: reminderEditor
+        theme: noteWindow.theme
+        onSaveRequested: function(seconds, recurrence) {
+            if (backend.setNoteReminder(noteWindow.noteId, seconds, recurrence)) {
+                noteWindow.refreshReminder()
+                // The library lists reminders; saved() makes it reload.
+                noteWindow.saved()
+            }
+        }
+        onRemoveRequested: {
+            if (backend.clearNoteReminder(noteWindow.noteId)) {
+                noteWindow.refreshReminder()
+                noteWindow.saved()
             }
         }
     }

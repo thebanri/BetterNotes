@@ -266,6 +266,60 @@ Window {
         check(window.deleteConfirmed(), "Formatting test cleanup failed")
     }
 
+    // A reminder set on a note shows in the library, can be edited there and
+    // fires once when due.
+    function assertReminders(library, note) {
+        const id = note.noteId
+        const tomorrow = new Date()
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        const date = tomorrow.getFullYear() + "-" + String(tomorrow.getMonth() + 1).padStart(2, "0")
+            + "-" + String(tomorrow.getDate()).padStart(2, "0")
+        const field = function(editor, name) { return findItem(editor.contentItem, name) }
+
+        note.editReminder()
+        const editor = note.reminderEditor
+        check(editor.visible && !editor.hasReminder, "Reminder editor did not open")
+        field(editor, "reminderDate").text = "2020-01-01"
+        field(editor, "reminderTime").text = "09:00"
+        editor.save()
+        check(editor.visible && editor.error.length > 0, "A reminder in the past was accepted")
+        field(editor, "reminderDate").text = date.replace(/-\d\d$/, "-32")
+        editor.save()
+        check(editor.visible && editor.error.length > 0, "An impossible date was accepted")
+        field(editor, "reminderDate").text = date
+        field(editor, "reminderTime").text = "09:30"
+        field(editor, "reminderRepeat").currentIndex = 2
+        editor.save()
+        check(!editor.visible && note.reminder.endsWith("|weekly"), "Saving a reminder failed")
+        const expected = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 9, 30)
+        check(parseInt(note.reminder) === expected.getTime() / 1000, "Reminder time is not the local time entered")
+
+        const backend = library.libraryBackend
+        const index = backend.noteIds.indexOf(id)
+        check(backend.noteReminders[index] === note.reminder, "The library does not list the reminder")
+        check(library.countNotes("reminders") === 1, "Reminders section count is wrong")
+        library.showSection("reminders")
+        check(library.visibleNotes.length === 1 && library.visibleNotes[0].id === id, "Reminders section shows the wrong notes")
+        library.showSection("all")
+
+        library.editReminder(id)
+        const libraryEditor = library.reminderEditorItem
+        check(libraryEditor.visible && libraryEditor.hasReminder, "Library reminder editor did not open")
+        check(field(libraryEditor, "reminderTime").text === "09:30", "Library editor lost the saved time")
+        field(libraryEditor, "reminderRepeat").currentIndex = 0
+        libraryEditor.save()
+        check(note.reminder.endsWith("|none"), "Editing in the library did not reach the open note")
+        library.editReminder(id)
+        libraryEditor.removeRequested()
+        libraryEditor.close()
+        check(note.reminder === "" && backend.noteReminders[index] === "", "Removing the reminder failed")
+
+        // Due reminders fire once; a one-time reminder is then gone.
+        check(backend.setNoteReminder(id, Math.floor(Date.now() / 1000) - 5, "none"), "Setting a due reminder failed")
+        check(backend.checkReminders() === 1, "The due reminder did not fire")
+        check(backend.checkReminders() === 0 && backend.noteReminders[index] === "", "A one-time reminder fired twice")
+    }
+
     // Tag chips, automatic lists, inserted and resized images, and GIFs that
     // play without counting as edits.
     function assertMediaAndLists(window) {
@@ -309,6 +363,11 @@ Window {
         const position = window.plainContent.indexOf("\ufffc")
         check(position >= 0 && body.text.indexOf("attachments/") >= 0, "Image was not stored as an attachment")
         check(formatter.imageAt(body.textDocument, position).width === 64, "A small image was scaled up")
+        input.wait(30)
+        const stillAt = body.positionToRectangle(position)
+        const stillPoint = body.mapToItem(window.contentItem, stillAt.x + 20, stillAt.y + 10)
+        const stillColor = input.grabImage(window.contentItem).pixel(stillPoint.x, stillPoint.y)
+        check(stillColor.r > 0.9 && stillColor.g < 0.1 && stillColor.b < 0.1, "A palette PNG was not drawn in its colours: " + stillColor)
         const rect = body.positionToRectangle(position)
         check(window.selectImageAt(rect.x + 4, rect.y + 4), "Clicking an image did not select it")
         const handle = findItem(window.contentItem, "imageResizeHandle")
@@ -343,6 +402,8 @@ Window {
             changed = !Qt.colorEqual(input.grabImage(window.contentItem).pixel(point.x, point.y), first)
         }
         check(changed, "The GIF did not animate")
+        const frame = input.grabImage(window.contentItem).pixel(point.x, point.y)
+        check((frame.r > 0.9 || frame.b > 0.9) && frame.g < 0.1, "GIF frames were not drawn in their colours: " + frame)
         check(!backend.dirty, "GIF frames were saved as edits")
     }
 
@@ -434,6 +495,7 @@ Window {
                 harness.check(harness.library.libraryBackend.titles.length === 2, "Delete failed to update library")
                 const media = harness.library.createNote()
                 harness.assertMediaAndLists(media)
+                harness.assertReminders(harness.library, media)
                 harness.check(media.deleteConfirmed(), "Media test note could not be deleted")
                 harness.first.toggleCollapsed()
                 harness.check(harness.first.collapsed && harness.first.height === harness.first.collapsedHeight, "Collapse failed")

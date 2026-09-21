@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import "../themes"
+import "Reminders.js" as Reminders
 
 // One note in the library grid, drawn in the note's own colour. Clicking opens
 // the note; hovering reveals quick actions, and a right click (or the menu
@@ -21,9 +22,11 @@ FocusScope {
     property string tint: "yellow"
     property bool onDesktop: false
     property bool current: false
+    // "<unix seconds>|<recurrence>", or "" when the note has no reminder.
+    property string reminder: ""
 
     signal openRequested()
-    // "pin", "unpin", "archive", "restore", "copy", "locate" or "delete".
+    // "pin", "unpin", "archive", "restore", "copy", "locate", "reminder" or "delete".
     signal actionRequested(string action)
 
     readonly property bool hot: hover.hovered || card.activeFocus || actionsMenu.visible
@@ -126,6 +129,48 @@ FocusScope {
                 clip: true
             }
 
+            // The reminder, if any; clicking it edits the reminder.
+            Rectangle {
+                id: reminderChip
+                objectName: "reminderChip"
+                visible: card.reminder.length > 0
+                Layout.maximumWidth: parent.width
+                implicitWidth: reminderRow.implicitWidth + 14
+                implicitHeight: 22
+                radius: height / 2
+                color: reminderTap.hovered
+                    ? Qt.rgba(card.edge.r, card.edge.g, card.edge.b, 0.55)
+                    : Qt.rgba(card.edge.r, card.edge.g, card.edge.b, 0.35)
+                RowLayout {
+                    id: reminderRow
+                    anchors.fill: parent
+                    anchors.leftMargin: 7
+                    anchors.rightMargin: 7
+                    spacing: 5
+                    AppIcon {
+                        name: "bell"
+                        size: 12
+                        color: card.ink
+                    }
+                    Label {
+                        text: Reminders.describe(card.reminder)
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
+                        color: card.ink
+                        Layout.fillWidth: true
+                    }
+                }
+                HoverHandler { id: reminderTap; cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    onTapped: card.actionRequested("reminder")
+                }
+                ToolTip.visible: reminderTap.hovered
+                ToolTip.text: qsTr("Edit reminder")
+                ToolTip.delay: 400
+            }
+
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 4
@@ -218,6 +263,11 @@ FocusScope {
                 hint: card.isArchived ? qsTr("Restore from archive") : qsTr("Archive")
             }
             QuickAction { cardAction: "copy"; iconName: "copy"; hint: qsTr("Copy text") }
+            QuickAction {
+                cardAction: "reminder"
+                iconName: "bell"
+                hint: card.reminder.length > 0 ? qsTr("Edit reminder") : qsTr("Add reminder")
+            }
             QuickAction { cardAction: "delete"; iconName: "trash"; hint: qsTr("Delete") }
             QuickAction {
                 id: moreButton
@@ -263,6 +313,10 @@ FocusScope {
             onTriggered: card.actionRequested(card.isArchived ? "restore" : "archive")
         }
         MenuItem { text: qsTr("Copy text"); onTriggered: card.actionRequested("copy") }
+        MenuItem {
+            text: card.reminder.length > 0 ? qsTr("Edit reminder…") : qsTr("Add reminder…")
+            onTriggered: card.actionRequested("reminder")
+        }
         MenuSeparator {}
         MenuItem { text: qsTr("Delete…"); onTriggered: card.actionRequested("delete") }
     }

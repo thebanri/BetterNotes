@@ -22,7 +22,7 @@ an account or a cloud service. Notes stay on your machine.
 - Images and animated GIFs: pick them or drop them onto a note, drag a corner to resize, right-click to save a copy.
 - SQLite storage, FTS5 search, tags, priorities and archiving.
 - Quick Capture, a command palette, a system tray and start-at-login settings.
-- Reminders, desktop notifications and file attachments.
+- Reminders for each note (one-time or repeating), editable from the note or the library, with desktop notifications; file attachments.
 - JSON/Markdown import and export, database and attachment backups, and restore.
 - A CLI sharing the Rust core with the GUI, plus local single-instance IPC.
 - Offline use without accounts, telemetry or a remote server.

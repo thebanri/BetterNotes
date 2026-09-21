@@ -153,6 +153,46 @@ pub fn dismiss_or_advance_reminder(connection: &Connection, reminder_id: i64) ->
     Ok(())
 }
 
+/// Marks a reminder done after it fired at `now`. A one-time reminder is
+/// dismissed. A recurring one moves to its first occurrence after `now`, so
+/// occurrences missed while the app was closed fire once, not once per check.
+pub fn complete_reminder(connection: &Connection, reminder_id: i64, now: i64) -> Result<()> {
+    let (recurrence_str, mut remind_at): (String, i64) = connection.query_row(
+        "SELECT recurrence, remind_at FROM reminders WHERE id = ?1",
+        [reminder_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let recurrence = Recurrence::parse(&recurrence_str);
+    let Some(step) = recurrence.next_timestamp(0).filter(|step| *step > 0) else {
+        connection.execute(
+            "UPDATE reminders SET dismissed = 1 WHERE id = ?1",
+            [reminder_id],
+        )?;
+        return Ok(());
+    };
+    if remind_at <= now {
+        remind_at += ((now - remind_at) / step + 1) * step;
+    }
+    connection.execute(
+        "UPDATE reminders SET remind_at = ?1, dismissed = 0 WHERE id = ?2",
+        params![remind_at, reminder_id],
+    )?;
+    Ok(())
+}
+
+/// Every note's active reminder, for showing them all in the library at once.
+pub fn active_reminders(
+    connection: &Connection,
+) -> Result<std::collections::HashMap<i64, (i64, Recurrence)>> {
+    let mut stmt = connection
+        .prepare("SELECT note_id, remind_at, recurrence FROM reminders WHERE dismissed = 0")?;
+    let rows = stmt.query_map([], |row| {
+        let recurrence: String = row.get(2)?;
+        Ok((row.get(0)?, (row.get(1)?, Recurrence::parse(&recurrence))))
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

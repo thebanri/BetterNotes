@@ -31,6 +31,8 @@ pub mod ffi {
         #[qproperty(QStringList, priorities, READ, NOTIFY = list_changed)]
         #[qproperty(QStringList, note_tags, READ, NOTIFY = list_changed, cxx_name = "noteTags")]
         #[qproperty(QStringList, note_colors, READ, NOTIFY = list_changed, cxx_name = "noteColors")]
+        /// Per listed note: "<unix seconds>|<recurrence>" or "" without a reminder.
+        #[qproperty(QStringList, note_reminders, READ, NOTIFY = list_changed, cxx_name = "noteReminders")]
         #[qproperty(QStringList, all_tags, READ, NOTIFY = list_changed, cxx_name = "allTags")]
         #[qproperty(QStringList, restore_ids, READ, NOTIFY = list_changed, cxx_name = "restoreIds")]
         #[qproperty(QString, current_id, READ, NOTIFY = selection_changed, cxx_name = "currentId")]
@@ -225,6 +227,25 @@ pub mod ffi {
         #[cxx_name = "checkReminders"]
         fn check_reminders(self: Pin<&mut Self>) -> i32;
 
+        /// A note's reminder as "<unix seconds>|<recurrence>", or "".
+        #[qinvokable]
+        #[cxx_name = "noteReminder"]
+        fn note_reminder(&self, id: QString) -> QString;
+
+        /// Sets any note's reminder by id, e.g. from the library.
+        #[qinvokable]
+        #[cxx_name = "setNoteReminder"]
+        fn set_note_reminder(
+            self: Pin<&mut Self>,
+            id: QString,
+            timestamp_sec: i64,
+            recurrence: QString,
+        ) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "clearNoteReminder"]
+        fn clear_note_reminder(self: Pin<&mut Self>, id: QString) -> bool;
+
         #[qinvokable]
         #[cxx_name = "exportNotesJson"]
         fn export_notes_json(self: Pin<&mut Self>, file_path: QString) -> bool;
@@ -257,6 +278,7 @@ pub struct NotesBackendRust {
     priorities: QStringList,
     note_tags: QStringList,
     note_colors: QStringList,
+    note_reminders: QStringList,
     all_tags: QStringList,
     restore_ids: QStringList,
     current_id: QString,
@@ -293,6 +315,7 @@ impl Default for NotesBackendRust {
             priorities: QStringList::default(),
             note_tags: QStringList::default(),
             note_colors: QStringList::default(),
+            note_reminders: QStringList::default(),
             all_tags: QStringList::default(),
             restore_ids: QStringList::default(),
             current_id: QString::default(),
@@ -521,6 +544,17 @@ impl ffi::NotesBackend {
                     .iter()
                     .map(QString::from)
                     .collect();
+                let note_reminders = session
+                    .summary_reminders()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|reminder| match reminder {
+                        Some((at, recurrence)) => {
+                            QString::from(&format!("{at}|{}", recurrence.as_str()))
+                        }
+                        None => QString::default(),
+                    })
+                    .collect();
                 let all_tags = session
                     .list_tags()
                     .unwrap_or_default()
@@ -550,6 +584,7 @@ impl ffi::NotesBackend {
                 state.priorities = priorities;
                 state.note_tags = note_tags;
                 state.note_colors = note_colors;
+                state.note_reminders = note_reminders;
                 state.all_tags = all_tags;
                 state.current_id = current_id;
                 state.current_index = index;
@@ -946,21 +981,69 @@ impl ffi::NotesBackend {
             .unwrap_or_default()
             .as_secs() as i64;
         let mut triggered = 0;
-        let mut rust = self.as_mut().rust_mut();
-        let session_opt = rust.session.as_mut();
-        if let Some(session) = session_opt {
+        if let Some(session) = self.as_mut().rust_mut().session.as_mut() {
             if let Ok(due_list) = session.check_due_reminders(now) {
                 for due in due_list {
+                    let title = due.note_title.trim();
                     let _ = betternotes_core::NotificationService::notify(
-                        &format!("Reminder: {}", due.note_title),
-                        "Your sticky note reminder is due now.",
+                        if title.is_empty() {
+                            "Untitled note"
+                        } else {
+                            title
+                        },
+                        "Reminder from BetterNotes",
                     );
-                    let _ = session.dismiss_reminder(due.reminder_id);
+                    let _ = session.dismiss_reminder(due.reminder_id, now);
                     triggered += 1;
                 }
             }
         }
+        // A fired one-time reminder is gone and a recurring one moved on.
+        if triggered > 0 {
+            self.finish(Ok(()), false);
+        }
         triggered
+    }
+
+    pub fn note_reminder(&self, id: QString) -> QString {
+        let Some((session, id)) = self.session.as_ref().zip(id.to_string().parse().ok()) else {
+            return QString::default();
+        };
+        match session.get_reminder(id) {
+            Ok(Some(reminder)) => QString::from(&format!(
+                "{}|{}",
+                reminder.remind_at,
+                reminder.recurrence.as_str()
+            )),
+            _ => QString::default(),
+        }
+    }
+
+    pub fn set_note_reminder(
+        self: Pin<&mut Self>,
+        id: QString,
+        timestamp_sec: i64,
+        recurrence: QString,
+    ) -> bool {
+        let recurrence = betternotes_core::Recurrence::parse(&recurrence.to_string());
+        self.perform(false, |session| {
+            let id = id
+                .to_string()
+                .parse()
+                .map_err(|_| Error::InvalidSelection)?;
+            session.set_reminder(id, timestamp_sec, recurrence)?;
+            Ok(())
+        })
+    }
+
+    pub fn clear_note_reminder(self: Pin<&mut Self>, id: QString) -> bool {
+        self.perform(false, |session| {
+            let id = id
+                .to_string()
+                .parse()
+                .map_err(|_| Error::InvalidSelection)?;
+            session.clear_reminder(id)
+        })
     }
 
     pub fn export_notes_json(self: Pin<&mut Self>, file_path: QString) -> bool {

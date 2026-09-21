@@ -13,6 +13,8 @@
         <file>components/AppIcon.qml</file>
         <file>windows/QuickCapture.qml</file>
         <file>components/CommandPalette.qml</file>
+        <file>components/ReminderEditor.qml</file>
+        <file>components/Reminders.js</file>
         <file alias="icons/app-16.png">../assets/icons/hicolor/org.betternotes.BetterNotes-16.png</file>
         <file alias="icons/app-22.png">../assets/icons/hicolor/org.betternotes.BetterNotes-22.png</file>
         <file alias="icons/app-24.png">../assets/icons/hicolor/org.betternotes.BetterNotes-24.png</file>

@@ -2,7 +2,7 @@ use betternotes_core::{
     add_attachment, clear_reminder_for_note, create_backup, delete_attachment,
     dismiss_or_advance_reminder, export_notes_json, export_notes_markdown_dir, get_due_reminders,
     get_reminder_for_note, import_note_markdown_file, import_notes_json, list_attachments,
-    restore_backup, set_reminder, NoteStore, Recurrence,
+    reminders::complete_reminder, restore_backup, set_reminder, NoteStore, Recurrence,
 };
 use std::fs;
 use tempfile::tempdir;
@@ -179,4 +179,32 @@ fn backup_and_restore_cycle() {
     let restored_att = list_attachments(restored_store.raw_connection(), notes[0].id).unwrap();
     assert_eq!(restored_att.len(), 1);
     assert_eq!(restored_att[0].filename, "photo.png");
+}
+
+#[test]
+fn completing_reminders_skips_missed_occurrences_and_dismisses_one_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = NoteStore::open(&dir.path().join("notes.sqlite3")).unwrap();
+    let daily = store.create().unwrap().id;
+    let once = store.create().unwrap().id;
+    let connection = store.raw_connection();
+    let start = 1_000_000;
+
+    let daily_id = set_reminder(connection, daily, start, Recurrence::Daily).unwrap();
+    // The app was closed for three and a half days: one notification, then
+    // the next occurrence after now, not the next missed one.
+    let now = start + 3 * 86_400 + 43_200;
+    assert_eq!(get_due_reminders(connection, now).unwrap().len(), 1);
+    complete_reminder(connection, daily_id, now).unwrap();
+    let next = get_reminder_for_note(connection, daily).unwrap().unwrap();
+    assert_eq!(next.remind_at, start + 4 * 86_400);
+    assert!(get_due_reminders(connection, now).unwrap().is_empty());
+
+    let once_id = set_reminder(connection, once, start, Recurrence::None).unwrap();
+    complete_reminder(connection, once_id, start + 5).unwrap();
+    assert!(get_reminder_for_note(connection, once).unwrap().is_none());
+
+    let all = betternotes_core::reminders::active_reminders(connection).unwrap();
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[&daily], (start + 4 * 86_400, Recurrence::Daily));
 }

@@ -37,8 +37,12 @@ QList<QUrl> resourceKeys(const QTextDocument *document, const QString &name) {
 
 void addImage(QTextDocument *document, const QString &name,
               const QImage &image) {
+    // Palette and 1-bit images (common for GIF frames and small PNGs) come out
+    // black when the scene graph turns them into textures.
+    const QImage converted =
+        image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     for (const auto &key : resourceKeys(document, name))
-        document->addResource(QTextDocument::ImageResource, key, image);
+        document->addResource(QTextDocument::ImageResource, key, converted);
 }
 } // namespace
 

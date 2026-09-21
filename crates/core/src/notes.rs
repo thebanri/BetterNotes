@@ -66,6 +66,8 @@ pub enum Error {
     Serialization(String),
     #[error("{0}")]
     Install(String),
+    #[error("Choose a valid date and time for the reminder.")]
+    InvalidReminder,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

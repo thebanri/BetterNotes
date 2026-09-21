@@ -307,7 +307,20 @@ impl NotesSession {
         remind_at: i64,
         recurrence: crate::Recurrence,
     ) -> Result<i64> {
+        if remind_at <= 0 {
+            return Err(Error::InvalidReminder);
+        }
         crate::set_reminder(self.store.raw_connection(), note_id, remind_at, recurrence)
+    }
+
+    /// The active reminder of each listed note, in list order.
+    pub fn summary_reminders(&self) -> Result<Vec<Option<(i64, crate::Recurrence)>>> {
+        let mut reminders = crate::reminders::active_reminders(self.store.raw_connection())?;
+        Ok(self
+            .summaries
+            .iter()
+            .map(|note| reminders.remove(&note.id))
+            .collect())
     }
 
     pub fn get_reminder(&self, note_id: i64) -> Result<Option<crate::Reminder>> {
@@ -322,8 +335,8 @@ impl NotesSession {
         crate::get_due_reminders(self.store.raw_connection(), now_sec)
     }
 
-    pub fn dismiss_reminder(&self, reminder_id: i64) -> Result<()> {
-        crate::dismiss_or_advance_reminder(self.store.raw_connection(), reminder_id)
+    pub fn dismiss_reminder(&self, reminder_id: i64, now_sec: i64) -> Result<()> {
+        crate::reminders::complete_reminder(self.store.raw_connection(), reminder_id, now_sec)
     }
 
     pub fn add_attachment(

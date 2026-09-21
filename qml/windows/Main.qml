@@ -21,6 +21,7 @@ ApplicationWindow {
     color: "transparent"
     property alias libraryBackend: backend
     property alias theme: theme
+    property alias reminderEditorItem: reminderEditor
     property var noteWindows: ({})
     property string windowError: ""
     property string filterTab: "all"
@@ -216,7 +217,9 @@ ApplicationWindow {
         for (let i = 0; i < backend.titles.length; ++i) {
             const pinned = backend.pinnedStates[i] === "true"
             const archived = backend.archivedStates[i] === "true"
-            if (kind === "pinned" ? pinned && !archived : (kind === "archived" ? archived : !archived)) total += 1
+            if (kind === "reminders") {
+                if ((backend.noteReminders[i] || "").length > 0) total += 1
+            } else if (kind === "pinned" ? pinned && !archived : (kind === "archived" ? archived : !archived)) total += 1
         }
         return total
     }
@@ -246,7 +249,8 @@ ApplicationWindow {
                 pinned: known && backend.pinnedStates[i] === "true",
                 archived: known && backend.archivedStates[i] === "true",
                 priority: known ? parseInt(backend.priorities[i] || "0") : 0,
-                tint: known ? (backend.noteColors[i] || "yellow") : "yellow"
+                tint: known ? (backend.noteColors[i] || "yellow") : "yellow",
+                reminder: known ? (backend.noteReminders[i] || "") : ""
             }
         }
         if (searchFilter.length > 0) {
@@ -259,6 +263,7 @@ ApplicationWindow {
             const note = row(backend.noteIds[i], backend.titles[i], backend.snippets[i] || "")
             if (filterTab === "archived" ? !note.archived : note.archived) continue
             if (filterTab === "pinned" && !note.pinned) continue
+            if (filterTab === "reminders" && note.reminder.length === 0) continue
             if (tagFilter.length > 0 && note.tags.indexOf(tagFilter) < 0) continue
             rows.push(note)
         }
@@ -270,6 +275,7 @@ ApplicationWindow {
         if (tagFilter.length > 0) return "#" + tagFilter
         if (filterTab === "pinned") return qsTr("Pinned")
         if (filterTab === "archived") return qsTr("Archive")
+        if (filterTab === "reminders") return qsTr("Reminders")
         return qsTr("All notes")
     }
 
@@ -319,10 +325,26 @@ ApplicationWindow {
                 backend.setNoteArchived(id, archived)
             }
             if (archived) showToast(qsTr("Moved to the archive"))
+        } else if (action === "reminder") {
+            editReminder(id)
         } else if (action === "delete") {
             deleteDialog.noteId = id
             deleteDialog.open()
         }
+    }
+
+    // Reminders live beside the note, not in its text, so the library sets
+    // them directly even while the note is open; an open note is told to
+    // show the change.
+    function editReminder(id) {
+        const index = backend.noteIds.indexOf(id)
+        reminderEditor.noteId = id
+        reminderEditor.openFor(index >= 0 ? backend.titles[index] : "", backend.noteReminder(id))
+    }
+
+    function reminderChanged(id) {
+        const sticky = noteWindows[id]
+        if (sticky) sticky.refreshReminder()
     }
 
     function deleteNoteConfirmed(id) {
@@ -509,6 +531,14 @@ ApplicationWindow {
                     count: window.countNotes("pinned")
                     selected: window.searchFilter.length === 0 && window.filterTab === "pinned"
                     onClicked: window.showSection("pinned")
+                }
+                SidebarItem {
+                    objectName: "remindersSection"
+                    text: qsTr("Reminders")
+                    iconName: "bell"
+                    count: window.countNotes("reminders")
+                    selected: window.searchFilter.length === 0 && window.filterTab === "reminders"
+                    onClicked: window.showSection("reminders")
                 }
                 SidebarItem {
                     text: qsTr("Archive")
@@ -855,6 +885,7 @@ ApplicationWindow {
                         isArchived: cell.modelData.archived
                         priority: cell.modelData.priority
                         tint: cell.modelData.tint
+                        reminder: cell.modelData.reminder
                         onDesktop: window.windowsRevision >= 0 && !!window.noteWindows[cell.modelData.id]
                         current: noteGrid.activeFocus && noteGrid.currentIndex === cell.index
                         onOpenRequested: {
@@ -1070,6 +1101,25 @@ ApplicationWindow {
                     if (error.length > 0) window.showToast(error)
                     else window.showToast(checked ? qsTr("Added to the applications menu") : qsTr("Removed from the applications menu"))
                 }
+            }
+        }
+    }
+
+    UI.ReminderEditor {
+        id: reminderEditor
+        objectName: "libraryReminderEditor"
+        property string noteId: ""
+        theme: window.theme
+        onSaveRequested: function(seconds, recurrence) {
+            if (backend.setNoteReminder(noteId, seconds, recurrence)) {
+                window.reminderChanged(noteId)
+                window.showToast(qsTr("Reminder set"))
+            }
+        }
+        onRemoveRequested: {
+            if (backend.clearNoteReminder(noteId)) {
+                window.reminderChanged(noteId)
+                window.showToast(qsTr("Reminder removed"))
             }
         }
     }

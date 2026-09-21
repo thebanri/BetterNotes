@@ -6,7 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.3] - 2026-09-21
 
+### Added
+- Reminders for every note: the bell in a note's title bar sets, changes or removes its reminder, with a date, a time, one-click choices and daily, weekly or monthly repeats.
+- The library shows each reminder on its note card; clicking it (or the card's bell or menu) edits it there, and a new **Reminders** section lists every note that has one.
+
 ### Fixed
+- A recurring reminder missed while BetterNotes was closed now fires once and moves to its next occurrence, instead of firing again every 30 seconds until it caught up.
+- Palette and 1-bit images, including many GIF frames, are drawn in their colours instead of black.
 - After `betternotes install` (and the curl installer) the applications menu shows the BetterNotes icon right away. Installing and uninstalling now tell the desktop that icons and menu entries changed; KDE Plasma had kept showing a blank icon from its cache.
 - Desktop notifications show the BetterNotes icon, also from an AppImage or a build that is not installed, and are linked to the app's desktop entry. A note title starting with `-` is no longer read as a `notify-send` option.
 - Running the test suites no longer shows notifications on the desktop.
