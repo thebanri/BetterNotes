@@ -32,6 +32,8 @@ FocusScope {
     // a plain click selects instead of opening).
     property bool selected: false
     property bool selecting: false
+    // The content is locked with the master password.
+    property bool locked: false
 
     // A click with Ctrl (toggle) or Shift (range), or any click while cards
     // are selected.
@@ -47,7 +49,8 @@ FocusScope {
 
     signal openRequested()
     // "pin", "unpin", "archive", "restore", "copy", "locate", "reminder",
-    // "delete" (to the trash), "restore-trash" or "delete-forever".
+    // "delete" (to the trash), "restore-trash", "delete-forever", "lock" or
+    // "unlock-note".
     signal actionRequested(string action)
 
     readonly property bool hot: hover.hovered || card.activeFocus || actionsMenu.visible || trashMenu.visible
@@ -140,6 +143,13 @@ FocusScope {
                 spacing: 6
 
                 AppIcon {
+                    visible: card.locked
+                    name: "lock"
+                    size: 13
+                    color: card.inkSoft
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                AppIcon {
                     visible: card.isPinned
                     name: "pin"
                     size: 13
@@ -167,6 +177,7 @@ FocusScope {
                 // text is escaped first, so only the highlight is markup.
                 readonly property bool marked: card.snippet.indexOf("\ue000") >= 0
                 text: {
+                    if (card.locked) return qsTr("Locked note")
                     if (!card.snippet.length) return qsTr("Empty note")
                     if (!marked) return card.snippet
                     const escaped = card.snippet.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -180,7 +191,7 @@ FocusScope {
                 wrapMode: Text.Wrap
                 elide: Text.ElideRight
                 font.pixelSize: 12
-                font.italic: card.snippet.length === 0
+                font.italic: card.snippet.length === 0 || card.locked
                 lineHeight: 1.3
                 color: card.inkSoft
                 Layout.fillWidth: true
@@ -409,7 +420,11 @@ FocusScope {
             text: card.isArchived ? qsTr("Restore from archive") : qsTr("Archive")
             onTriggered: card.actionRequested(card.isArchived ? "restore" : "archive")
         }
-        MenuItem { text: qsTr("Copy text"); onTriggered: card.actionRequested("copy") }
+        MenuItem { text: qsTr("Copy text"); enabled: !card.locked; onTriggered: card.actionRequested("copy") }
+        MenuItem {
+            text: card.locked ? qsTr("Remove Lock…") : qsTr("Lock with Password…")
+            onTriggered: card.actionRequested(card.locked ? "unlock-note" : "lock")
+        }
         MenuItem {
             text: card.reminder.length > 0 ? qsTr("Edit reminder…") : qsTr("Add reminder…")
             onTriggered: card.actionRequested("reminder")

@@ -20,6 +20,7 @@ mod session;
 pub mod settings;
 pub mod shortcuts;
 mod store;
+pub mod vault;
 mod window_state;
 
 pub use attachments::{

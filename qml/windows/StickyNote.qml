@@ -50,6 +50,8 @@ ApplicationWindow {
     signal quitRequested()
     signal libraryRequested()
     signal newNoteRequested()
+    // Locking needs the master password, which the library asks for.
+    signal lockRequested(string id, bool locked)
     // Emitted for every clicked link, before deciding whether it may open.
     signal linkClicked(string link)
 
@@ -493,6 +495,18 @@ ApplicationWindow {
                 }
                 TapHandler { onTapped: noteWindow.editReminder() }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
+            }
+
+            UI.AppIcon {
+                objectName: "lockedMark"
+                visible: backend.isLocked && !noteWindow.collapsed
+                name: "lock"
+                size: 13
+                color: theme.noteTextSecondary
+                Layout.alignment: Qt.AlignVCenter
+                HoverHandler { id: lockHover }
+                ToolTip.visible: lockHover.hovered
+                ToolTip.text: qsTr("Locked: the text is encrypted with your password")
             }
 
             UI.StatusBadge {
@@ -1821,6 +1835,11 @@ ApplicationWindow {
                             onTriggered: noteWindow.align("justify")
                         }
                         MenuSeparator {}
+                        MenuItem {
+                            objectName: "lockNoteItem"
+                            text: backend.isLocked ? qsTr("Remove Lock…") : qsTr("Lock with Password…")
+                            onTriggered: noteWindow.lockRequested(noteWindow.noteId, !backend.isLocked)
+                        }
                         MenuItem {
                             objectName: "attachFileItem"
                             text: qsTr("Attach File…")

@@ -25,6 +25,7 @@ an account or a cloud service. Notes stay on your machine.
 - Reminders for each note (one-time or repeating), editable from the note or the library, with desktop notifications; file attachments.
 - JSON/Markdown import and export, database and attachment backups, and restore.
 - A CLI sharing the Rust core with the GUI, plus local single-instance IPC.
+- Locked notes: encrypt a note's text with a master password (see below).
 - Offline use without accounts, telemetry or a remote server.
 
 Desktop integration depends on the session and package format; see
@@ -140,6 +141,20 @@ vary between desktops; headless CI tests verify startup, not compositor behavior
   depends on the desktop notification service.
 
 Use `betternotes --diagnostics` when reporting desktop integration issues.
+
+## Locked notes
+
+Lock a note from its **⋯** menu or its card's menu. The first time, you choose
+a master password; every locked note uses it. A locked note's text is encrypted
+with XChaCha20-Poly1305 under a key derived from the password with Argon2id, is
+left out of search and previews, and opens only after you enter the password.
+The key stays in memory until **Lock Now** (Settings) or quitting.
+
+- The password is not stored and **cannot be recovered**. Without it, locked
+  notes cannot be opened.
+- Titles, attached files and images are **not** encrypted.
+- Exports and backups keep locked text encrypted; importing it needs the same
+  password.
 
 ## Keyboard shortcuts
 

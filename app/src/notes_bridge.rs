@@ -63,6 +63,13 @@ pub mod ffi {
         #[qproperty(bool, autostart_enabled, READ, NOTIFY = autostart_changed, cxx_name = "autostartEnabled")]
         #[qproperty(bool, notes_stay_below, READ, NOTIFY = layer_changed, cxx_name = "notesStayBelow")]
         #[qproperty(QString, accent_color, READ, NOTIFY = theme_changed, cxx_name = "accentColor")]
+        /// Per listed note: "true" when its content is locked.
+        #[qproperty(QStringList, locked_states, READ, NOTIFY = list_changed, cxx_name = "lockedStates")]
+        /// The selected note is locked.
+        #[qproperty(bool, is_locked, READ, NOTIFY = list_changed, cxx_name = "isLocked")]
+        /// A master password exists, and whether it is unlocked right now.
+        #[qproperty(bool, vault_set, READ, NOTIFY = list_changed, cxx_name = "vaultSet")]
+        #[qproperty(bool, vault_unlocked, READ, NOTIFY = list_changed, cxx_name = "vaultUnlocked")]
         /// Every configurable shortcut as a JSON object {action: sequence}.
         #[qproperty(QString, shortcuts_json, READ, NOTIFY = theme_changed, cxx_name = "shortcutsJson")]
         type NotesBackend = super::NotesBackendRust;
@@ -369,6 +376,34 @@ pub mod ffi {
         #[cxx_name = "runAutoBackup"]
         fn run_auto_backup(&self);
 
+        /// Sets the master password the first time; returns "" or why not.
+        #[qinvokable]
+        #[cxx_name = "setUpPassword"]
+        fn set_up_password(self: Pin<&mut Self>, password: QString) -> QString;
+        /// Unlocks locked notes; false for a wrong password.
+        #[qinvokable]
+        #[cxx_name = "unlockNotes"]
+        fn unlock_notes(self: Pin<&mut Self>, password: QString) -> bool;
+        #[qinvokable]
+        #[cxx_name = "lockNotes"]
+        fn lock_notes(self: Pin<&mut Self>);
+        #[qinvokable]
+        #[cxx_name = "changePassword"]
+        fn change_password(self: Pin<&mut Self>, current: QString, replacement: QString)
+            -> QString;
+        /// Locks or unlocks the selected note's content.
+        #[qinvokable]
+        #[cxx_name = "setLocked"]
+        fn set_locked(self: Pin<&mut Self>, locked: bool) -> bool;
+        #[qinvokable]
+        #[cxx_name = "setNoteLocked"]
+        fn set_note_locked(self: Pin<&mut Self>, id: QString, locked: bool) -> bool;
+        /// Rereads the lists and vault state, e.g. after another window
+        /// unlocked or locked notes.
+        #[qinvokable]
+        #[cxx_name = "refreshState"]
+        fn refresh_state(self: Pin<&mut Self>);
+
         #[qinvokable]
         #[cxx_name = "setAccentColor"]
         fn set_accent_color(self: Pin<&mut Self>, color: QString) -> bool;
@@ -413,6 +448,10 @@ pub struct NotesBackendRust {
     note_colors: QStringList,
     note_reminders: QStringList,
     accent_color: QString,
+    locked_states: QStringList,
+    is_locked: bool,
+    vault_set: bool,
+    vault_unlocked: bool,
     shortcuts_json: QString,
     reminder_texts: [String; 3],
     trash_ids: QStringList,
@@ -457,6 +496,10 @@ impl Default for NotesBackendRust {
             note_colors: QStringList::default(),
             note_reminders: QStringList::default(),
             accent_color: QString::from(betternotes_core::settings::DEFAULT_ACCENT),
+            locked_states: QStringList::default(),
+            is_locked: false,
+            vault_set: false,
+            vault_unlocked: false,
             shortcuts_json: QString::default(),
             reminder_texts: [
                 "Reminder from BetterNotes".into(),
@@ -758,6 +801,14 @@ impl ffi::NotesBackend {
                     .store()
                     .accent_color()
                     .unwrap_or_else(|_| betternotes_core::settings::DEFAULT_ACCENT.to_string());
+                let locked_states = session
+                    .summaries()
+                    .iter()
+                    .map(|note| QString::from(if note.is_locked { "true" } else { "false" }))
+                    .collect();
+                let is_locked = session.current().is_some_and(|note| note.is_locked);
+                let vault_set = betternotes_core::vault::is_set(session.store()).unwrap_or(false);
+                let vault_unlocked = betternotes_core::vault::is_unlocked();
                 let shortcuts_json = betternotes_core::keymap::load(session.store())
                     .ok()
                     .and_then(|keys| serde_json::to_string(&keys).ok())
@@ -790,6 +841,10 @@ impl ffi::NotesBackend {
                 state.autostart_enabled = autostart_enabled;
                 state.notes_stay_below = notes_stay_below;
                 state.accent_color = QString::from(&accent_color);
+                state.locked_states = locked_states;
+                state.is_locked = is_locked;
+                state.vault_set = vault_set;
+                state.vault_unlocked = vault_unlocked;
                 state.shortcuts_json = QString::from(&shortcuts_json);
             }
         }
@@ -1490,6 +1545,67 @@ impl ffi::NotesBackend {
                 Err(error) => eprintln!("BetterNotes: automatic backup failed: {error}"),
             }
         });
+    }
+
+    pub fn set_up_password(mut self: Pin<&mut Self>, password: QString) -> QString {
+        let mut refused = String::new();
+        self.as_mut().perform(false, |session| {
+            if let Err(error) =
+                betternotes_core::vault::set_up(session.store(), &password.to_string())
+            {
+                refused = error.to_string();
+            }
+            Ok(())
+        });
+        QString::from(&refused)
+    }
+
+    pub fn unlock_notes(mut self: Pin<&mut Self>, password: QString) -> bool {
+        let mut unlocked = false;
+        self.as_mut().perform(false, |session| {
+            unlocked = betternotes_core::vault::unlock(session.store(), &password.to_string())?;
+            Ok(())
+        });
+        unlocked
+    }
+
+    pub fn lock_notes(self: Pin<&mut Self>) {
+        betternotes_core::vault::lock();
+        self.finish(Ok(()), false);
+    }
+
+    pub fn change_password(
+        mut self: Pin<&mut Self>,
+        current: QString,
+        replacement: QString,
+    ) -> QString {
+        let mut refused = String::new();
+        self.as_mut().perform(false, |session| {
+            if let Err(error) = betternotes_core::vault::change_password(
+                session.store(),
+                &current.to_string(),
+                &replacement.to_string(),
+            ) {
+                refused = error.to_string();
+            }
+            Ok(())
+        });
+        QString::from(&refused)
+    }
+
+    pub fn set_locked(self: Pin<&mut Self>, locked: bool) -> bool {
+        self.perform(true, |session| session.set_locked(locked))
+    }
+
+    pub fn set_note_locked(self: Pin<&mut Self>, id: QString, locked: bool) -> bool {
+        match parse_note_id(&id) {
+            Ok(id) => self.perform(false, |session| session.set_note_locked(id, locked)),
+            Err(error) => self.finish(Err(error), false),
+        }
+    }
+
+    pub fn refresh_state(self: Pin<&mut Self>) {
+        self.finish(Ok(()), false);
     }
 
     pub fn set_accent_color(self: Pin<&mut Self>, color: QString) -> bool {

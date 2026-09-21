@@ -26,6 +26,7 @@ ApplicationWindow {
     property alias deleteForeverDialog: deleteDialog
     property alias settingsPopupItem: settingsPopup
     property alias keySequencesItem: keySequences
+    property alias passwordDialogItem: passwordDialog
     property var noteWindows: ({})
     property string windowError: ""
     property string filterTab: "all"
@@ -77,6 +78,7 @@ ApplicationWindow {
             onQuitRequested: window.quitApplication()
             onLibraryRequested: { window.showNormal(); window.requestActivate() }
             onNewNoteRequested: window.createNote()
+            onLockRequested: function(id, locked) { window.noteAction(id, locked ? "lock" : "unlock-note") }
         }
     }
     Component {
@@ -96,6 +98,8 @@ ApplicationWindow {
         const ids = backend.restoreIds
         const errors = []
         for (let i = 0; i < ids.length; ++i) {
+            // Locked notes wait until they are unlocked.
+            if (isLockedNote(ids[i]) && !backend.vaultUnlocked) continue
             if (!openNote(ids[i])) errors.push(windowError)
         }
         windowError = errors.join("\n")
@@ -109,8 +113,18 @@ ApplicationWindow {
 
     // activate defaults to true; pass false to reveal a note without pulling it
     // above other windows or stealing keyboard focus.
+    function isLockedNote(id) {
+        const i = backend.noteIds.indexOf(id)
+        return i >= 0 && backend.lockedStates[i] === "true"
+    }
+
     function openNote(id, recover, activate) {
         let sticky = noteWindows[id]
+        // A locked note opens after its password; then this runs again.
+        if (!sticky && isLockedNote(id) && !backend.vaultUnlocked) {
+            askPassword("unlock", id, "open")
+            return null
+        }
         if (!sticky) {
             sticky = stickyComponent.createObject(window, {noteId: id}) as StickyNote
             if (!sticky) {
@@ -339,7 +353,8 @@ ApplicationWindow {
                 tint: known ? (backend.noteColors[i] || "yellow") : "yellow",
                 reminder: known ? (backend.noteReminders[i] || "") : "",
                 trashed: false,
-                deletedAt: 0
+                deletedAt: 0,
+                locked: known && backend.lockedStates[i] === "true"
             }
         }
         if (filterTab === "trash" && searchFilter.length === 0) {
@@ -347,7 +362,7 @@ ApplicationWindow {
                 rows.push({
                     id: backend.trashIds[t], title: backend.trashTitles[t], snippet: backend.trashSnippets[t] || "",
                     tags: [], pinned: false, archived: false, priority: 0, tint: "yellow", reminder: "",
-                    trashed: true, deletedAt: parseFloat(backend.trashDeletedAt[t] || "0")
+                    trashed: true, deletedAt: parseFloat(backend.trashDeletedAt[t] || "0"), locked: false
                 })
             }
             return rows
@@ -428,6 +443,30 @@ ApplicationWindow {
                 backend.setNoteArchived(id, archived)
             }
             if (archived) showToast(qsTr("Moved to the archive"))
+        } else if (action === "lock" || action === "unlock-note") {
+            const locking = action === "lock"
+            if (!backend.vaultSet) {
+                askPassword("setup", id, action)
+                return
+            }
+            if (!backend.vaultUnlocked) {
+                askPassword("unlock", id, action)
+                return
+            }
+            let done
+            if (sticky) {
+                done = sticky.editorBackend.setLocked(locking) && sticky.flush()
+            } else {
+                done = backend.setNoteLocked(id, locking)
+            }
+            backend.reload()
+            if (!done) {
+                showToast(backend.errorMessage || (sticky ? sticky.editorBackend.errorMessage : ""))
+            } else if (locking && sticky && (sticky.attachments.length > 0 || sticky.plainContent.indexOf("\ufffc") >= 0)) {
+                showToast(qsTr("Note locked. Its attached files and images are not encrypted."))
+            } else {
+                showToast(locking ? qsTr("Note locked") : qsTr("Lock removed"))
+            }
         } else if (action === "reminder") {
             editReminder(id)
         } else if (action === "delete") {
@@ -441,6 +480,70 @@ ApplicationWindow {
             deleteDialog.noteIds = [id]
             deleteDialog.open()
         }
+    }
+
+    // ---- Locked notes -------------------------------------------------------
+
+    // Asks for the master password, then carries on with action on id.
+    function askPassword(mode, id, action) {
+        passwordDialog.pendingId = id || ""
+        passwordDialog.pendingAction = action || ""
+        const i = backend.noteIds.indexOf(id)
+        const title = i >= 0 ? (backend.titles[i] || qsTr("Untitled note")) : ""
+        passwordDialog.openAs(mode, title)
+    }
+
+    function passwordSubmitted(password, replacement) {
+        const mode = passwordDialog.mode
+        if (mode === "unlock") {
+            if (!backend.unlockNotes(password)) {
+                passwordDialog.error = qsTr("That password is not right.")
+                return
+            }
+        } else if (mode === "setup") {
+            const refused = backend.setUpPassword(password)
+            if (refused.length > 0) {
+                passwordDialog.error = refused
+                return
+            }
+        } else {
+            const refused = backend.changePassword(password, replacement)
+            if (refused.length > 0) {
+                passwordDialog.error = refused
+                return
+            }
+            showToast(qsTr("Password changed"))
+        }
+        passwordDialog.close()
+        refreshWindowsState()
+        const id = passwordDialog.pendingId
+        const action = passwordDialog.pendingAction
+        passwordDialog.pendingId = ""
+        passwordDialog.pendingAction = ""
+        if (action === "open") openNote(id)
+        else if (action.length > 0) noteAction(id, action)
+    }
+
+    // Saves and closes locked notes, then forgets the key.
+    function lockNow() {
+        for (const id of Object.keys(noteWindows)) {
+            const sticky = noteWindows[id]
+            if (sticky.editorBackend.isLocked) {
+                if (!sticky.flush()) {
+                    showToast(qsTr("A locked note could not be saved; it stays open."))
+                    return
+                }
+                sticky.close()
+            }
+        }
+        backend.lockNotes()
+        refreshWindowsState()
+        showToast(qsTr("Locked notes are locked"))
+    }
+
+    function refreshWindowsState() {
+        backend.refreshState()
+        for (const id of Object.keys(noteWindows)) noteWindows[id].editorBackend.refreshState()
     }
 
     // ---- Selection ----------------------------------------------------------
@@ -1275,6 +1378,7 @@ ApplicationWindow {
                         tint: cell.modelData.tint
                         reminder: cell.modelData.reminder
                         trashed: cell.modelData.trashed
+                        locked: cell.modelData.locked
                         deletedAt: cell.modelData.deletedAt
                         selected: window.selectionRevision >= 0 && !!window.selectedIds[cell.modelData.id]
                         selecting: window.selectionCount > 0
@@ -1723,6 +1827,59 @@ ApplicationWindow {
                 }
             }
 
+            // ---- Locked notes -------------------------------------------------
+            ColumnLayout {
+                objectName: "lockSection"
+                spacing: 8
+                Layout.fillWidth: true
+                Label {
+                    text: qsTr("Locked notes")
+                    font.pixelSize: 13
+                    font.weight: Font.Medium
+                    color: theme.textPrimary
+                }
+                Label {
+                    text: !backend.vaultSet
+                        ? qsTr("Lock a note from its ⋯ menu or its card's menu to encrypt its text with a password. Titles, attached files and images are not encrypted.")
+                        : (backend.vaultUnlocked ? qsTr("Unlocked: locked notes can be opened until you lock them or quit.")
+                                                 : qsTr("Locked: enter the password to open locked notes."))
+                    wrapMode: Text.WordWrap
+                    font.pixelSize: 11
+                    color: theme.textSecondary
+                    Layout.fillWidth: true
+                }
+                RowLayout {
+                    spacing: 8
+                    UI.StyledButton {
+                        visible: !backend.vaultSet
+                        theme: window.theme
+                        text: qsTr("Set Password…")
+                        onClicked: window.askPassword("setup")
+                    }
+                    UI.StyledButton {
+                        visible: backend.vaultSet && !backend.vaultUnlocked
+                        theme: window.theme
+                        iconName: "unlock"
+                        text: qsTr("Unlock…")
+                        onClicked: window.askPassword("unlock")
+                    }
+                    UI.StyledButton {
+                        visible: backend.vaultSet && backend.vaultUnlocked
+                        theme: window.theme
+                        iconName: "lock"
+                        text: qsTr("Lock Now")
+                        onClicked: window.lockNow()
+                    }
+                    UI.StyledButton {
+                        visible: backend.vaultSet
+                        theme: window.theme
+                        variant: "ghost"
+                        text: qsTr("Change Password…")
+                        onClicked: window.askPassword("change")
+                    }
+                }
+            }
+
             // ---- Keyboard shortcuts ------------------------------------------
             ColumnLayout {
                 id: shortcutSection
@@ -1894,6 +2051,15 @@ ApplicationWindow {
             if (failed.length > 0) window.showToast(qsTr("Imported %1 notes; could not import %2").arg(imported).arg(failed.join("; ")))
             else window.showToast(qsTr("Imported %1 notes").arg(imported))
         }
+    }
+
+    UI.PasswordDialog {
+        id: passwordDialog
+        objectName: "passwordDialog"
+        property string pendingId: ""
+        property string pendingAction: ""
+        theme: window.theme
+        onSubmitted: function(password, replacement) { window.passwordSubmitted(password, replacement) }
     }
 
     UI.ReminderEditor {

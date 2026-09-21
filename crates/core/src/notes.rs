@@ -13,6 +13,8 @@ pub struct Note {
     pub is_archived: bool,
     pub is_pinned: bool,
     pub tags: Vec<String>,
+    /// Content is sealed with the master password (see vault).
+    pub is_locked: bool,
 }
 
 /// List queries deliberately omit note bodies, providing summaries with snippets and metadata.
@@ -25,6 +27,7 @@ pub struct NoteSummary {
     pub is_archived: bool,
     pub is_pinned: bool,
     pub tags: Vec<String>,
+    pub is_locked: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -68,6 +71,8 @@ pub enum Error {
     Install(String),
     #[error("Choose a valid date and time for the reminder.")]
     InvalidReminder,
+    #[error("This note is locked. Unlock locked notes with your password first.")]
+    Locked,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

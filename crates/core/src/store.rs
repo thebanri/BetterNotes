@@ -6,7 +6,7 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x424e4f54; // BNOT, an internal identifier, not a public app ID.
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
 const INITIAL_SCHEMA: &str = include_str!("../../../migrations/0001_notes.sql");
 const WINDOW_SCHEMA: &str = include_str!("../../../migrations/0002_note_windows.sql");
 const SETTINGS_SCHEMA: &str = include_str!("../../../migrations/0003_settings.sql");
@@ -15,6 +15,7 @@ const SEARCH_ORG_SCHEMA: &str =
 const PRODUCTIVITY_SCHEMA: &str = include_str!("../../../migrations/0005_productivity.sql");
 const PLAIN_SEARCH_SCHEMA: &str = include_str!("../../../migrations/0006_plain_search_text.sql");
 const TRASH_SCHEMA: &str = include_str!("../../../migrations/0007_trash.sql");
+const LOCKED_SCHEMA: &str = include_str!("../../../migrations/0008_locked_notes.sql");
 /// How long a note stays in the trash before it is deleted for good.
 pub const TRASH_RETENTION_MS: i64 = 30 * 24 * 60 * 60 * 1000;
 /// Preview length for list rows and search results, in characters.
@@ -46,8 +47,10 @@ impl NoteStore {
             // Rich-text bodies open with a long `<head>`, so the preview needs
             // more raw characters than it will finally show. It stays a
             // substring: list queries never load whole note bodies.
-            "SELECT n.id, n.title, substr(n.content, 1, 2000), n.priority, n.is_archived, n.is_pinned,
-                    COALESCE((SELECT group_concat(t.name, ',') FROM note_tags nt JOIN tags t ON nt.tag_id = t.id WHERE nt.note_id = n.id), '')
+            "SELECT n.id, n.title, CASE WHEN n.is_locked THEN '' ELSE substr(n.content, 1, 2000) END,
+                    n.priority, n.is_archived, n.is_pinned,
+                    COALESCE((SELECT group_concat(t.name, ',') FROM note_tags nt JOIN tags t ON nt.tag_id = t.id WHERE nt.note_id = n.id), ''),
+                    n.is_locked
              FROM notes n
              WHERE n.deleted_at IS NULL
              ORDER BY n.is_pinned DESC, n.updated_at DESC, n.id DESC",
@@ -72,6 +75,7 @@ impl NoteStore {
                 is_archived: row.get::<_, i32>(4)? != 0,
                 is_pinned: row.get::<_, i32>(5)? != 0,
                 tags,
+                is_locked: row.get::<_, i32>(7)? != 0,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -81,7 +85,7 @@ impl NoteStore {
         let note = self
             .connection
             .query_row(
-                "SELECT id, title, content, created_at, updated_at, revision, priority, is_archived, is_pinned
+                "SELECT id, title, content, created_at, updated_at, revision, priority, is_archived, is_pinned, is_locked
                  FROM notes WHERE id = ?1",
                 [id],
                 |row| {
@@ -95,6 +99,7 @@ impl NoteStore {
                         row.get::<_, i32>(6)?,
                         row.get::<_, i32>(7)? != 0,
                         row.get::<_, i32>(8)? != 0,
+                        row.get::<_, i32>(9)? != 0,
                     ))
                 },
             )
@@ -108,10 +113,17 @@ impl NoteStore {
             .query_map([id], |row| row.get::<_, String>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
+        // A locked note opens only while the master password is unlocked;
+        // otherwise its empty draft could be saved over the sealed content.
+        let content = if note.9 {
+            crate::vault::open(&note.2)?
+        } else {
+            note.2
+        };
         Ok(Note {
             id: note.0,
             title: note.1,
-            content: note.2,
+            content,
             created_at: note.3,
             updated_at: note.4,
             revision: note.5,
@@ -119,6 +131,7 @@ impl NoteStore {
             is_archived: note.7,
             is_pinned: note.8,
             tags,
+            is_locked: note.9,
         })
     }
 
@@ -140,6 +153,7 @@ impl NoteStore {
             is_archived: false,
             is_pinned: false,
             tags: Vec::new(),
+            is_locked: false,
         })
     }
 
@@ -150,13 +164,23 @@ impl NoteStore {
             .checked_add(1)
             .ok_or(Error::RevisionOverflow)?;
         let updated_at = now_millis()?.max(draft.updated_at);
+        // Locked content is stored sealed and is not searchable.
+        let (stored, search_text) = if draft.is_locked {
+            (crate::vault::seal(&draft.content)?, String::new())
+        } else {
+            (
+                draft.content.clone(),
+                crate::preview::to_plain_text(&draft.content),
+            )
+        };
         let changed = self.connection.execute(
             "UPDATE notes SET title = ?1, content = ?2, updated_at = ?3, revision = ?4,
-                    priority = ?5, is_archived = ?6, is_pinned = ?7, search_text = ?10
+                    priority = ?5, is_archived = ?6, is_pinned = ?7, search_text = ?10,
+                    is_locked = ?11
              WHERE id = ?8 AND revision = ?9",
             params![
                 draft.title,
-                draft.content,
+                stored,
                 updated_at,
                 revision,
                 draft.priority,
@@ -164,7 +188,8 @@ impl NoteStore {
                 if draft.is_pinned { 1 } else { 0 },
                 draft.id,
                 draft.revision,
-                crate::preview::to_plain_text(&draft.content)
+                search_text,
+                draft.is_locked
             ],
         )?;
         if changed != 1 {
@@ -248,6 +273,18 @@ impl NoteStore {
         Ok(())
     }
 
+    /// Writes an imported note's sealed content as it is, locking the note.
+    pub fn set_sealed_content(&self, id: i64, sealed: &str) -> Result<()> {
+        if !sealed.starts_with(crate::vault::SEALED_PREFIX) {
+            return Err(Error::Locked);
+        }
+        self.connection.execute(
+            "UPDATE notes SET content = ?1, is_locked = 1, search_text = '' WHERE id = ?2",
+            params![sealed, id],
+        )?;
+        Ok(())
+    }
+
     /// Moves a note to the trash, at the revision the caller last saw, and
     /// closes its window.
     pub fn move_to_trash(&self, note: &Note) -> Result<()> {
@@ -293,6 +330,7 @@ impl NoteStore {
                     is_archived: row.get::<_, i32>(4)? != 0,
                     is_pinned: row.get::<_, i32>(5)? != 0,
                     tags: Vec::new(),
+                    is_locked: false,
                 },
                 row.get(6)?,
             ))
@@ -482,14 +520,14 @@ impl NoteStore {
 
     pub fn all_notes_for_export(&self) -> Result<Vec<crate::export_import::ExportNote>> {
         let mut statement = self.connection.prepare(
-            "SELECT n.title, n.content, n.priority, n.is_archived, n.is_pinned, n.created_at, n.updated_at,
+            "SELECT n.title, n.content, n.priority, n.is_archived, n.is_pinned, n.created_at, n.updated_at, n.is_locked,
                     COALESCE((SELECT group_concat(t.name, ',') FROM note_tags nt JOIN tags t ON nt.tag_id = t.id WHERE nt.note_id = n.id), '')
              FROM notes n
              WHERE n.deleted_at IS NULL
              ORDER BY n.id ASC",
         )?;
         let rows = statement.query_map([], |row| {
-            let tags_str: String = row.get(7)?;
+            let tags_str: String = row.get(8)?;
             let tags = if tags_str.is_empty() {
                 Vec::new()
             } else {
@@ -508,6 +546,8 @@ impl NoteStore {
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
                 tags,
+                // Locked content leaves the app still sealed.
+                locked: row.get::<_, i32>(7)? != 0,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -583,6 +623,10 @@ fn migrate(connection: &mut Connection, initial_schema: &str) -> Result<()> {
         transaction.execute_batch(TRASH_SCHEMA)?;
     }
     transaction.prepare("SELECT deleted_at FROM notes LIMIT 0")?;
+    if version < 8 {
+        transaction.execute_batch(LOCKED_SCHEMA)?;
+    }
+    transaction.prepare("SELECT is_locked FROM notes LIMIT 0")?;
     if version < SCHEMA_VERSION {
         transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     }

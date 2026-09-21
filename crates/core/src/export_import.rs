@@ -22,6 +22,9 @@ pub struct ExportNote {
     pub is_archived: bool,
     pub created_at: i64,
     pub updated_at: i64,
+    /// The content is sealed with a BetterNotes master password.
+    #[serde(default)]
+    pub locked: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -107,12 +110,18 @@ pub fn import_notes_json(store: &NoteStore, input_path: &Path) -> Result<usize> 
     for exp in archive.notes {
         let mut note = store.create()?;
         note.title = exp.title;
-        note.content = exp.content;
         note.priority = exp.priority;
         note.is_pinned = exp.is_pinned;
         note.is_archived = exp.is_archived;
         note.tags = exp.tags;
+        if !exp.locked {
+            note.content = exp.content.clone();
+        }
         store.update(&note)?;
+        // Sealed content goes in untouched; the same password opens it.
+        if exp.locked {
+            store.set_sealed_content(note.id, &exp.content)?;
+        }
         imported += 1;
     }
 

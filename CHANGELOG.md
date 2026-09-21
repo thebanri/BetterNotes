@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Reminder notifications have **Open note** and **Snooze 10 min** buttons (snooze is offered for one-time reminders), where the desktop's notification service supports buttons.
 - A note's title bar shows its reminder; click it to edit.
+- **Locked notes**: lock a note with one master password (from its ⋯ menu or its card). Its text is encrypted (XChaCha20-Poly1305 with an Argon2id-derived key) and left out of search and previews; it opens only after the password is entered, and **Lock Now** in Settings closes it again. Titles, attached files and images are not encrypted, and a forgotten password cannot be recovered. Exports and backups keep locked text encrypted.
 - Two more themes, **Sepia** (warm paper) and **Black** (pure black for OLED screens), and a choice of accent colour. Theme and accent changes reach open notes at once.
 - Keyboard shortcuts can be changed in Settings: click one, press the new keys. Shortcuts that clash within the library or within a note are refused, and **Reset All** restores the defaults. Tooltips show the current keys.
 - Automatic backups, on by default: daily or weekly, keeping the newest 7 (1–100), in a folder of your choice. Settings also offer **Back Up Now** and show when the last backup was made.

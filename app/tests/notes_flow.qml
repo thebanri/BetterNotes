@@ -519,6 +519,50 @@ Window {
         check(sticky.deleteConfirmed(), "Could not clean up the appearance note")
     }
 
+    // Locking a note sets up the password first; locked notes close when
+    // locked, ask for the password to open, and can have the lock removed.
+    function assertLockedNotes(library) {
+        const backend = library.libraryBackend
+        const dialog = library.passwordDialogItem
+        const field = function(name) { return findItem(dialog.contentItem, name) }
+        let sticky = library.createNote()
+        const id = sticky.noteId
+        findItem(sticky.contentItem, "contentEditor").insert(0, "secret words")
+        check(sticky.flush(), "Could not save the note to lock")
+
+        library.noteAction(id, "lock")
+        check(dialog.visible && dialog.mode === "setup", "Locking without a password did not ask to set one")
+        field("passwordFirst").text = "short"
+        field("passwordSecond").text = "short"
+        dialog.submit()
+        check(dialog.visible && dialog.error.length > 0, "A short password was accepted")
+        field("passwordFirst").text = "correct horse"
+        field("passwordSecond").text = "correct horsE"
+        dialog.submit()
+        check(dialog.visible && dialog.error.length > 0, "Mismatched passwords were accepted")
+        field("passwordSecond").text = "correct horse"
+        dialog.submit()
+        check(!dialog.visible && backend.vaultSet && backend.vaultUnlocked, "Setting the password failed")
+        check(sticky.editorBackend.isLocked && library.isLockedNote(id), "The note was not locked after setting the password")
+        backend.search("secret")
+        check(backend.searchResultIds.indexOf(id) < 0, "A locked note's text is searchable")
+
+        library.lockNow()
+        check(!backend.vaultUnlocked && !library.noteWindows[id], "Lock Now left the locked note open")
+        check(library.openNote(id) === null && dialog.visible && dialog.mode === "unlock", "Opening a locked note did not ask for the password")
+        field("passwordFirst").text = "wrong password"
+        dialog.submit()
+        check(dialog.visible && dialog.error.length > 0 && !backend.vaultUnlocked, "A wrong password unlocked")
+        field("passwordFirst").text = "correct horse"
+        dialog.submit()
+        sticky = library.noteWindows[id]
+        check(sticky && sticky.plainContent === "secret words", "Unlocking did not open the note with its text")
+
+        library.noteAction(id, "unlock-note")
+        check(!sticky.editorBackend.isLocked && !library.isLockedNote(id), "Removing the lock failed")
+        check(sticky.deleteConfirmed(), "Could not clean up the locked note")
+    }
+
     // A reminder set on a note shows in the library, can be edited there and
     // fires once when due.
     function assertReminders(library, note) {
@@ -826,6 +870,7 @@ Window {
                 harness.assertArrangeAndOpenFiles(harness.library)
                 harness.assertBackups(harness.library)
                 harness.assertAppearanceAndShortcuts(harness.library)
+                harness.assertLockedNotes(harness.library)
                 const extras = harness.library.createNote()
                 harness.assertEditorExtras(extras)
                 harness.check(extras.deleteConfirmed(), "Editor extras note could not be deleted")
@@ -866,7 +911,9 @@ Window {
         }
     }
     Timer {
-        interval: 10000
+        // A safety net for a hung test only: the run takes a few seconds, and
+        // password hashing is slow in debug builds on shared CI machines.
+        interval: 60000
         running: true
         onTriggered: { console.error("QML test timed out"); Qt.exit(2) }
     }

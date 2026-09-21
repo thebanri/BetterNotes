@@ -20,7 +20,11 @@ impl NotesSession {
     pub fn open_note(path: &Path, id: i64) -> Result<Self> {
         let store = NoteStore::open(path)?;
         let note = store.get(id)?;
-        let snippet = plain_preview(&note.content, PREVIEW_CHARS);
+        let snippet = if note.is_locked {
+            String::new()
+        } else {
+            plain_preview(&note.content, PREVIEW_CHARS)
+        };
         Ok(Self {
             store,
             summaries: vec![NoteSummary {
@@ -31,6 +35,7 @@ impl NotesSession {
                 is_archived: note.is_archived,
                 is_pinned: note.is_pinned,
                 tags: note.tags.clone(),
+                is_locked: note.is_locked,
             }],
             current: Some(note),
             dirty: false,
@@ -187,7 +192,13 @@ impl NotesSession {
                 .update(self.current.as_ref().ok_or(Error::NoSelection)?)?;
             if let Some(summary) = self.summaries.iter_mut().find(|note| note.id == saved.id) {
                 summary.title.clone_from(&saved.title);
-                summary.snippet = plain_preview(&saved.content, PREVIEW_CHARS);
+                // A locked note's text never reaches the list.
+                summary.snippet = if saved.is_locked {
+                    String::new()
+                } else {
+                    plain_preview(&saved.content, PREVIEW_CHARS)
+                };
+                summary.is_locked = saved.is_locked;
                 summary.priority = saved.priority;
                 summary.is_archived = saved.is_archived;
                 summary.is_pinned = saved.is_pinned;
@@ -212,6 +223,7 @@ impl NotesSession {
                 is_archived: note.is_archived,
                 is_pinned: note.is_pinned,
                 tags: note.tags.clone(),
+                is_locked: false,
             },
         );
         self.current = Some(note);
@@ -327,6 +339,27 @@ impl NotesSession {
             }
         }
         Ok(())
+    }
+
+    /// Locks or unlocks the selected note's content with the master password.
+    /// Both need the password unlocked: locking seals the content, unlocking
+    /// stores it readable again.
+    pub fn set_locked(&mut self, locked: bool) -> Result<()> {
+        if !crate::vault::is_unlocked() {
+            return Err(Error::Locked);
+        }
+        let note = self.current.as_mut().ok_or(Error::NoSelection)?;
+        note.is_locked = locked;
+        self.dirty = true;
+        self.save()
+    }
+
+    /// Locks or unlocks any listed note. See [`Self::set_note_pinned`].
+    pub fn set_note_locked(&mut self, id: i64, locked: bool) -> Result<()> {
+        if !crate::vault::is_unlocked() {
+            return Err(Error::Locked);
+        }
+        self.change_note(id, |note| note.is_locked = locked)
     }
 
     /// Adds a tag to any listed note. See [`Self::set_note_pinned`].
