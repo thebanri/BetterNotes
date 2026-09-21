@@ -22,7 +22,8 @@ fn main() {
     // --as-needed, GNU ld (Fedora) drops each one before it sees the
     // reference and fails with "DSO missing from command line". Naming them
     // again after the archives keeps them; lld (Arch) is order-insensitive.
+    // Every target needs it: the app and the QML integration test.
     for module in ["Widgets", "Quick", "DBus", "Qml", "Gui", "Core"] {
-        println!("cargo:rustc-link-arg-bins=-lQt6{module}");
+        println!("cargo:rustc-link-arg=-lQt6{module}");
     }
 }
