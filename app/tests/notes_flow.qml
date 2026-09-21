@@ -80,50 +80,6 @@ Window {
         }
     }
 
-    // The bottom-right grip resizes the window in QML rather than handing the
-    // drag to the compositor. The size must be a pure function of where the
-    // pointer is in scene coordinates -- that invariant is what stops the edge
-    // vibrating, because a stationary pointer then yields a stationary size no
-    // matter how the anchored grip moves underneath it.
-    function assertEdgeResize(window) {
-        const grip = findItem(window.contentItem, "bottomRightResize")
-        check(grip, "Missing resize grip")
-        const startWidth = window.width
-        const startHeight = window.height
-        // Scene coordinates are what a still pointer holds constant, so drive
-        // the handle through them rather than through grip-local offsets.
-        function at(sceneX, sceneY) { return grip.mapFromItem(null, sceneX, sceneY) }
-        const pressX = startWidth - 8
-        const pressY = startHeight - 8
-
-        window.beginEdgeResize(grip, at(pressX, pressY))
-        window.trackEdgeResize(grip, at(pressX + 60, pressY + 40), true, true)
-        window.commitEdgeResize()
-        check(window.width === startWidth + 60, "Horizontal resize did not follow the pointer")
-        check(window.height === startHeight + 40, "Vertical resize did not follow the pointer")
-
-        // Pointer held still: the size must not creep frame after frame.
-        for (let i = 0; i < 3; ++i) {
-            window.trackEdgeResize(grip, at(pressX + 60, pressY + 40), true, true)
-            window.commitEdgeResize()
-        }
-        check(window.width === startWidth + 60 && window.height === startHeight + 40, "Resize crept while the pointer was still")
-
-        window.trackEdgeResize(grip, at(pressX, pressY), true, true)
-        window.commitEdgeResize()
-        check(window.width === startWidth && window.height === startHeight, "Returning the pointer did not restore the size")
-
-        window.trackEdgeResize(grip, at(pressX - 5000, pressY - 5000), true, true)
-        window.commitEdgeResize()
-        check(window.width === window.minimumWidth && window.height === window.minimumHeight, "Resize ignored the minimum size")
-
-        check(window.width === Math.round(window.width) && window.height === Math.round(window.height), "Resize produced a fractional size")
-        window.endEdgeResize()
-        check(!window.resizing, "Resize state outlived the drag")
-        window.width = startWidth
-        window.height = startHeight
-    }
-
     function clickTool(window, name) {
         const button = findItem(window.contentItem, name)
         check(button && button.enabled, "Formatting button unavailable: " + name)
@@ -294,7 +250,6 @@ Window {
                 harness.check(harness.first.transientParent === null && harness.second.transientParent === null, "Notes are transient windows")
                 harness.check(harness.library.openNote(harness.firstId) === harness.first, "Duplicate editor created")
                 harness.assertShowAllNotes(harness.library, [harness.firstId, harness.secondId])
-                harness.assertEdgeResize(harness.second)
                 harness.edit(harness.first, "Autosaved title", "Plain <b>text</b>\nİstanbul 🦀")
                 harness.edit(harness.second, "Second", "Independent draft")
                 harness.first.width = 420

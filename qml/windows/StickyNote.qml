@@ -18,10 +18,6 @@ ApplicationWindow {
     property bool initialized: false
     property bool retiring: false
     property bool placing: false
-    // Drag state for the QML-driven resize handles.
-    property bool resizing: false
-    property int targetWidth: 0
-    property int targetHeight: 0
     property int expandedWidth: 380
     property int expandedHeight: 360
     property int normalX: 0
@@ -143,12 +139,18 @@ ApplicationWindow {
     readonly property color activeBorder: tintPalettes[noteTint] ? tintPalettes[noteTint].border : (noteTint.startsWith("#") ? computeCustomTint(noteTint, "border") : theme.noteBorder)
 
     // QObject ownership belongs to the library; these remain independent windows.
-    // Qt.Tool ensures desktop sticky notes act as utility widgets and do not appear as separate application windows in the taskbar/dock.
     // By default, sticky notes stay on bottom (desktop level) unless toggled to always-on-top.
     // Both stacking hints are X11-only: Wayland has no protocol for a client to
     // place itself in a layer, so on Wayland a note is an ordinary window.
+    //
+    // Deliberately not Qt.Tool. On X11 Qt makes a tool window without a
+    // transient parent transient for the whole application group
+    // (WM_TRANSIENT_FOR = client leader), and the window manager then raises
+    // every note along with the library whenever the library is activated --
+    // straight over other applications, keep-below or not. Hiding notes from
+    // the taskbar and switcher is done by the desktop integration instead.
     transientParent: null
-    flags: Qt.Tool | Qt.FramelessWindowHint | (alwaysOnTop ? Qt.WindowStaysOnTopHint : Qt.WindowStaysOnBottomHint)
+    flags: Qt.Window | Qt.FramelessWindowHint | (alwaysOnTop ? Qt.WindowStaysOnTopHint : Qt.WindowStaysOnBottomHint)
     title: (titleEditor.text.trim().length ? titleEditor.text : qsTr("Untitled note")) + " — BetterNotes"
     width: 380
     height: 360
@@ -235,55 +237,6 @@ ApplicationWindow {
         place({width: expandedWidth, height: expandedHeight, positioned: false}, fallbackScreen, true)
         persist(true)
         requestActivate()
-    }
-
-    // Client-driven resize for the edges that keep the window's origin fixed.
-    //
-    // Handing the drag to the compositor with startSystemResize() smears stale
-    // frames across the desktop on Wayland/KWin: a quick drag leaves copies of
-    // every intermediate size behind. Setting width/height ourselves repaints
-    // cleanly, but only if the size is a pure function of where the pointer is:
-    //
-    //  * Scene coordinates, not global ones. The window's top-left is what
-    //    these edges never move, so measuring against it makes the target size
-    //    independent of the current size. Global coordinates would fold in the
-    //    window position, which the compositor revises mid-drag on Wayland, and
-    //    each revision would feed straight back into the next size.
-    //  * Whole pixels. A fractional size makes the border and the text layout
-    //    shimmer between neighbouring device pixels.
-    //  * One resize per frame. Pointer events arrive faster than the window can
-    //    be reconfigured, and resizing several times inside one frame is what
-    //    makes the edge vibrate instead of following the cursor.
-    function beginEdgeResize(handle, mouse) {
-        const scene = handle.mapToItem(null, mouse.x, mouse.y)
-        // Distance from the grab point to each edge, held for the whole drag.
-        handle.grabRight = width - scene.x
-        handle.grabBottom = height - scene.y
-        targetWidth = width
-        targetHeight = height
-        resizing = true
-    }
-
-    function trackEdgeResize(handle, mouse, horizontal, vertical) {
-        const scene = handle.mapToItem(null, mouse.x, mouse.y)
-        if (horizontal) {
-            targetWidth = Math.max(minimumWidth, Math.round(scene.x + handle.grabRight))
-        }
-        if (vertical) {
-            targetHeight = Math.max(minimumHeight,
-                Math.min(maximumHeight, Math.round(scene.y + handle.grabBottom)))
-        }
-    }
-
-    function commitEdgeResize() {
-        if (targetWidth > 0 && width !== targetWidth) width = targetWidth
-        if (targetHeight > 0 && height !== targetHeight) height = targetHeight
-    }
-
-    function endEdgeResize() {
-        commitEdgeResize()
-        resizing = false
-        persist(true)
     }
 
     function captureGeometry() {
@@ -1017,35 +970,8 @@ ApplicationWindow {
         Label { text: qsTr("Reload the saved note and discard this draft?"); wrapMode: Text.WordWrap; width: Math.min(300, noteWindow.width - 64) }
         onAccepted: backend.reloadNote()
     }
-    // Right, bottom and bottom-right resize the window in place, so QML drives
-    // them. The left edges have to move the window as it grows, which a Wayland
-    // client cannot do for itself; those still ask the compositor and remain
-    // subject to its repaint behaviour.
-    component ResizeHandle: MouseArea {
-        id: handle
-        property real grabRight: 0
-        property real grabBottom: 0
-        property bool horizontal: false
-        property bool vertical: false
-        acceptedButtons: Qt.LeftButton
-        preventStealing: true
-        onPressed: function(mouse) { noteWindow.beginEdgeResize(handle, mouse) }
-        onPositionChanged: function(mouse) {
-            if (pressed) noteWindow.trackEdgeResize(handle, mouse, horizontal, vertical)
-        }
-        onReleased: noteWindow.endEdgeResize()
-        onCanceled: noteWindow.endEdgeResize()
-    }
-
-    // Applies the pointer's latest target once per displayed frame, so the
-    // window is reconfigured at the refresh rate rather than at the pointer's
-    // event rate.
-    FrameAnimation {
-        running: noteWindow.resizing
-        onTriggered: noteWindow.commitEdgeResize()
-    }
-
-    ResizeHandle {
+    // Native system resize handles for frameless window
+    MouseArea {
         id: rightResize
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -1053,9 +979,13 @@ ApplicationWindow {
         anchors.topMargin: 12
         anchors.bottomMargin: 16
         width: 8
-        horizontal: true
         cursorShape: Qt.SizeHorCursor
         z: 20
+        onPressed: function(mouse) {
+            if (mouse.button === Qt.LeftButton) {
+                noteWindow.startSystemResize(Qt.RightEdge)
+            }
+        }
     }
 
     MouseArea {
@@ -1075,7 +1005,7 @@ ApplicationWindow {
         }
     }
 
-    ResizeHandle {
+    MouseArea {
         id: bottomResize
         anchors.left: parent.left
         anchors.right: parent.right
@@ -1083,24 +1013,30 @@ ApplicationWindow {
         anchors.leftMargin: 16
         anchors.rightMargin: 16
         height: 8
-        vertical: true
         cursorShape: Qt.SizeVerCursor
         z: 20
         enabled: !noteWindow.collapsed
+        onPressed: function(mouse) {
+            if (mouse.button === Qt.LeftButton) {
+                noteWindow.startSystemResize(Qt.BottomEdge)
+            }
+        }
     }
 
-    ResizeHandle {
+    MouseArea {
         id: bottomRightResize
-        objectName: "bottomRightResize"
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         width: 16
         height: 16
-        horizontal: true
-        vertical: true
         cursorShape: Qt.SizeFDiagCursor
         z: 21
         enabled: !noteWindow.collapsed
+        onPressed: function(mouse) {
+            if (mouse.button === Qt.LeftButton) {
+                noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
+            }
+        }
 
         Rectangle {
             anchors.right: parent.right
