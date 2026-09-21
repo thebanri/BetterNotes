@@ -122,7 +122,7 @@ pub fn prune(folder: &Path, keep: usize) -> Result<usize> {
                 .then(|| (stamp, entry.path()))
         })
         .collect();
-    backups.sort_by(|a, b| b.0.cmp(&a.0));
+    backups.sort_by_key(|backup| std::cmp::Reverse(backup.0));
     let mut removed = 0;
     for (_, path) in backups.into_iter().skip(keep.max(1)) {
         fs::remove_dir_all(path)?;
