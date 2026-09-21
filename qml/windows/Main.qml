@@ -10,18 +10,24 @@ import "../components" as UI
 
 ApplicationWindow {
     id: window
-    width: 640
-    height: 480
-    minimumWidth: 400
-    minimumHeight: 300
+    width: 960
+    height: 620
+    minimumWidth: 440
+    minimumHeight: 360
     visible: !applicationInfo.startInBackground()
     title: applicationInfo.name() + qsTr(" — All notes")
-    color: theme.windowBackground
+    // Frameless: the window draws its own title bar and rounded frame.
+    flags: Qt.Window | Qt.FramelessWindowHint
+    color: "transparent"
     property alias libraryBackend: backend
     property alias theme: theme
     property var noteWindows: ({})
     property string windowError: ""
     property string filterTab: "all"
+    property string tagFilter: ""
+    // noteWindows is a plain object, so bindings cannot see it change. Anything
+    // that shows which notes are open also reads this counter.
+    property int windowsRevision: 0
     property string searchFilter: ""
     property var quickCaptureWindow: null
 
@@ -79,6 +85,7 @@ ApplicationWindow {
                 return null
             }
             noteWindows[id] = sticky
+            windowsRevision += 1
         }
         windowError = ""
         if (recover) {
@@ -105,6 +112,7 @@ ApplicationWindow {
     function releaseWindow(id) {
         const sticky = noteWindows[id]
         delete noteWindows[id]
+        windowsRevision += 1
         if (sticky) sticky.destroy()
     }
 
@@ -183,21 +191,81 @@ ApplicationWindow {
         }
     }
 
-    // Row counts for the filter chips. These read the list properties directly
-    // so the bindings refresh with the model.
+    // ---- Library data -----------------------------------------------------
+
+    function noteTagsAt(index) {
+        const joined = backend.noteTags[index] || ""
+        return joined.length > 0 ? joined.split(",") : []
+    }
+
+    // Row counts for the sidebar. They read the list properties directly so
+    // the bindings refresh with the model.
     function countNotes(kind) {
         let total = 0
         for (let i = 0; i < backend.titles.length; ++i) {
             const pinned = backend.pinnedStates[i] === "true"
             const archived = backend.archivedStates[i] === "true"
-            if (kind === "pinned" ? pinned : (kind === "archived" ? archived : !archived)) total += 1
+            if (kind === "pinned" ? pinned && !archived : (kind === "archived" ? archived : !archived)) total += 1
         }
         return total
     }
 
-    function noteTagsAt(index) {
-        const joined = backend.noteTags[index] || ""
-        return joined.length > 0 ? joined.split(",") : []
+    function countTag(tag) {
+        let total = 0
+        for (let i = 0; i < backend.titles.length; ++i) {
+            if (backend.archivedStates[i] !== "true" && noteTagsAt(i).indexOf(tag) >= 0) total += 1
+        }
+        return total
+    }
+
+    // The cards to show: search results while searching, otherwise the notes
+    // in the selected section, narrowed to the selected tag.
+    readonly property var visibleNotes: {
+        const rows = []
+        const indexById = {}
+        for (let i = 0; i < backend.noteIds.length; ++i) indexById[backend.noteIds[i]] = i
+        function row(id, title, snippet) {
+            const i = indexById[id]
+            const known = i !== undefined
+            return {
+                id: id,
+                title: title,
+                snippet: snippet,
+                tags: known ? window.noteTagsAt(i) : [],
+                pinned: known && backend.pinnedStates[i] === "true",
+                archived: known && backend.archivedStates[i] === "true",
+                priority: known ? parseInt(backend.priorities[i] || "0") : 0,
+                tint: known ? (backend.noteColors[i] || "yellow") : "yellow"
+            }
+        }
+        if (searchFilter.length > 0) {
+            for (let k = 0; k < backend.searchResultIds.length; ++k) {
+                rows.push(row(backend.searchResultIds[k], backend.searchResultTitles[k] || "", backend.searchResultSnippets[k] || ""))
+            }
+            return rows
+        }
+        for (let i = 0; i < backend.noteIds.length; ++i) {
+            const note = row(backend.noteIds[i], backend.titles[i], backend.snippets[i] || "")
+            if (filterTab === "archived" ? !note.archived : note.archived) continue
+            if (filterTab === "pinned" && !note.pinned) continue
+            if (tagFilter.length > 0 && note.tags.indexOf(tagFilter) < 0) continue
+            rows.push(note)
+        }
+        return rows
+    }
+
+    readonly property string sectionTitle: {
+        if (searchFilter.length > 0) return qsTr("Results for “%1”").arg(searchFilter)
+        if (tagFilter.length > 0) return "#" + tagFilter
+        if (filterTab === "pinned") return qsTr("Pinned")
+        if (filterTab === "archived") return qsTr("Archive")
+        return qsTr("All notes")
+    }
+
+    function showSection(tab, tag) {
+        filterTab = tab
+        tagFilter = tag || ""
+        searchField.text = ""
     }
 
     function cycleThemeMode() {
@@ -206,395 +274,657 @@ ApplicationWindow {
         else backend.setThemeMode("system")
     }
 
-    header: Rectangle {
-        height: 56
-        color: theme.surface
+    // ---- Note actions -----------------------------------------------------
 
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: 1
-            color: theme.border
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 12
-            spacing: 8
-
-            Label {
-                text: applicationInfo.name()
-                font.pixelSize: 16
-                font.weight: Font.Bold
-                color: theme.textPrimary
+    // Every per-note action from the library. A note that is open in its own
+    // window is changed through that window's editor, which owns the note's
+    // revision; changing it behind the editor's back would make the editor's
+    // next save fail with a conflict.
+    function noteAction(id, action) {
+        const sticky = noteWindows[id]
+        if (action === "open") {
+            openNote(id)
+        } else if (action === "locate") {
+            openNote(id, true)
+        } else if (action === "copy") {
+            if (sticky) sticky.flush()
+            const text = backend.notePlainText(id)
+            if (text.length > 0 && backend.copyToClipboard(text)) showToast(qsTr("Copied to the clipboard"))
+        } else if (action === "pin" || action === "unpin") {
+            const pinned = action === "pin"
+            if (sticky) {
+                if (sticky.editorBackend.setPinned(pinned)) sticky.flush()
+            } else {
+                backend.setNotePinned(id, pinned)
             }
-
-            UI.Tag {
-                theme: window.theme
-                text: backend.noteIds.length === 1 ? qsTr("1 note") : qsTr("%1 notes").arg(backend.noteIds.length)
-                visible: backend.ready
-                Layout.alignment: Qt.AlignVCenter
-            }
-
-            Item { Layout.fillWidth: true }
-
-            UI.StyledButton {
-                iconName: "library"
-                theme: window.theme
-                variant: "ghost"
-                implicitWidth: 32
-                implicitHeight: 32
-                padding: 0
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Command palette (Ctrl+K)")
-                onClicked: commandPalette.open()
-            }
-
-            UI.StyledButton {
-                iconName: "settings"
-                theme: window.theme
-                variant: settingsPopup.visible ? "accent" : "ghost"
-                implicitWidth: 32
-                implicitHeight: 32
-                padding: 0
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Settings")
-                onClicked: settingsPopup.open()
-            }
-
-            UI.StyledButton {
-                iconName: "palette"
-                theme: window.theme
-                variant: "ghost"
-                implicitWidth: 32
-                implicitHeight: 32
-                padding: 0
-                ToolTip.visible: hovered
-                ToolTip.text: {
-                    if (backend.themeMode === "light") return qsTr("Theme: Light — click for Dark")
-                    if (backend.themeMode === "dark") return qsTr("Theme: Dark — click to follow the system")
-                    return qsTr("Theme: System — click for Light")
+        } else if (action === "archive" || action === "restore") {
+            const archived = action === "archive"
+            if (sticky) {
+                if (sticky.editorBackend.setArchived(archived) && sticky.flush() && archived) {
+                    // Archiving puts a note away, so its window goes too.
+                    sticky.close()
                 }
-                onClicked: window.cycleThemeMode()
+            } else {
+                backend.setNoteArchived(id, archived)
             }
+            if (archived) showToast(qsTr("Moved to the archive"))
+        } else if (action === "delete") {
+            deleteDialog.noteId = id
+            deleteDialog.open()
+        }
+    }
 
-            UI.StyledButton {
-                iconName: "x"
-                theme: window.theme
-                variant: "ghost"
-                implicitWidth: 32
-                implicitHeight: 32
-                padding: 0
-                ToolTip.visible: hovered
-                ToolTip.text: systemTray.available || Object.keys(window.noteWindows).length > 0
-                    ? qsTr("Close the library — notes keep running")
-                    : qsTr("Quit")
-                onClicked: window.close()
+    function deleteNoteConfirmed(id) {
+        const sticky = noteWindows[id]
+        if (sticky) sticky.deleteConfirmed()
+        else backend.deleteNoteById(id)
+    }
+
+    function showToast(message) {
+        toast.text = message
+        toast.shown = true
+        toastTimer.restart()
+    }
+
+    // ---- Frame ------------------------------------------------------------
+
+    readonly property bool maximized: window.visibility === Window.Maximized
+    readonly property int frameRadius: maximized ? 0 : 14
+
+    function toggleMaximized() {
+        if (maximized) window.showNormal()
+        else window.showMaximized()
+    }
+
+    background: Rectangle {
+        radius: window.frameRadius
+        color: theme.windowBackground
+        border.width: window.maximized ? 0 : 1
+        border.color: theme.border
+    }
+
+    // A frameless window moves by its empty chrome and resizes by its edges.
+    component DragArea: Item {
+        DragHandler {
+            target: null
+            grabPermissions: PointerHandler.CanTakeOverFromAnything
+            onActiveChanged: if (active) window.startSystemMove()
+        }
+        TapHandler {
+            onDoubleTapped: window.toggleMaximized()
+        }
+    }
+
+    component SidebarItem: ItemDelegate {
+        id: item
+        property string iconName: ""
+        property int count: -1
+        property bool selected: false
+        Layout.fillWidth: true
+        implicitHeight: 34
+        leftPadding: 10
+        rightPadding: 10
+        focusPolicy: Qt.NoFocus
+        background: Rectangle {
+            radius: theme.radiusMd
+            color: item.selected ? theme.accentSubtle : (item.hovered ? theme.surfaceHover : "transparent")
+        }
+        contentItem: RowLayout {
+            spacing: 10
+            UI.AppIcon {
+                name: item.iconName
+                size: 16
+                color: item.selected ? theme.accent : theme.textSecondary
+            }
+            Label {
+                text: item.text
+                elide: Text.ElideRight
+                font.pixelSize: 13
+                font.weight: item.selected ? Font.DemiBold : Font.Normal
+                color: item.selected ? theme.textPrimary : theme.textSecondary
+                Layout.fillWidth: true
+            }
+            Label {
+                visible: item.count >= 0
+                text: item.count
+                font.pixelSize: 11
+                color: theme.textMuted
             }
         }
     }
 
-    ColumnLayout {
+    component WindowButton: UI.StyledButton {
+        property string hint: ""
+        theme: window.theme
+        variant: "ghost"
+        iconSize: 14
+        implicitWidth: 32
+        implicitHeight: 32
+        padding: 0
+        focusPolicy: Qt.NoFocus
+        ToolTip.visible: hovered
+        ToolTip.text: hint
+        ToolTip.delay: 500
+    }
+
+    RowLayout {
         anchors.fill: parent
-        anchors.margins: 16
-        spacing: 12
+        anchors.margins: window.maximized ? 0 : 1
+        spacing: 0
 
+        // ---- Sidebar ------------------------------------------------------
         Rectangle {
-            visible: window.windowError.length > 0 || backend.errorMessage.length > 0
-            Layout.fillWidth: true
-            implicitHeight: errorRow.implicitHeight + 16
-            radius: theme.radiusMd
-            color: theme.dangerSubtle
-            border.width: 1
-            border.color: theme.danger
+            id: sidebar
+            Layout.preferredWidth: 220
+            Layout.fillHeight: true
+            radius: window.frameRadius
+            color: theme.surfaceElevated
+            visible: window.width >= 620
 
-            RowLayout {
-                id: errorRow
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 8
-                Label {
-                    text: window.windowError || backend.errorMessage
-                    textFormat: Text.PlainText
-                    wrapMode: Text.WordWrap
-                    Layout.fillWidth: true
-                    color: theme.danger
-                    Accessible.role: Accessible.AlertMessage
-                }
+            // Square off the edge that meets the content area.
+            Rectangle {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: parent.radius
+                color: parent.color
             }
-        }
+            Rectangle {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 1
+                color: theme.border
+            }
 
-        UI.StyledButton {
-            text: qsTr("Retry opening")
-            theme: window.theme
-            variant: "accent"
-            visible: !backend.ready
-            onClicked: window.initialize()
-        }
+            DragArea { anchors.fill: parent }
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            visible: backend.ready
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 12
+                anchors.topMargin: 16
+                spacing: 4
 
-            UI.StyledTextField {
-                id: searchField
-                Layout.fillWidth: true
-                Layout.preferredHeight: 34
-                leftPadding: 32
-                rightPadding: 32
-                placeholderText: qsTr("Search titles, content and tags…")
-                Accessible.name: qsTr("Search notes")
-                theme: window.theme
-                onTextChanged: {
-                    window.searchFilter = text.trim()
-                    if (window.searchFilter.length > 0) {
-                        backend.search(window.searchFilter)
+                RowLayout {
+                    spacing: 10
+                    Layout.leftMargin: 6
+                    Layout.bottomMargin: 12
+                    Rectangle {
+                        implicitWidth: 28
+                        implicitHeight: 28
+                        radius: 8
+                        color: theme.accent
+                        UI.AppIcon {
+                            anchors.centerIn: parent
+                            name: "sticky-note"
+                            size: 16
+                            color: theme.accentText
+                        }
                     }
-                }
-                Keys.onEscapePressed: clear()
-
-                UI.AppIcon {
-                    name: "search"
-                    size: 15
-                    color: theme.textMuted
-                    anchors.left: parent.left
-                    anchors.leftMargin: 10
-                    anchors.verticalCenter: parent.verticalCenter
+                    Label {
+                        text: applicationInfo.name()
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                        color: theme.textPrimary
+                    }
                 }
 
                 UI.StyledButton {
-                    iconName: "x"
-                    iconSize: 12
+                    text: qsTr("New note")
+                    iconName: "plus"
+                    iconSize: 15
                     theme: window.theme
-                    variant: "ghost"
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    padding: 0
-                    focusPolicy: Qt.NoFocus
-                    visible: searchField.text.length > 0
-                    anchors.right: parent.right
-                    anchors.rightMargin: 6
-                    anchors.verticalCenter: parent.verticalCenter
+                    variant: "accent"
+                    implicitHeight: 36
+                    enabled: backend.ready
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 12
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Clear search")
-                    onClicked: searchField.clear()
+                    ToolTip.text: qsTr("Create a note (Ctrl+N)")
+                    ToolTip.delay: 500
+                    onClicked: window.createNote()
                 }
-            }
 
-            UI.StyledButton {
-                text: qsTr("New note")
-                iconName: "plus"
-                iconSize: 14
-                theme: window.theme
-                variant: "accent"
-                implicitHeight: 34
-                enabled: backend.ready
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Create a note (Ctrl+N)")
-                onClicked: window.createNote()
-            }
-
-            UI.StyledButton {
-                text: qsTr("Show all")
-                theme: window.theme
-                variant: "secondary"
-                implicitHeight: 34
-                enabled: backend.ready && backend.noteIds.length > 0
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Bring back notes that are closed or minimised, leaving the ones already on screen where they are")
-                onClicked: window.showAllNotes()
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 6
-            visible: backend.ready && window.searchFilter.length === 0
-
-            Repeater {
-                model: [
-                    {key: "all", label: qsTr("All")},
-                    {key: "pinned", label: qsTr("Pinned")},
-                    {key: "archived", label: qsTr("Archived")}
-                ]
-                delegate: UI.StyledButton {
-                    required property var modelData
-                    text: modelData.label + "  " + window.countNotes(modelData.key)
-                    theme: window.theme
-                    variant: window.filterTab === modelData.key ? "accent" : "ghost"
-                    implicitHeight: 28
-                    padding: 4
-                    leftPadding: 12
-                    rightPadding: 12
-                    onClicked: window.filterTab = modelData.key
+                SidebarItem {
+                    text: qsTr("All notes")
+                    iconName: "sticky-note"
+                    count: window.countNotes("all")
+                    selected: window.searchFilter.length === 0 && window.filterTab === "all" && window.tagFilter.length === 0
+                    onClicked: window.showSection("all")
                 }
-            }
+                SidebarItem {
+                    text: qsTr("Pinned")
+                    iconName: "pin"
+                    count: window.countNotes("pinned")
+                    selected: window.searchFilter.length === 0 && window.filterTab === "pinned"
+                    onClicked: window.showSection("pinned")
+                }
+                SidebarItem {
+                    text: qsTr("Archive")
+                    iconName: "archive"
+                    count: window.countNotes("archived")
+                    selected: window.searchFilter.length === 0 && window.filterTab === "archived"
+                    onClicked: window.showSection("archived")
+                }
 
-            Item { Layout.fillWidth: true }
-
-            UI.StyledButton {
-                text: qsTr("Hide all")
-                theme: window.theme
-                variant: "ghost"
-                implicitHeight: 28
-                padding: 4
-                leftPadding: 10
-                rightPadding: 10
-                enabled: Object.keys(window.noteWindows).length > 0
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Minimise every open note window")
-                onClicked: window.hideAllNotes()
-            }
-        }
-
-        // Tags wrap instead of overflowing the row when a database has many.
-        Flow {
-            Layout.fillWidth: true
-            spacing: 4
-            visible: backend.ready && backend.allTags.length > 0 && window.searchFilter.length === 0
-
-            Repeater {
-                model: backend.allTags
-                delegate: UI.StyledButton {
-                    required property string modelData
-                    text: "#" + modelData
-                    theme: window.theme
-                    variant: "ghost"
-                    implicitHeight: 24
-                    padding: 2
-                    leftPadding: 8
-                    rightPadding: 8
+                Label {
+                    visible: backend.allTags.length > 0
+                    text: qsTr("Tags")
                     font.pixelSize: 11
-                    onClicked: searchField.text = modelData
+                    font.weight: Font.DemiBold
+                    font.capitalization: Font.AllUppercase
+                    color: theme.textMuted
+                    Layout.leftMargin: 10
+                    Layout.topMargin: 16
+                    Layout.bottomMargin: 2
+                }
+
+                ListView {
+                    id: tagList
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 2
+                    boundsBehavior: Flickable.StopAtBounds
+                    model: backend.allTags
+                    delegate: SidebarItem {
+                        required property string modelData
+                        width: tagList.width
+                        text: modelData
+                        iconName: "tag"
+                        count: window.countTag(modelData)
+                        selected: window.searchFilter.length === 0 && window.tagFilter === modelData
+                        onClicked: window.showSection("all", modelData)
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    Layout.topMargin: 6
+                    Layout.bottomMargin: 6
+                    color: theme.border
+                }
+
+                SidebarItem {
+                    text: qsTr("Show all on desktop")
+                    iconName: "eye"
+                    enabled: backend.ready && backend.noteIds.length > 0
+                    onClicked: window.showAllNotes()
+                }
+                SidebarItem {
+                    text: qsTr("Hide all")
+                    iconName: "eye-off"
+                    enabled: window.windowsRevision >= 0 && Object.keys(window.noteWindows).length > 0
+                    onClicked: window.hideAllNotes()
                 }
             }
         }
 
-        Label {
-            text: window.searchFilter.length > 0
-                ? qsTr("Search results for “%1”").arg(window.searchFilter)
-                : qsTr("Select a note to open its window. “Bring here” recovers one that is off-screen.")
-            wrapMode: Text.WordWrap
-            textFormat: Text.PlainText
-            Layout.fillWidth: true
-            font.pixelSize: 12
-            color: theme.textSecondary
-            visible: backend.ready
-        }
-
-        Rectangle {
-            visible: backend.ready && ((window.searchFilter.length === 0 && backend.titles.length === 0) || (window.searchFilter.length > 0 && backend.searchResultIds.length === 0))
+        // ---- Content ------------------------------------------------------
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            radius: theme.radiusLg
-            color: theme.surface
-            border.width: 1
-            border.color: theme.border
+            spacing: 0
 
+            // Top bar: search, then settings and the window buttons.
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 60
+
+                DragArea { anchors.fill: parent }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 20
+                    anchors.rightMargin: 10
+                    spacing: 6
+
+                    UI.StyledButton {
+                        visible: !sidebar.visible
+                        iconName: "plus"
+                        theme: window.theme
+                        variant: "accent"
+                        implicitWidth: 34
+                        implicitHeight: 34
+                        padding: 0
+                        enabled: backend.ready
+                        onClicked: window.createNote()
+                    }
+
+                    UI.StyledTextField {
+                        id: searchField
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: 480
+                        Layout.preferredHeight: 36
+                        leftPadding: 34
+                        rightPadding: 32
+                        placeholderText: qsTr("Search notes…")
+                        // Typing in the library searches straight away.
+                        focus: true
+                        Accessible.name: qsTr("Search notes")
+                        theme: window.theme
+                        enabled: backend.ready
+                        background: Rectangle {
+                            radius: 18
+                            color: theme.surface
+                            border.width: searchField.activeFocus ? 2 : 1
+                            border.color: searchField.activeFocus ? theme.accent : theme.border
+                        }
+                        onTextChanged: {
+                            window.searchFilter = text.trim()
+                            if (window.searchFilter.length > 0) backend.search(window.searchFilter)
+                        }
+                        Keys.onEscapePressed: clear()
+                        Keys.onDownPressed: noteGrid.forceActiveFocus()
+
+                        UI.AppIcon {
+                            name: "search"
+                            size: 15
+                            color: theme.textMuted
+                            anchors.left: parent.left
+                            anchors.leftMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        UI.StyledButton {
+                            iconName: "x"
+                            iconSize: 12
+                            theme: window.theme
+                            variant: "ghost"
+                            implicitWidth: 24
+                            implicitHeight: 24
+                            padding: 0
+                            focusPolicy: Qt.NoFocus
+                            visible: searchField.text.length > 0
+                            anchors.right: parent.right
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            onClicked: searchField.clear()
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    WindowButton {
+                        iconName: "library"
+                        hint: qsTr("Command palette (Ctrl+K)")
+                        onClicked: commandPalette.open()
+                    }
+                    WindowButton {
+                        iconName: "settings"
+                        hint: qsTr("Settings")
+                        variant: settingsPopup.visible ? "accent" : "ghost"
+                        onClicked: settingsPopup.open()
+                    }
+                    Rectangle {
+                        implicitWidth: 1
+                        implicitHeight: 18
+                        color: theme.border
+                        Layout.leftMargin: 4
+                        Layout.rightMargin: 4
+                    }
+                    WindowButton {
+                        iconName: "minus"
+                        hint: qsTr("Minimise")
+                        onClicked: window.showMinimized()
+                    }
+                    WindowButton {
+                        iconName: "square"
+                        iconSize: 12
+                        hint: window.maximized ? qsTr("Restore") : qsTr("Maximise")
+                        onClicked: window.toggleMaximized()
+                    }
+                    WindowButton {
+                        iconName: "x"
+                        hint: systemTray.available || Object.keys(window.noteWindows).length > 0
+                            ? qsTr("Close — notes keep running") : qsTr("Quit")
+                        onClicked: window.close()
+                    }
+                }
+            }
+
+            // Section heading.
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 24
+                Layout.rightMargin: 24
+                Layout.bottomMargin: 12
+                spacing: 10
+                visible: backend.ready
+
+                Label {
+                    text: window.sectionTitle
+                    textFormat: Text.PlainText
+                    elide: Text.ElideRight
+                    font.pixelSize: 22
+                    font.weight: Font.Bold
+                    color: theme.textPrimary
+                    Layout.fillWidth: true
+                }
+                Label {
+                    text: window.visibleNotes.length === 1 ? qsTr("1 note") : qsTr("%1 notes").arg(window.visibleNotes.length)
+                    font.pixelSize: 12
+                    color: theme.textMuted
+                }
+            }
+
+            Rectangle {
+                visible: window.windowError.length > 0 || backend.errorMessage.length > 0
+                Layout.fillWidth: true
+                Layout.leftMargin: 24
+                Layout.rightMargin: 24
+                Layout.bottomMargin: 12
+                implicitHeight: errorRow.implicitHeight + 16
+                radius: theme.radiusMd
+                color: theme.dangerSubtle
+                border.width: 1
+                border.color: theme.danger
+
+                RowLayout {
+                    id: errorRow
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 8
+                    Label {
+                        text: window.windowError || backend.errorMessage
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        color: theme.danger
+                        Accessible.role: Accessible.AlertMessage
+                    }
+                }
+            }
+
+            UI.StyledButton {
+                text: qsTr("Retry opening")
+                theme: window.theme
+                variant: "accent"
+                visible: !backend.ready
+                Layout.leftMargin: 24
+                onClicked: window.initialize()
+            }
+
+            // Empty state.
             ColumnLayout {
-                anchors.centerIn: parent
-                width: Math.min(360, parent.width - 48)
+                visible: backend.ready && window.visibleNotes.length === 0
+                Layout.fillWidth: true
+                Layout.fillHeight: true
                 spacing: 10
 
+                Item { Layout.fillHeight: true }
                 UI.AppIcon {
-                    name: window.searchFilter.length > 0 ? "search" : "library"
-                    size: 32
-                    strokeWidth: 1.5
+                    name: window.searchFilter.length > 0 ? "search" : (window.filterTab === "archived" ? "archive" : "sticky-note")
+                    size: 40
+                    strokeWidth: 1.4
                     color: theme.textMuted
                     Layout.alignment: Qt.AlignHCenter
                 }
                 Label {
-                    text: window.searchFilter.length > 0 ? qsTr("No matching notes") : qsTr("No notes yet")
+                    text: {
+                        if (window.searchFilter.length > 0) return qsTr("No matching notes")
+                        if (window.filterTab === "archived") return qsTr("The archive is empty")
+                        if (window.filterTab === "pinned") return qsTr("No pinned notes")
+                        if (window.tagFilter.length > 0) return qsTr("No notes with this tag")
+                        return qsTr("No notes yet")
+                    }
                     font.pixelSize: 16
                     font.weight: Font.DemiBold
                     color: theme.textPrimary
                     Layout.alignment: Qt.AlignHCenter
                 }
                 Label {
-                    text: window.searchFilter.length > 0
-                        ? qsTr("Try another term, or check the archived filter.")
-                        : qsTr("Create your first note to keep it on your desktop.")
+                    text: {
+                        if (window.searchFilter.length > 0) return qsTr("Try another word, or look in the archive.")
+                        if (window.filterTab === "archived") return qsTr("Archived notes are kept here, out of the way.")
+                        if (window.filterTab === "pinned") return qsTr("Pin a note to keep it at the top of the list.")
+                        return qsTr("Create a note to keep it on your desktop.")
+                    }
                     font.pixelSize: 13
                     color: theme.textSecondary
-                    wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
                     Layout.fillWidth: true
+                    Layout.maximumWidth: 360
+                    Layout.alignment: Qt.AlignHCenter
                 }
                 UI.StyledButton {
-                    text: qsTr("Create note")
+                    visible: window.filterTab === "all" && window.searchFilter.length === 0 && window.tagFilter.length === 0
+                    text: qsTr("New note")
                     iconName: "plus"
                     iconSize: 14
                     theme: window.theme
                     variant: "accent"
-                    visible: window.searchFilter.length === 0
                     Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 6
                     onClicked: window.createNote()
                 }
-            }
-        }
-
-        ListView {
-            id: notesList
-            visible: (window.searchFilter.length === 0 && backend.titles.length > 0) || (window.searchFilter.length > 0 && backend.searchResultIds.length > 0)
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-            model: window.searchFilter.length > 0 ? backend.searchResultIds : backend.titles
-            spacing: 8
-            activeFocusOnTab: true
-            boundsBehavior: Flickable.StopAtBounds
-            // Leave the scrollbar its own gutter so it never sits on a card.
-            rightMargin: 10
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
-                anchors.right: parent.right
+                Item { Layout.fillHeight: true }
             }
 
-            function idAt(index) {
-                return window.searchFilter.length > 0 ? backend.searchResultIds[index] : backend.noteIds[index]
-            }
+            // The notes.
+            GridView {
+                id: noteGrid
+                visible: backend.ready && window.visibleNotes.length > 0
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.leftMargin: 18
+                Layout.rightMargin: 8
+                clip: true
+                model: window.visibleNotes
+                readonly property int columns: Math.max(1, Math.floor((width - 10) / 240))
+                cellWidth: Math.floor((width - 10) / columns)
+                cellHeight: 176
+                bottomMargin: 18
+                boundsBehavior: Flickable.StopAtBounds
+                keyNavigationWraps: false
+                activeFocusOnTab: true
+                currentIndex: -1
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-            Keys.onReturnPressed: {
-                if (currentIndex >= 0) window.openNote(idAt(currentIndex))
-            }
+                Keys.onReturnPressed: if (currentIndex >= 0) window.noteAction(window.visibleNotes[currentIndex].id, "open")
+                Keys.onDeletePressed: if (currentIndex >= 0) window.noteAction(window.visibleNotes[currentIndex].id, "delete")
+                onActiveFocusChanged: if (activeFocus && currentIndex < 0 && count > 0) currentIndex = 0
 
-            delegate: UI.NoteCard {
-                id: noteDelegate
-                required property int index
-                required property string modelData
-                theme: window.theme
-                noteTitle: window.searchFilter.length > 0
-                    ? (backend.searchResultTitles[index] || qsTr("Untitled note"))
-                    : modelData
-                snippet: window.searchFilter.length > 0
-                    ? (backend.searchResultSnippets[index] || "")
-                    : (backend.snippets[index] || "")
-                tags: window.searchFilter.length > 0 ? [] : window.noteTagsAt(index)
-                isPinned: window.searchFilter.length === 0 && backend.pinnedStates[index] === "true"
-                isArchived: window.searchFilter.length === 0 && backend.archivedStates[index] === "true"
-                priority: window.searchFilter.length === 0 ? parseInt(backend.priorities[index] || "0") : 0
-                visible: {
-                    if (window.searchFilter.length > 0) return true
-                    const pinned = backend.pinnedStates[index] === "true"
-                    const archived = backend.archivedStates[index] === "true"
-                    if (window.filterTab === "pinned") return pinned
-                    if (window.filterTab === "archived") return archived
-                    return !archived
+                delegate: Item {
+                    id: cell
+                    required property var modelData
+                    required property int index
+                    width: noteGrid.cellWidth
+                    height: noteGrid.cellHeight
+
+                    UI.NoteCard {
+                        anchors.fill: parent
+                        anchors.rightMargin: 12
+                        anchors.bottomMargin: 12
+                        theme: window.theme
+                        noteTitle: cell.modelData.title
+                        snippet: cell.modelData.snippet
+                        tags: cell.modelData.tags
+                        isPinned: cell.modelData.pinned
+                        isArchived: cell.modelData.archived
+                        priority: cell.modelData.priority
+                        tint: cell.modelData.tint
+                        onDesktop: window.windowsRevision >= 0 && !!window.noteWindows[cell.modelData.id]
+                        current: noteGrid.activeFocus && noteGrid.currentIndex === cell.index
+                        onOpenRequested: {
+                            noteGrid.currentIndex = cell.index
+                            window.noteAction(cell.modelData.id, "open")
+                        }
+                        onActionRequested: function(action) { window.noteAction(cell.modelData.id, action) }
+                    }
                 }
-                height: visible ? implicitHeight : 0
-                highlighted: ListView.isCurrentItem
-                onClicked: {
-                    notesList.currentIndex = index
-                    window.openNote(notesList.idAt(index))
-                }
-                onBringHereRequested: window.openNote(notesList.idAt(noteDelegate.index), true)
             }
         }
     }
 
+    // Edge and corner handles for the frameless window.
+    component ResizeEdge: MouseArea {
+        property int edges: 0
+        z: 100
+        enabled: !window.maximized
+        acceptedButtons: Qt.LeftButton
+        onPressed: window.startSystemResize(edges)
+    }
+    ResizeEdge { edges: Qt.LeftEdge; cursorShape: Qt.SizeHorCursor; anchors { left: parent.left; top: parent.top; bottom: parent.bottom; margins: 12 } width: 5; anchors.leftMargin: 0 }
+    ResizeEdge { edges: Qt.RightEdge; cursorShape: Qt.SizeHorCursor; anchors { right: parent.right; top: parent.top; bottom: parent.bottom; margins: 12 } width: 5; anchors.rightMargin: 0 }
+    ResizeEdge { edges: Qt.TopEdge; cursorShape: Qt.SizeVerCursor; anchors { top: parent.top; left: parent.left; right: parent.right; margins: 12 } height: 5; anchors.topMargin: 0 }
+    ResizeEdge { edges: Qt.BottomEdge; cursorShape: Qt.SizeVerCursor; anchors { bottom: parent.bottom; left: parent.left; right: parent.right; margins: 12 } height: 5; anchors.bottomMargin: 0 }
+    ResizeEdge { edges: Qt.TopEdge | Qt.LeftEdge; cursorShape: Qt.SizeFDiagCursor; anchors { top: parent.top; left: parent.left } width: 12; height: 12 }
+    ResizeEdge { edges: Qt.TopEdge | Qt.RightEdge; cursorShape: Qt.SizeBDiagCursor; anchors { top: parent.top; right: parent.right } width: 12; height: 12 }
+    ResizeEdge { edges: Qt.BottomEdge | Qt.LeftEdge; cursorShape: Qt.SizeBDiagCursor; anchors { bottom: parent.bottom; left: parent.left } width: 12; height: 12 }
+    ResizeEdge { edges: Qt.BottomEdge | Qt.RightEdge; cursorShape: Qt.SizeFDiagCursor; anchors { bottom: parent.bottom; right: parent.right } width: 12; height: 12 }
+
+    // Short confirmation for actions with no other visible effect.
+    Rectangle {
+        id: toast
+        property alias text: toastLabel.text
+        property bool shown: false
+        z: 200
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: shown ? 24 : 8
+        opacity: shown ? 1 : 0
+        visible: opacity > 0
+        implicitWidth: toastLabel.implicitWidth + 32
+        implicitHeight: 36
+        radius: 18
+        color: theme.textPrimary
+        Behavior on opacity { NumberAnimation { duration: 150 } }
+        Behavior on anchors.bottomMargin { NumberAnimation { duration: 150 } }
+        Label {
+            id: toastLabel
+            anchors.centerIn: parent
+            font.pixelSize: 12
+            color: theme.windowBackground
+        }
+        Timer { id: toastTimer; interval: 1800; onTriggered: toast.shown = false }
+    }
+
+    Dialog {
+        id: deleteDialog
+        property string noteId: ""
+        readonly property string noteTitle: {
+            const i = backend.noteIds.indexOf(noteId)
+            return i >= 0 && backend.titles[i].trim().length ? backend.titles[i] : qsTr("Untitled note")
+        }
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(400, window.width - 48)
+        modal: true
+        title: qsTr("Delete “%1”?").arg(noteTitle)
+        standardButtons: Dialog.Cancel | Dialog.Ok
+        Label {
+            width: parent.width
+            text: qsTr("The note and its unsaved changes will be deleted. This cannot be undone. Use Archive to put a note away instead.")
+            wrapMode: Text.WordWrap
+        }
+        Component.onCompleted: {
+            const ok = standardButton(Dialog.Ok)
+            if (ok) ok.text = qsTr("Delete")
+        }
+        onAccepted: window.deleteNoteConfirmed(noteId)
+    }
 
     // One labelled switch in the settings popup.
     component SettingRow: RowLayout {
@@ -637,9 +967,9 @@ ApplicationWindow {
         id: settingsPopup
         parent: Overlay.overlay
         x: Math.round((window.width - width) / 2)
-        y: 64
-        width: Math.min(440, window.width - 32)
-        padding: 18
+        y: 72
+        width: Math.min(460, window.width - 32)
+        padding: 20
         modal: true
         focus: true
         background: Rectangle {
@@ -652,13 +982,44 @@ ApplicationWindow {
         readonly property bool layersSupported: applicationInfo.supportsNoteLayers()
 
         contentItem: ColumnLayout {
-            spacing: 16
+            spacing: 18
 
             Label {
                 text: qsTr("Settings")
-                font.pixelSize: 15
+                font.pixelSize: 16
                 font.weight: Font.DemiBold
                 color: theme.textPrimary
+            }
+
+            ColumnLayout {
+                spacing: 8
+                Layout.fillWidth: true
+                Label {
+                    text: qsTr("Appearance")
+                    font.pixelSize: 13
+                    font.weight: Font.Medium
+                    color: theme.textPrimary
+                }
+                RowLayout {
+                    spacing: 6
+                    Repeater {
+                        model: [
+                            {mode: "system", label: qsTr("System"), icon: "monitor"},
+                            {mode: "light", label: qsTr("Light"), icon: "sun"},
+                            {mode: "dark", label: qsTr("Dark"), icon: "moon"}
+                        ]
+                        delegate: UI.StyledButton {
+                            required property var modelData
+                            text: modelData.label
+                            iconName: modelData.icon
+                            iconSize: 14
+                            theme: window.theme
+                            variant: backend.themeMode === modelData.mode ? "accent" : "secondary"
+                            implicitHeight: 32
+                            onClicked: backend.setThemeMode(modelData.mode)
+                        }
+                    }
+                }
             }
 
             SettingRow {
@@ -829,6 +1190,7 @@ ApplicationWindow {
     Shortcut { sequences: [StandardKey.New]; context: Qt.WindowShortcut; enabled: backend.ready; onActivated: window.createNote() }
     Shortcut { sequences: [StandardKey.Quit]; context: Qt.WindowShortcut; onActivated: window.close() }
     Shortcut { sequences: ["Ctrl+K", "Ctrl+Shift+P"]; context: Qt.WindowShortcut; onActivated: commandPalette.open() }
+    Shortcut { sequences: [StandardKey.Find]; context: Qt.WindowShortcut; onActivated: searchField.forceActiveFocus() }
     Shortcut { sequences: ["Ctrl+Alt+Space"]; onActivated: window.openQuickCapture() }
 
     Timer {

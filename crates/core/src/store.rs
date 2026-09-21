@@ -312,6 +312,24 @@ impl NoteStore {
         self.set_setting("theme", theme.as_str())
     }
 
+    /// Every note's chosen colour, keyed by note id, in one query.
+    pub fn note_colors(&self) -> Result<std::collections::HashMap<i64, String>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT key, value FROM settings WHERE key LIKE 'note_color_%'")?;
+        let rows = statement.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut colors = std::collections::HashMap::new();
+        for row in rows {
+            let (key, value) = row?;
+            if let Ok(id) = key["note_color_".len()..].parse::<i64>() {
+                colors.insert(id, value);
+            }
+        }
+        Ok(colors)
+    }
+
     /// Whether unpinned sticky notes stay beneath ordinary windows. On by
     /// default: sticky notes behave like part of the desktop unless pinned.
     pub fn notes_stay_below(&self) -> Result<bool> {

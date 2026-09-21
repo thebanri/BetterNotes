@@ -251,6 +251,52 @@ impl NotesSession {
         Ok(())
     }
 
+    /// Pins or unpins any note in the list without selecting it.
+    ///
+    /// Library actions read the note's latest revision immediately before
+    /// writing, so they never overwrite edits another editor has saved. A note
+    /// that is open in its own editor must be changed through that editor
+    /// instead: this write bumps the revision, and the open editor's next save
+    /// would then report a conflict.
+    pub fn set_note_pinned(&mut self, id: i64, pinned: bool) -> Result<()> {
+        self.change_note(id, |note| note.is_pinned = pinned)
+    }
+
+    /// Archives or restores any note in the list. See [`Self::set_note_pinned`].
+    pub fn set_note_archived(&mut self, id: i64, archived: bool) -> Result<()> {
+        self.change_note(id, |note| note.is_archived = archived)
+    }
+
+    /// Deletes any note in the list, at its latest revision. Called only after
+    /// UI confirmation. See [`Self::set_note_pinned`] for notes open elsewhere.
+    pub fn delete_note(&mut self, id: i64) -> Result<()> {
+        self.save()?;
+        let note = self.store.get(id)?;
+        self.store.delete(&note)?;
+        self.reload()
+    }
+
+    /// The note's title and body as plain text, for copying out of the app.
+    pub fn plain_text(&self, id: i64) -> Result<String> {
+        let note = self.store.get(id)?;
+        let body = crate::preview::to_plain_text(&note.content);
+        let body = body.trim();
+        Ok(match (note.title.trim(), body) {
+            ("", body) => body.to_string(),
+            (title, "") => title.to_string(),
+            (title, body) => format!("{title}\n\n{body}"),
+        })
+    }
+
+    fn change_note(&mut self, id: i64, change: impl FnOnce(&mut Note)) -> Result<()> {
+        // Commit this session's own draft first so the reload below keeps it.
+        self.save()?;
+        let mut note = self.store.get(id)?;
+        change(&mut note);
+        self.store.update(&note)?;
+        self.reload()
+    }
+
     pub fn store(&self) -> &NoteStore {
         &self.store
     }
@@ -317,6 +363,21 @@ impl NotesSession {
         let count = crate::import_note_markdown_file(&self.store, input_path)?;
         self.reload()?;
         Ok(count)
+    }
+
+    /// The colour of each listed note, in list order. Notes without a chosen
+    /// colour are yellow, matching [`Self::note_color`].
+    pub fn summary_colors(&self) -> Result<Vec<String>> {
+        let mut colors = self.store.note_colors()?;
+        Ok(self
+            .summaries
+            .iter()
+            .map(|note| {
+                colors
+                    .remove(&note.id)
+                    .unwrap_or_else(|| "yellow".to_string())
+            })
+            .collect())
     }
 
     pub fn note_color(&self) -> String {

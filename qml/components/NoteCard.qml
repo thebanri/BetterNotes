@@ -5,7 +5,10 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import "../themes"
 
-ItemDelegate {
+// One note in the library grid, drawn in the note's own colour. Clicking opens
+// the note; hovering reveals quick actions, and a right click (or the menu
+// key) offers every action by name.
+FocusScope {
     id: card
 
     property Theme theme: null
@@ -15,13 +18,23 @@ ItemDelegate {
     property bool isPinned: false
     property bool isArchived: false
     property int priority: 0
-    signal bringHereRequested()
+    property string tint: "yellow"
+    property bool onDesktop: false
+    property bool current: false
 
-    readonly property color accentColor: {
+    signal openRequested()
+    // "pin", "unpin", "archive", "restore", "copy", "locate" or "delete".
+    signal actionRequested(string action)
+
+    readonly property bool hot: hover.hovered || card.activeFocus || actionsMenu.visible
+    readonly property color background: theme ? theme.noteTint(tint, "bg") : "#fefce8"
+    readonly property color edge: theme ? theme.noteTint(tint, "border") : "#fde047"
+    readonly property color ink: theme ? theme.noteText : "#1c1917"
+    readonly property color inkSoft: theme ? theme.noteTextSecondary : "#78716c"
+    readonly property color priorityColor: {
         if (priority === 3) return theme ? theme.danger : "#ef4444"
         if (priority === 2) return theme ? theme.warning : "#f59e0b"
-        if (isPinned) return theme ? theme.accent : "#6366f1"
-        return theme ? theme.border : "#e2e8f0"
+        return theme ? theme.textMuted : "#94a3b8"
     }
     readonly property string priorityLabel: {
         if (priority === 3) return qsTr("High")
@@ -30,54 +43,58 @@ ItemDelegate {
         return ""
     }
 
-    implicitWidth: ListView.view ? ListView.view.width : 320
-    implicitHeight: layout.implicitHeight + 22
-    padding: 0
-    hoverEnabled: true
+    activeFocusOnTab: true
+    Accessible.role: Accessible.Button
+    Accessible.name: (noteTitle.trim().length ? noteTitle : qsTr("Untitled note"))
+    Keys.onReturnPressed: card.openRequested()
+    Keys.onEnterPressed: card.openRequested()
+    Keys.onDeletePressed: card.actionRequested("delete")
+    Keys.onMenuPressed: actionsMenu.popup(card, card.width / 2, card.height / 2)
 
-    background: Rectangle {
-        radius: card.theme ? card.theme.radiusLg : 12
-        color: {
-            if (card.down) return card.theme ? card.theme.surfaceActive : "#e2e8f0"
-            if (card.hovered || card.highlighted) return card.theme ? card.theme.surfaceHover : "#f1f5f9"
-            return card.theme ? card.theme.surface : "#ffffff"
-        }
-        border.width: 1
-        border.color: card.activeFocus || card.highlighted
+    Rectangle {
+        id: surface
+        anchors.fill: parent
+        radius: 14
+        color: card.background
+        border.width: card.current || card.activeFocus ? 2 : 1
+        border.color: card.current || card.activeFocus
             ? (card.theme ? card.theme.accent : "#6366f1")
-            : (card.theme ? card.theme.border : "#e2e8f0")
-        opacity: card.isArchived && !card.hovered ? 0.72 : 1.0
+            : card.edge
+        opacity: card.isArchived && !card.hot ? 0.7 : 1
+        scale: tap.pressed ? 0.985 : 1
 
-        // The rail is the only colour the row carries, so priority and pinning
-        // read at a glance without competing with the note text.
+        Behavior on scale { NumberAnimation { duration: 90 } }
+        Behavior on opacity { NumberAnimation { duration: card.theme ? card.theme.animShort : 120 } }
+
+        // Priority reads as a single coloured edge, not another badge.
         Rectangle {
+            visible: card.priority >= 2
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            anchors.margins: 1
+            anchors.margins: 10
+            anchors.leftMargin: 0
             width: 3
-            radius: width
-            color: card.accentColor
-            visible: card.priority > 0 || card.isPinned
+            radius: 2
+            color: card.priorityColor
         }
-
-        Behavior on color {
-            ColorAnimation { duration: card.theme ? card.theme.animShort : 120 }
-        }
-    }
-
-    contentItem: RowLayout {
-        id: layout
-        spacing: 10
 
         ColumnLayout {
-            Layout.fillWidth: true
-            Layout.leftMargin: 14
-            spacing: 4
+            anchors.fill: parent
+            anchors.margins: 14
+            spacing: 6
 
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 6
+
+                AppIcon {
+                    visible: card.isPinned
+                    name: "pin"
+                    size: 13
+                    color: card.theme ? card.theme.accent : "#6366f1"
+                    Layout.alignment: Qt.AlignVCenter
+                }
 
                 Label {
                     text: card.noteTitle.trim().length ? card.noteTitle : qsTr("Untitled note")
@@ -85,104 +102,168 @@ ItemDelegate {
                     elide: Text.ElideRight
                     font.pixelSize: 14
                     font.weight: Font.DemiBold
-                    color: card.theme ? card.theme.textPrimary : "#0f172a"
+                    color: card.noteTitle.trim().length ? card.ink : card.inkSoft
                     Layout.fillWidth: true
-                }
-
-                Tag {
-                    theme: card.theme
-                    text: card.priorityLabel
-                    visible: card.priority > 0
-                    textColor: card.accentColor
-                    fillColor: {
-                        if (card.priority === 3) return card.theme ? card.theme.dangerSubtle : "#fee2e2"
-                        if (card.priority === 2) return card.theme ? card.theme.warningSubtle : "#fef3c7"
-                        return card.theme ? card.theme.surfaceHover : "#f1f5f9"
-                    }
-                }
-
-                Tag {
-                    theme: card.theme
-                    text: qsTr("Pinned")
-                    visible: card.isPinned
-                    textColor: card.theme ? card.theme.accent : "#6366f1"
-                    fillColor: card.theme ? card.theme.accentSubtle : "#e0e7ff"
-                }
-
-                Tag {
-                    theme: card.theme
-                    text: qsTr("Archived")
-                    visible: card.isArchived
-                    textColor: card.theme ? card.theme.textSecondary : "#64748b"
-                    fillColor: card.theme ? card.theme.surfaceHover : "#f1f5f9"
+                    // Keep clear of the hover actions in the top-right corner.
+                    Layout.rightMargin: card.hot ? quickActions.width - 6 : 0
                 }
             }
 
             // Previews arrive as plain text from the core; rendering them as
             // plain text keeps any stray markup in a note body inert.
             Label {
-                text: card.snippet
+                text: card.snippet.length ? card.snippet : qsTr("Empty note")
                 textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-                maximumLineCount: 2
+                wrapMode: Text.Wrap
                 elide: Text.ElideRight
                 font.pixelSize: 12
-                lineHeight: 1.25
-                color: card.theme ? card.theme.textSecondary : "#64748b"
+                font.italic: card.snippet.length === 0
+                lineHeight: 1.3
+                color: card.inkSoft
                 Layout.fillWidth: true
-                visible: card.snippet.length > 0
+                Layout.fillHeight: true
+                verticalAlignment: Text.AlignTop
+                clip: true
             }
 
-            Flow {
+            RowLayout {
                 Layout.fillWidth: true
                 spacing: 4
-                visible: card.tags.length > 0
 
                 Repeater {
-                    model: card.tags.slice(0, 4)
+                    model: card.tags.slice(0, 2)
                     delegate: Tag {
                         required property string modelData
                         theme: card.theme
                         text: "#" + modelData
-                        textColor: card.theme ? card.theme.textSecondary : "#64748b"
-                        fillColor: card.theme ? card.theme.surfaceHover : "#f1f5f9"
+                        textColor: card.ink
+                        fillColor: Qt.rgba(card.edge.r, card.edge.g, card.edge.b, 0.35)
+                        Layout.maximumWidth: 90
                     }
                 }
+                Tag {
+                    theme: card.theme
+                    visible: card.tags.length > 2
+                    text: "+" + (card.tags.length - 2)
+                    textColor: card.inkSoft
+                    fillColor: Qt.rgba(card.edge.r, card.edge.g, card.edge.b, 0.25)
+                }
+
+                Item { Layout.fillWidth: true }
 
                 Tag {
                     theme: card.theme
-                    text: "+" + (card.tags.length - 4)
-                    visible: card.tags.length > 4
-                    textColor: card.theme ? card.theme.textMuted : "#94a3b8"
-                    fillColor: card.theme ? card.theme.surfaceHover : "#f1f5f9"
+                    visible: card.priority > 0
+                    text: card.priorityLabel
+                    textColor: card.priorityColor
+                    fillColor: Qt.rgba(card.edge.r, card.edge.g, card.edge.b, 0.3)
+                }
+                Tag {
+                    theme: card.theme
+                    visible: card.isArchived
+                    text: qsTr("Archived")
+                    textColor: card.inkSoft
+                    fillColor: Qt.rgba(card.edge.r, card.edge.g, card.edge.b, 0.3)
+                }
+                AppIcon {
+                    visible: card.onDesktop
+                    name: "monitor"
+                    size: 13
+                    color: card.inkSoft
+                    Layout.alignment: Qt.AlignVCenter
+                    HoverHandler { id: desktopHint }
+                    ToolTip.visible: desktopHint.hovered
+                    ToolTip.text: qsTr("Open on the desktop")
                 }
             }
         }
 
-        StyledButton {
-            text: qsTr("Bring here")
-            theme: card.theme
-            variant: "ghost"
-            implicitHeight: 28
-            padding: 4
-            leftPadding: 10
-            rightPadding: 10
-            focusPolicy: Qt.NoFocus
-            // Only the row being acted on needs the recovery action; showing it
-            // on every row turns the list into a wall of buttons.
-            // Kept in the layout at zero opacity: toggling visibility would
-            // reflow the note text every time the pointer crosses a row.
-            opacity: card.hovered || card.highlighted || card.activeFocus ? 1 : 0
-            enabled: opacity > 0
-            Layout.alignment: Qt.AlignVCenter
-            Layout.rightMargin: 10
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Move this note's window to the current screen")
-            onClicked: card.bringHereRequested()
+        // Quick actions, shown while the card is hovered or focused.
+        Row {
+            id: quickActions
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 8
+            spacing: 2
+            opacity: card.hot ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: card.theme ? card.theme.animShort : 120 } }
 
-            Behavior on opacity {
-                NumberAnimation { duration: card.theme ? card.theme.animShort : 120 }
+            component QuickAction: StyledButton {
+                property string cardAction: ""
+                property string hint: ""
+                theme: card.theme
+                variant: "ghost"
+                iconSize: 14
+                implicitWidth: 28
+                implicitHeight: 28
+                padding: 0
+                focusPolicy: Qt.NoFocus
+                iconColor: cardAction === "delete" && hovered
+                    ? (card.theme ? card.theme.danger : "#ef4444") : card.ink
+                ToolTip.visible: hovered
+                ToolTip.text: hint
+                ToolTip.delay: 400
+                onClicked: if (cardAction.length) card.actionRequested(cardAction)
+            }
+
+            QuickAction {
+                cardAction: card.isPinned ? "unpin" : "pin"
+                iconName: card.isPinned ? "pin-off" : "pin"
+                hint: card.isPinned ? qsTr("Unpin") : qsTr("Pin to the top of the list")
+            }
+            QuickAction {
+                cardAction: card.isArchived ? "restore" : "archive"
+                iconName: card.isArchived ? "archive-restore" : "archive"
+                hint: card.isArchived ? qsTr("Restore from archive") : qsTr("Archive")
+            }
+            QuickAction { cardAction: "copy"; iconName: "copy"; hint: qsTr("Copy text") }
+            QuickAction { cardAction: "delete"; iconName: "trash"; hint: qsTr("Delete") }
+            QuickAction {
+                id: moreButton
+                iconName: "more"
+                hint: qsTr("More actions")
+                onClicked: actionsMenu.popup(moreButton, 0, moreButton.height)
             }
         }
+    }
+
+    HoverHandler { id: hover }
+
+    TapHandler {
+        id: tap
+        acceptedButtons: Qt.LeftButton
+        onTapped: {
+            card.forceActiveFocus()
+            card.openRequested()
+        }
+    }
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: function(eventPoint) {
+            card.forceActiveFocus()
+            actionsMenu.popup(card, eventPoint.position.x, eventPoint.position.y)
+        }
+    }
+
+    Menu {
+        id: actionsMenu
+        MenuItem { text: qsTr("Open"); onTriggered: card.openRequested() }
+        MenuItem {
+            text: qsTr("Bring here")
+            onTriggered: card.actionRequested("locate")
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: card.isPinned ? qsTr("Unpin") : qsTr("Pin to top")
+            onTriggered: card.actionRequested(card.isPinned ? "unpin" : "pin")
+        }
+        MenuItem {
+            text: card.isArchived ? qsTr("Restore from archive") : qsTr("Archive")
+            onTriggered: card.actionRequested(card.isArchived ? "restore" : "archive")
+        }
+        MenuItem { text: qsTr("Copy text"); onTriggered: card.actionRequested("copy") }
+        MenuSeparator {}
+        MenuItem { text: qsTr("Delete…"); onTriggered: card.actionRequested("delete") }
     }
 }

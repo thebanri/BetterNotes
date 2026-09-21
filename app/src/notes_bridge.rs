@@ -28,6 +28,7 @@ pub mod ffi {
         #[qproperty(QStringList, archived_states, READ, NOTIFY = list_changed, cxx_name = "archivedStates")]
         #[qproperty(QStringList, priorities, READ, NOTIFY = list_changed)]
         #[qproperty(QStringList, note_tags, READ, NOTIFY = list_changed, cxx_name = "noteTags")]
+        #[qproperty(QStringList, note_colors, READ, NOTIFY = list_changed, cxx_name = "noteColors")]
         #[qproperty(QStringList, all_tags, READ, NOTIFY = list_changed, cxx_name = "allTags")]
         #[qproperty(QStringList, restore_ids, READ, NOTIFY = list_changed, cxx_name = "restoreIds")]
         #[qproperty(QString, current_id, READ, NOTIFY = selection_changed, cxx_name = "currentId")]
@@ -131,6 +132,18 @@ pub mod ffi {
         #[cxx_name = "setThemeMode"]
         fn set_theme_mode(self: Pin<&mut Self>, mode: QString) -> bool;
         #[qinvokable]
+        #[cxx_name = "setNotePinned"]
+        fn set_note_pinned(self: Pin<&mut Self>, id: QString, pinned: bool) -> bool;
+        #[qinvokable]
+        #[cxx_name = "setNoteArchived"]
+        fn set_note_archived(self: Pin<&mut Self>, id: QString, archived: bool) -> bool;
+        #[qinvokable]
+        #[cxx_name = "deleteNoteById"]
+        fn delete_note_by_id(self: Pin<&mut Self>, id: QString) -> bool;
+        #[qinvokable]
+        #[cxx_name = "notePlainText"]
+        fn note_plain_text(&self, id: QString) -> QString;
+        #[qinvokable]
         #[cxx_name = "setNotesStayBelow"]
         fn set_notes_stay_below(self: Pin<&mut Self>, enabled: bool) -> bool;
         #[qinvokable]
@@ -230,6 +243,7 @@ pub struct NotesBackendRust {
     archived_states: QStringList,
     priorities: QStringList,
     note_tags: QStringList,
+    note_colors: QStringList,
     all_tags: QStringList,
     restore_ids: QStringList,
     current_id: QString,
@@ -265,6 +279,7 @@ impl Default for NotesBackendRust {
             archived_states: QStringList::default(),
             priorities: QStringList::default(),
             note_tags: QStringList::default(),
+            note_colors: QStringList::default(),
             all_tags: QStringList::default(),
             restore_ids: QStringList::default(),
             current_id: QString::default(),
@@ -487,6 +502,12 @@ impl ffi::NotesBackend {
                     .iter()
                     .map(|note| QString::from(&note.tags.join(",")))
                     .collect();
+                let note_colors = session
+                    .summary_colors()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(QString::from)
+                    .collect();
                 let all_tags = session
                     .list_tags()
                     .unwrap_or_default()
@@ -515,6 +536,7 @@ impl ffi::NotesBackend {
                 state.archived_states = archived_states;
                 state.priorities = priorities;
                 state.note_tags = note_tags;
+                state.note_colors = note_colors;
                 state.all_tags = all_tags;
                 state.current_id = current_id;
                 state.current_index = index;
@@ -621,6 +643,37 @@ impl ffi::NotesBackend {
         } else {
             false
         }
+    }
+
+    pub fn set_note_pinned(self: Pin<&mut Self>, id: QString, pinned: bool) -> bool {
+        match parse_note_id(&id) {
+            Ok(id) => self.perform(false, |session| session.set_note_pinned(id, pinned)),
+            Err(error) => self.finish(Err(error), false),
+        }
+    }
+
+    pub fn set_note_archived(self: Pin<&mut Self>, id: QString, archived: bool) -> bool {
+        match parse_note_id(&id) {
+            Ok(id) => self.perform(false, |session| session.set_note_archived(id, archived)),
+            Err(error) => self.finish(Err(error), false),
+        }
+    }
+
+    pub fn delete_note_by_id(self: Pin<&mut Self>, id: QString) -> bool {
+        match parse_note_id(&id) {
+            Ok(id) => self.perform(false, |session| session.delete_note(id)),
+            Err(error) => self.finish(Err(error), false),
+        }
+    }
+
+    pub fn note_plain_text(&self, id: QString) -> QString {
+        let text = parse_note_id(&id).and_then(|id| {
+            self.session
+                .as_ref()
+                .ok_or(Error::NoSelection)?
+                .plain_text(id)
+        });
+        QString::from(&text.unwrap_or_default())
     }
 
     pub fn search(mut self: Pin<&mut Self>, query: QString) {
@@ -907,4 +960,12 @@ impl ffi::NotesBackend {
             None => QString::from(""),
         }
     }
+}
+
+/// Note ids reach QML as strings; anything that is not one is rejected.
+fn parse_note_id(id: &QString) -> Result<i64> {
+    id.to_string()
+        .trim()
+        .parse()
+        .map_err(|_| Error::InvalidSelection)
 }

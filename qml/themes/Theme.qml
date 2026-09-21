@@ -49,6 +49,60 @@ QtObject {
     readonly property color noteText: isDark ? "#f5f5f4" : "#1c1917"
     readonly property color noteTextSecondary: isDark ? "#a8a29e" : "#78716c"
 
+    // Sticky note colours, shared by the note windows and the library cards.
+    // A note's colour is a preset name or a custom "#rrggbb"; each yields a
+    // background, a header and a border tone for the current light/dark mode.
+    readonly property var tintPalettes: ({
+        "yellow": {
+            bg: isDark ? "#28231a" : "#fefce8",
+            header: isDark ? "#362f23" : "#fef08a",
+            border: isDark ? "#4f4230" : "#fde047"
+        },
+        "green": {
+            bg: isDark ? "#17271c" : "#f0fdf4",
+            header: isDark ? "#1e3727" : "#dcfce7",
+            border: isDark ? "#2e573c" : "#86efac"
+        },
+        "pink": {
+            bg: isDark ? "#2d161d" : "#fff1f2",
+            header: isDark ? "#3d1c26" : "#ffe4e6",
+            border: isDark ? "#5c2738" : "#fda4af"
+        },
+        "blue": {
+            bg: isDark ? "#142436" : "#f0f9ff",
+            header: isDark ? "#1a324b" : "#e0f2fe",
+            border: isDark ? "#254e77" : "#7dd3fc"
+        },
+        "purple": {
+            bg: isDark ? "#241834" : "#faf5ff",
+            header: isDark ? "#32204a" : "#f3e8ff",
+            border: isDark ? "#4c2f70" : "#d8b4fe"
+        }
+    })
+
+    function customTint(colorHex, role) {
+        let base = Qt.color(colorHex)
+        if (!base || base === "transparent") return noteBackground
+        if (isDark) {
+            if (role === "bg") return Qt.rgba(base.r * 0.18 + 0.04, base.g * 0.18 + 0.04, base.b * 0.18 + 0.04, 1.0)
+            if (role === "header") return Qt.rgba(base.r * 0.28 + 0.06, base.g * 0.28 + 0.06, base.b * 0.28 + 0.06, 1.0)
+            return Qt.rgba(base.r * 0.45 + 0.1, base.g * 0.45 + 0.1, base.b * 0.45 + 0.1, 1.0)
+        } else {
+            if (role === "bg") return Qt.rgba(1.0 - (1.0 - base.r) * 0.10, 1.0 - (1.0 - base.g) * 0.10, 1.0 - (1.0 - base.b) * 0.10, 1.0)
+            if (role === "header") return Qt.rgba(1.0 - (1.0 - base.r) * 0.22, 1.0 - (1.0 - base.g) * 0.22, 1.0 - (1.0 - base.b) * 0.22, 1.0)
+            return Qt.rgba(1.0 - (1.0 - base.r) * 0.45, 1.0 - (1.0 - base.g) * 0.45, 1.0 - (1.0 - base.b) * 0.45, 1.0)
+        }
+    }
+
+    function noteTint(name, role) {
+        const preset = tintPalettes[name]
+        if (preset) return preset[role]
+        if (typeof name === "string" && name.startsWith("#")) return customTint(name, role)
+        if (role === "header") return noteHeader
+        if (role === "border") return noteBorder
+        return noteBackground
+    }
+
     // Geometry / Spacing
     readonly property int spacingXs: 4
     readonly property int spacingSm: 8

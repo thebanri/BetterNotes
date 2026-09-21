@@ -206,3 +206,58 @@ fn abrupt_exit_writer() {
     interrupted.execute_batch("BEGIN IMMEDIATE; INSERT INTO notes (title, created_at, updated_at) VALUES ('Uncommitted', 0, 0);").unwrap();
     std::process::exit(0);
 }
+
+#[test]
+fn library_actions_change_any_note_at_its_latest_revision() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("notes.sqlite3");
+    let mut library = NotesSession::open(&path).unwrap();
+    library.create().unwrap();
+    let id = library.current().unwrap().id;
+    library.create().unwrap();
+
+    // Another editor saves the first note after the library last read it.
+    let mut editor = NotesSession::open_note(&path, id).unwrap();
+    editor.edit_title("Edited elsewhere".into());
+    editor.edit_content("<p>Body <b>text</b> &amp; more</p>".into());
+    editor.save().unwrap();
+
+    // The library still acts on the newest revision and keeps that edit.
+    library.set_note_pinned(id, true).unwrap();
+    library.set_note_archived(id, true).unwrap();
+    let store = NoteStore::open(&path).unwrap();
+    let note = store.get(id).unwrap();
+    assert!(note.is_pinned && note.is_archived);
+    assert_eq!(note.title, "Edited elsewhere");
+    assert!(library
+        .summaries()
+        .iter()
+        .any(|s| s.id == id && s.is_pinned && s.is_archived));
+    assert_eq!(
+        library.plain_text(id).unwrap(),
+        "Edited elsewhere\n\nBody text & more"
+    );
+
+    // An editor still holding the old revision is told, not overwritten.
+    editor.edit_title("Stale draft".into());
+    assert!(matches!(editor.save(), Err(Error::Conflict)));
+
+    // Colours come back in list order; a note without one is yellow.
+    editor.reload_note().unwrap();
+    editor.set_note_color("#336699").unwrap();
+    let colors = library.summary_colors().unwrap();
+    assert_eq!(colors.len(), library.summaries().len());
+    for (summary, color) in library.summaries().iter().zip(&colors) {
+        let expected = if summary.id == id {
+            "#336699"
+        } else {
+            "yellow"
+        };
+        assert_eq!(color, expected);
+    }
+
+    library.delete_note(id).unwrap();
+    assert!(matches!(store.get(id), Err(Error::NotFound(_))));
+    assert!(library.summaries().iter().all(|s| s.id != id));
+    assert_eq!(library.summaries().len(), 1);
+}

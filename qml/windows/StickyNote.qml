@@ -102,50 +102,9 @@ ApplicationWindow {
                content.indexOf("<u>") !== -1
     }
 
-    function computeCustomTint(colorHex, role) {
-        let base = Qt.color(colorHex)
-        if (!base || base === "transparent") return theme.noteBackground
-        if (theme.isDark) {
-            if (role === "bg") return Qt.rgba(base.r * 0.18 + 0.04, base.g * 0.18 + 0.04, base.b * 0.18 + 0.04, 1.0)
-            if (role === "header") return Qt.rgba(base.r * 0.28 + 0.06, base.g * 0.28 + 0.06, base.b * 0.28 + 0.06, 1.0)
-            return Qt.rgba(base.r * 0.45 + 0.1, base.g * 0.45 + 0.1, base.b * 0.45 + 0.1, 1.0)
-        } else {
-            if (role === "bg") return Qt.rgba(1.0 - (1.0 - base.r) * 0.10, 1.0 - (1.0 - base.g) * 0.10, 1.0 - (1.0 - base.b) * 0.10, 1.0)
-            if (role === "header") return Qt.rgba(1.0 - (1.0 - base.r) * 0.22, 1.0 - (1.0 - base.g) * 0.22, 1.0 - (1.0 - base.b) * 0.22, 1.0)
-            return Qt.rgba(1.0 - (1.0 - base.r) * 0.45, 1.0 - (1.0 - base.g) * 0.45, 1.0 - (1.0 - base.b) * 0.45, 1.0)
-        }
-    }
-
-    readonly property var tintPalettes: ({
-        "yellow": {
-            bg: theme.isDark ? "#28231a" : "#fefce8",
-            header: theme.isDark ? "#362f23" : "#fef08a",
-            border: theme.isDark ? "#4f4230" : "#fde047"
-        },
-        "green": {
-            bg: theme.isDark ? "#17271c" : "#f0fdf4",
-            header: theme.isDark ? "#1e3727" : "#dcfce7",
-            border: theme.isDark ? "#2e573c" : "#86efac"
-        },
-        "pink": {
-            bg: theme.isDark ? "#2d161d" : "#fff1f2",
-            header: theme.isDark ? "#3d1c26" : "#ffe4e6",
-            border: theme.isDark ? "#5c2738" : "#fda4af"
-        },
-        "blue": {
-            bg: theme.isDark ? "#142436" : "#f0f9ff",
-            header: theme.isDark ? "#1a324b" : "#e0f2fe",
-            border: theme.isDark ? "#254e77" : "#7dd3fc"
-        },
-        "purple": {
-            bg: theme.isDark ? "#241834" : "#faf5ff",
-            header: theme.isDark ? "#32204a" : "#f3e8ff",
-            border: theme.isDark ? "#4c2f70" : "#d8b4fe"
-        }
-    })
-    readonly property color activeBg: tintPalettes[noteTint] ? tintPalettes[noteTint].bg : (noteTint.startsWith("#") ? computeCustomTint(noteTint, "bg") : theme.noteBackground)
-    readonly property color activeHeader: tintPalettes[noteTint] ? tintPalettes[noteTint].header : (noteTint.startsWith("#") ? computeCustomTint(noteTint, "header") : theme.noteHeader)
-    readonly property color activeBorder: tintPalettes[noteTint] ? tintPalettes[noteTint].border : (noteTint.startsWith("#") ? computeCustomTint(noteTint, "border") : theme.noteBorder)
+    readonly property color activeBg: theme.noteTint(noteTint, "bg")
+    readonly property color activeHeader: theme.noteTint(noteTint, "header")
+    readonly property color activeBorder: theme.noteTint(noteTint, "border")
 
     // QObject ownership belongs to the library; these remain independent windows.
     // Unpinned notes stay on bottom (desktop level) while stayBelow is set;
