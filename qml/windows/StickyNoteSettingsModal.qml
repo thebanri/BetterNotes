@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtQuick.Templates as T
 import "../components" as UI
 import "../themes" as Themes
 
@@ -137,8 +138,14 @@ Window {
         Layout.fillWidth: true
     }
 
-    component SettingsCombo: ComboBox {
+    // Built on the template rather than the styled ComboBox: every visual part
+    // is replaced here, and the KDE desktop style's ComboBox assumes its
+    // content item is an editable TextInput (positionToRectangle), which a
+    // plain Text is not.
+    component SettingsCombo: T.ComboBox {
         id: combo
+        implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
+                                implicitContentWidth + leftPadding + rightPadding)
         implicitHeight: 36
         leftPadding: 12
         rightPadding: 32
