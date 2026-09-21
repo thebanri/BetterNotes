@@ -87,6 +87,11 @@ fn main() {
         "QML integration assertions failed"
     );
     drop(engine);
+    assert_eq!(
+        std::fs::read(fixtures.join("saved.png")).unwrap(),
+        include_bytes!("fixtures/still.png"),
+        "Save Image As must write a copy of the image"
+    );
     let store =
         betternotes_core::NoteStore::open(&directory.path().join("betternotes/notes.sqlite3"))
             .unwrap();

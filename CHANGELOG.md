@@ -4,6 +4,15 @@ All notable changes to the BetterNotes project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-09-21
+
+### Added
+- `install.sh`: install or update BetterNotes with one `curl … | sh` command, verified against `SHA256SUMS`, and remove it with `--uninstall`.
+- Right-clicking an image in a note offers **Save Image As…** (suggesting its original file name) and **Remove Image**.
+
+### Fixed
+- The AppImage now shows the BetterNotes icon in the Wayland taskbar instead of the generic Wayland icon. It is built with Qt 6.9, the first Qt that sends window icons to compositors supporting xdg-toplevel-icon (such as KWin).
+
 ## [0.1.1] - 2026-09-21
 
 Published as the Latest release rather than a prerelease.

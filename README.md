@@ -11,7 +11,7 @@ an account or a cloud service. Notes stay on your machine.
 **[Download releases](https://github.com/thebanri/BetterNotes/releases)** ·
 [Build from source](#build-from-source) · [Contribute](CONTRIBUTING.md)
 
-> BetterNotes is a working project name. The current version is **0.1.1**, a
+> BetterNotes is a working project name. The current version is **0.1.2**, a
 > Linux preview; desktop compatibility still needs testing across environments.
 > Windows and macOS are not current release targets.
 
@@ -19,7 +19,7 @@ an account or a cloud service. Notes stay on your machine.
 
 - Independent sticky windows with autosave, resizing, collapse and saved window state.
 - Rich text editing, automatic bulleted and numbered lists, checklists, links, colors, and light, dark or system themes.
-- Images and animated GIFs: pick them or drop them onto a note, then drag a corner to resize.
+- Images and animated GIFs: pick them or drop them onto a note, drag a corner to resize, right-click to save a copy.
 - SQLite storage, FTS5 search, tags, priorities and archiving.
 - Quick Capture, a command palette, a system tray and start-at-login settings.
 - Reminders, desktop notifications and file attachments.
@@ -32,7 +32,20 @@ Desktop integration depends on the session and package format; see
 
 ## Install
 
-Open **[GitHub Releases](https://github.com/thebanri/BetterNotes/releases)** and
+The quickest way, for your user only and without root, installs the latest
+AppImage with its menu entry and icon, and checks it against `SHA256SUMS`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/thebanri/BetterNotes/main/install.sh | sh
+```
+
+Run the same command again to update. To remove it (your notes are kept):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/thebanri/BetterNotes/main/install.sh | sh -s -- --uninstall
+```
+
+To use your distribution's package manager instead, open **[GitHub Releases](https://github.com/thebanri/BetterNotes/releases)** and
 expand **Assets** on the **Latest** release. Packages are currently built for
 **x86_64 / amd64**.
 
@@ -54,14 +67,14 @@ on Ubuntu 24.04. These checks do not certify every distribution or desktop sessi
 For the current preview:
 
 ```bash
-chmod +x BetterNotes-0.1.1-x86_64.AppImage
-./BetterNotes-0.1.1-x86_64.AppImage
+chmod +x BetterNotes-0.1.2-x86_64.AppImage
+./BetterNotes-0.1.2-x86_64.AppImage
 ```
 
 If FUSE is unavailable, run with extraction enabled:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./BetterNotes-0.1.1-x86_64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./BetterNotes-0.1.2-x86_64.AppImage
 ```
 
 ### Flatpak
@@ -70,7 +83,7 @@ Add Flathub as a source for the KDE runtime, then install the downloaded bundle:
 
 ```bash
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./BetterNotes-0.1.1-x86_64.flatpak
+flatpak install --user ./BetterNotes-0.1.2-x86_64.flatpak
 flatpak run org.betternotes.BetterNotes
 ```
 
@@ -85,7 +98,7 @@ for your user, with its icon; no root is needed:
 
 ```bash
 ./target/release/betternotes install      # copies the binary to ~/.local/bin
-./BetterNotes-0.1.1-x86_64.AppImage install   # launches the AppImage where it is
+./BetterNotes-0.1.2-x86_64.AppImage install   # launches the AppImage where it is
 betternotes uninstall                     # removes the entry, icons and copied binary; notes stay
 ```
 

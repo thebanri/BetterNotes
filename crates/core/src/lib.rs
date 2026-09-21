@@ -19,7 +19,9 @@ pub mod shortcuts;
 mod store;
 mod window_state;
 
-pub use attachments::{add_attachment, delete_attachment, list_attachments, Attachment};
+pub use attachments::{
+    add_attachment, delete_attachment, list_attachments, original_filename, save_copy, Attachment,
+};
 pub use autostart::{is_autostart_enabled, set_autostart};
 pub use backup::{create_backup, restore_backup, BackupManifest};
 pub use desktop::{DesktopEnvironment, DesktopReport, DisplayServer};

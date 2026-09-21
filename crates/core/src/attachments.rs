@@ -167,6 +167,52 @@ pub fn delete_attachment(
     Ok(())
 }
 
+/// The name an attachment had when it was added: its stored file name
+/// without the `<time>_<random>_` prefix that keeps stored names unique.
+pub fn original_filename(stored_name: &str) -> &str {
+    let mut parts = stored_name.splitn(3, '_');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(time), Some(random), Some(name))
+            if !name.is_empty()
+                && [time, random].iter().all(|part| {
+                    !part.is_empty() && part.chars().all(|c| c.is_ascii_hexdigit())
+                }) =>
+        {
+            name
+        }
+        _ => stored_name,
+    }
+}
+
+/// Saves a copy of an attachment where the user chose. The copy is written
+/// beside the target and renamed over it, so an interrupted save never leaves
+/// a truncated file, and the attachment itself is never modified.
+pub fn save_copy(source: &Path, target: &Path) -> Result<()> {
+    if !source.is_file() {
+        return Err(Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "The image file no longer exists",
+        )));
+    }
+    if target.is_dir() {
+        return Err(Error::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Choose a file name, not a folder",
+        )));
+    }
+    if fs::canonicalize(source).ok() == fs::canonicalize(target).ok() {
+        return Ok(());
+    }
+    let mut name = target.file_name().unwrap_or_default().to_os_string();
+    name.push(".betternotes-partial");
+    let partial = target.with_file_name(name);
+    let result = fs::copy(source, &partial).and_then(|_| fs::rename(&partial, target));
+    if result.is_err() {
+        let _ = fs::remove_file(&partial);
+    }
+    Ok(result?)
+}
+
 fn rand_simple() -> u32 {
     let p = std::process::id();
     let t = SystemTime::now()
@@ -188,5 +234,35 @@ mod tests {
         assert_eq!(guess_mime_type("photo.png"), "image/png");
         assert_eq!(guess_mime_type("doc.pdf"), "application/pdf");
         assert_eq!(guess_mime_type("notes.md"), "text/markdown");
+    }
+
+    #[test]
+    fn original_filename_drops_only_the_storage_prefix() {
+        assert_eq!(original_filename("1a0c41f74ca_ef7994b2_cat.gif"), "cat.gif");
+        assert_eq!(
+            original_filename("1a0c_ef79_my_holiday.png"),
+            "my_holiday.png"
+        );
+        assert_eq!(original_filename("holiday_photo.png"), "holiday_photo.png");
+        assert_eq!(original_filename("plain.png"), "plain.png");
+    }
+
+    #[test]
+    fn save_copy_writes_the_image_and_keeps_the_attachment() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("1a_2b_cat.gif");
+        fs::write(&source, b"GIF89a").unwrap();
+        let target = dir.path().join("saved.gif");
+        fs::write(&target, b"old").unwrap();
+
+        save_copy(&source, &target).unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"GIF89a");
+        assert_eq!(fs::read(&source).unwrap(), b"GIF89a");
+        assert!(!dir.path().join("saved.gif.betternotes-partial").exists());
+
+        save_copy(&source, &source).unwrap();
+        assert_eq!(fs::read(&source).unwrap(), b"GIF89a");
+        assert!(save_copy(&source, dir.path()).is_err());
+        assert!(save_copy(&dir.path().join("missing.png"), &target).is_err());
     }
 }

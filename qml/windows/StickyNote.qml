@@ -15,6 +15,7 @@ ApplicationWindow {
     property alias editorBackend: backend
     property alias imageAnimator: gifs
     property alias imageFormatter: formatter
+    property alias imageMenu: imageMenu
     property alias theme: theme
     property bool collapsed: false
     property bool initialized: false
@@ -579,6 +580,21 @@ ApplicationWindow {
         }
     }
 
+    // Offers to save a copy of the selected image under its original name.
+    function saveSelectedImage() {
+        if (selectedImage < 0) return
+        const source = formatter.imageAt(contentEditor.textDocument, selectedImage).name
+        if (!source) return
+        const name = backend.imageFileName(source)
+        const suffix = name.substring(name.lastIndexOf(".") + 1).toLowerCase()
+        saveImageDialog.source = source
+        saveImageDialog.nameFilters = suffix.length > 0 && suffix !== name.toLowerCase()
+            ? [qsTr("%1 image (*.%2)").arg(suffix.toUpperCase()).arg(suffix), qsTr("All files (*)")]
+            : [qsTr("All files (*)")]
+        saveImageDialog.selectedFile = saveImageDialog.currentFolder + "/" + encodeURIComponent(name)
+        saveImageDialog.open()
+    }
+
     // Copies each image into the note's attachments and inserts it at the
     // position, each on its own line, at most as wide as the note.
     function insertImages(urls, position) {
@@ -730,6 +746,34 @@ ApplicationWindow {
             for (let i = 0; i < selectedFiles.length; ++i) urls.push(selectedFiles[i])
             if (urls.length > 0) currentFolder = urls[0].toString().replace(/\/[^\/]*$/, "")
             noteWindow.insertImages(urls, contentEditor.cursorPosition)
+        }
+    }
+
+    FileDialog {
+        id: saveImageDialog
+        property string source: ""
+        title: qsTr("Save Image")
+        fileMode: FileDialog.SaveFile
+        currentFolder: backend.picturesFolder()
+        onAccepted: {
+            backend.saveImageAs(source, selectedFile.toString())
+            currentFolder = selectedFile.toString().replace(/\/[^\/]*$/, "")
+        }
+    }
+
+    Menu {
+        id: imageMenu
+        MenuItem {
+            objectName: "saveImageItem"
+            text: qsTr("Save Image As…")
+            onTriggered: noteWindow.saveSelectedImage()
+        }
+        MenuItem {
+            text: qsTr("Remove Image")
+            onTriggered: {
+                if (noteWindow.selectedImage < 0) return
+                contentEditor.remove(noteWindow.selectedImage, noteWindow.selectedImage + 1)
+            }
         }
     }
 
@@ -1224,6 +1268,22 @@ ApplicationWindow {
                         const link = noteWindow.linkAt(eventPoint.position.x, eventPoint.position.y)
                         if (link.length > 0) noteWindow.openLink(link)
                         else noteWindow.selectImageAt(eventPoint.position.x, eventPoint.position.y)
+                    }
+                }
+
+                // A right click on an image selects it and offers to save it.
+                // Accepting the press also keeps the editor's own text menu
+                // closed; anywhere else the click passes through to it.
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.RightButton
+                    z: 4
+                    onPressed: function(mouse) {
+                        if (!noteWindow.selectImageAt(mouse.x, mouse.y)) {
+                            mouse.accepted = false
+                            return
+                        }
+                        imageMenu.popup()
                     }
                 }
 

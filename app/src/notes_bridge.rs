@@ -180,6 +180,14 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "setNoteFontSize"]
         fn set_note_font_size(self: Pin<&mut Self>, size: i32) -> bool;
+        /// Saves a copy of a note image (file URL) to a chosen file URL.
+        #[qinvokable]
+        #[cxx_name = "saveImageAs"]
+        fn save_image_as(self: Pin<&mut Self>, image_url: QString, target_url: QString) -> bool;
+        /// The file name an image had before it was attached.
+        #[qinvokable]
+        #[cxx_name = "imageFileName"]
+        fn image_file_name(&self, image_url: QString) -> QString;
         #[qinvokable]
         #[cxx_name = "picturesFolder"]
         fn pictures_folder(&self) -> QString;
@@ -807,6 +815,39 @@ impl ffi::NotesBackend {
             .ok_or(Error::NoSelection)
             .and_then(|session| session.set_note_font_size(size));
         result.is_ok()
+    }
+
+    pub fn save_image_as(
+        mut self: Pin<&mut Self>,
+        image_url: QString,
+        target_url: QString,
+    ) -> bool {
+        let local = |url: &QString| QUrl::from(url).to_local_file().map(|path| path.to_string());
+        let result = match (local(&image_url), local(&target_url)) {
+            (Some(source), Some(target)) => betternotes_core::save_copy(
+                std::path::Path::new(&source),
+                std::path::Path::new(&target),
+            ),
+            _ => Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Only local files can be saved",
+            ))),
+        };
+        let message = match &result {
+            Ok(()) => String::new(),
+            Err(error) => format!("Could not save the image: {error}"),
+        };
+        if !message.is_empty() {
+            eprintln!("BetterNotes: {message}");
+        }
+        self.as_mut().rust_mut().error_message = QString::from(&message);
+        self.as_mut().status_changed();
+        result.is_ok()
+    }
+
+    pub fn image_file_name(&self, image_url: QString) -> QString {
+        let name = QUrl::from(&image_url).file_name().to_string();
+        QString::from(betternotes_core::original_filename(&name))
     }
 
     pub fn pictures_folder(&self) -> QString {

@@ -320,6 +320,16 @@ Window {
         check(resized.width === 124 && resized.height === 62, "Dragging the handle did not resize the image in proportion")
         check(window.flush() && backend.draftContent.indexOf('width="124"') >= 0, "Resized image width was not saved")
 
+        body.deselect()
+        const imageRect = body.positionToRectangle(position)
+        input.mouseClick(body, imageRect.x + 4, imageRect.y + 4, Qt.RightButton)
+        check(window.imageMenu.visible && window.selectedImage === position, "Right-clicking an image did not open its menu")
+        window.imageMenu.close()
+        const stored = formatter.imageAt(body.textDocument, position).name
+        check(backend.imageFileName(stored) === "still.png", "Save did not suggest the original file name")
+        check(backend.saveImageAs(stored, fixtures + "saved.png"), "Saving the image failed")
+        check(!backend.saveImageAs(stored, "https://example.com/x.png"), "Saved to a non-local URL")
+
         check(window.insertImages([fixtures + "animated.gif"], body.length) === 1, "GIF insert failed")
         check(window.imageAnimator.animationCount === 1, "GIF animation did not start")
         check(window.flush(), "GIF note failed to save")

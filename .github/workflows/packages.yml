@@ -190,7 +190,9 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.3'
+          # 6.9 is the first Qt to send the window icon to Wayland compositors
+          # (xdg-toplevel-icon), which the taskbar shows before installation.
+          version: '6.9.3'
           cache: true
       - uses: dtolnay/rust-toolchain@stable
       - run: packaging/linux/appimage/build-appimage.sh dist
