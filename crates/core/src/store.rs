@@ -428,6 +428,24 @@ impl NoteStore {
         self.set_setting(NOTES_STAY_BELOW_KEY, if enabled { "true" } else { "false" })
     }
 
+    /// The chosen accent colour ("#rrggbb").
+    pub fn accent_color(&self) -> Result<String> {
+        Ok(self
+            .get_setting("accent_color")?
+            .and_then(|value| crate::settings::normalize_accent(&value))
+            .unwrap_or_else(|| crate::settings::DEFAULT_ACCENT.to_string()))
+    }
+
+    pub fn set_accent_color(&self, color: &str) -> Result<()> {
+        let color = crate::settings::normalize_accent(color).ok_or_else(|| {
+            Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Choose a colour as #rrggbb",
+            ))
+        })?;
+        self.set_setting("accent_color", &color)
+    }
+
     /// Recent library searches, newest first. Searches are single lines, so
     /// they are stored one per line.
     pub fn recent_searches(&self) -> Result<Vec<String>> {

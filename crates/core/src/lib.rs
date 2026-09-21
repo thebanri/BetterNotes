@@ -8,6 +8,7 @@ pub mod desktop;
 pub mod export_import;
 pub mod install;
 pub mod ipc;
+pub mod keymap;
 pub mod links;
 mod notes;
 pub mod notifications;

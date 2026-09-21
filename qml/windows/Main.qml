@@ -25,6 +25,7 @@ ApplicationWindow {
     property alias reminderEditorItem: reminderEditor
     property alias deleteForeverDialog: deleteDialog
     property alias settingsPopupItem: settingsPopup
+    property alias keySequencesItem: keySequences
     property var noteWindows: ({})
     property string windowError: ""
     property string filterTab: "all"
@@ -42,7 +43,16 @@ ApplicationWindow {
     readonly property int selectionCount: selectionRevision >= 0 ? Object.keys(selectedIds).length : 0
     property var quickCaptureWindow: null
 
-    Themes.Theme { id: theme; themeMode: backend.themeMode }
+    Themes.Theme { id: theme; themeMode: backend.themeMode; accentColor: backend.accentColor }
+    KeySequences { id: keySequences }
+    // Configurable shortcuts {action: sequence}, shared with the note windows.
+    readonly property var keys: {
+        try {
+            return JSON.parse(backend.shortcutsJson || "{}")
+        } catch (error) {
+            return {}
+        }
+    }
     ApplicationInfo { id: applicationInfo }
     NotesBackend { id: backend; objectName: "notesBackend" }
     // Saves and restores note positions on KDE Plasma under Wayland, where the
@@ -58,6 +68,9 @@ ApplicationWindow {
         id: stickyComponent
         StickyNote {
             stayBelow: backend.notesStayBelow
+            appearanceMode: backend.themeMode
+            appearanceAccent: backend.accentColor
+            keys: window.keys
             placement: placementService
             onSaved: backend.reload()
             onDismissed: function(id) { window.releaseWindow(id) }
@@ -1475,13 +1488,16 @@ ApplicationWindow {
                     font.weight: Font.Medium
                     color: theme.textPrimary
                 }
-                RowLayout {
+                Flow {
                     spacing: 6
+                    Layout.fillWidth: true
                     Repeater {
                         model: [
                             {mode: "system", label: qsTr("System"), icon: "monitor"},
                             {mode: "light", label: qsTr("Light"), icon: "sun"},
-                            {mode: "dark", label: qsTr("Dark"), icon: "moon"}
+                            {mode: "dark", label: qsTr("Dark"), icon: "moon"},
+                            {mode: "sepia", label: qsTr("Sepia"), icon: "palette"},
+                            {mode: "black", label: qsTr("Black"), icon: "moon"}
                         ]
                         delegate: UI.StyledButton {
                             required property var modelData
@@ -1492,6 +1508,45 @@ ApplicationWindow {
                             variant: backend.themeMode === modelData.mode ? "accent" : "secondary"
                             implicitHeight: 32
                             onClicked: backend.setThemeMode(modelData.mode)
+                        }
+                    }
+                }
+
+                // Accent colour: buttons, selections and highlights.
+                Label {
+                    text: qsTr("Accent colour")
+                    font.pixelSize: 12
+                    color: theme.textSecondary
+                    Layout.topMargin: 4
+                }
+                Flow {
+                    objectName: "accentSwatches"
+                    spacing: 8
+                    Layout.fillWidth: true
+                    Repeater {
+                        model: ["#6366f1", "#3b82f6", "#0ea5e9", "#14b8a6", "#22c55e", "#f59e0b", "#f97316", "#ef4444", "#ec4899", "#a855f7", "#64748b"]
+                        delegate: Rectangle {
+                            required property string modelData
+                            readonly property bool chosen: backend.accentColor === modelData
+                            width: 26
+                            height: 26
+                            radius: 13
+                            color: modelData
+                            border.width: chosen ? 3 : 1
+                            border.color: chosen ? theme.textPrimary : Qt.darker(modelData, 1.2)
+                            UI.AppIcon {
+                                anchors.centerIn: parent
+                                visible: parent.chosen
+                                name: "check"
+                                size: 13
+                                strokeWidth: 3
+                                color: "white"
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: backend.setAccentColor(parent.modelData)
+                            }
                         }
                     }
                 }
@@ -1665,6 +1720,121 @@ ApplicationWindow {
                     id: backupFolderDialog
                     title: qsTr("Choose a Backup Folder")
                     onAccepted: backupSection.apply({ folder: selectedFolder.toString() })
+                }
+            }
+
+            // ---- Keyboard shortcuts ------------------------------------------
+            ColumnLayout {
+                id: shortcutSection
+                objectName: "shortcutSection"
+                spacing: 4
+                Layout.fillWidth: true
+                // The action being recorded, or "".
+                property string recording: ""
+
+                readonly property var labels: ({
+                    new_note: qsTr("New note"),
+                    focus_search: qsTr("Search the library"),
+                    command_palette: qsTr("Command palette"),
+                    quick_capture: qsTr("Quick Capture (while BetterNotes is active)"),
+                    bold: qsTr("Bold"),
+                    italic: qsTr("Italic"),
+                    underline: qsTr("Underline"),
+                    heading1: qsTr("Heading 1"),
+                    heading2: qsTr("Heading 2"),
+                    bullet_list: qsTr("Bulleted list"),
+                    numbered_list: qsTr("Numbered list"),
+                    checklist: qsTr("Checklist"),
+                    toggle_check: qsTr("Tick checklist item"),
+                    find: qsTr("Find in note"),
+                    replace: qsTr("Replace in note"),
+                    align_left: qsTr("Align left"),
+                    align_center: qsTr("Align center"),
+                    align_right: qsTr("Align right"),
+                    align_justify: qsTr("Justify")
+                })
+                readonly property var libraryActions: ["new_note", "focus_search", "command_palette", "quick_capture"]
+
+                function record(action, event) {
+                    if (event.key === Qt.Key_Escape) {
+                        recording = ""
+                        event.accepted = true
+                        return
+                    }
+                    const sequence = keySequences.fromKey(event.key, event.modifiers)
+                    event.accepted = true
+                    if (sequence.length === 0) return
+                    recording = ""
+                    const refused = backend.setShortcut(action, sequence)
+                    if (refused.length > 0) window.showToast(refused)
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label {
+                        text: qsTr("Keyboard shortcuts")
+                        font.pixelSize: 13
+                        font.weight: Font.Medium
+                        color: theme.textPrimary
+                        Layout.fillWidth: true
+                    }
+                    UI.StyledButton {
+                        theme: window.theme
+                        variant: "ghost"
+                        text: qsTr("Reset All")
+                        onClicked: backend.resetShortcuts()
+                    }
+                }
+                Label {
+                    text: qsTr("Click a shortcut, then press the new keys. Esc cancels.")
+                    font.pixelSize: 11
+                    color: theme.textMuted
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                }
+                Repeater {
+                    model: Object.keys(shortcutSection.labels)
+                    delegate: RowLayout {
+                        id: shortcutRow
+                        required property string modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        Label {
+                            visible: shortcutRow.modelData === "new_note" || shortcutRow.modelData === "bold"
+                            text: shortcutRow.modelData === "new_note" ? qsTr("Library") : qsTr("Notes")
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
+                            color: theme.textSecondary
+                            Layout.topMargin: 6
+                            Layout.preferredWidth: 60
+                        }
+                        Item { visible: shortcutRow.modelData !== "new_note" && shortcutRow.modelData !== "bold"; Layout.preferredWidth: 60 }
+                        Label {
+                            text: shortcutSection.labels[shortcutRow.modelData]
+                            font.pixelSize: 12
+                            color: theme.textPrimary
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+                        UI.StyledButton {
+                            id: recorder
+                            objectName: "shortcut_" + shortcutRow.modelData
+                            readonly property bool active: shortcutSection.recording === shortcutRow.modelData
+                            theme: window.theme
+                            variant: active ? "accent" : "secondary"
+                            implicitHeight: 28
+                            Layout.preferredWidth: 150
+                            text: active ? qsTr("Press keys…") : keySequences.display(window.keys[shortcutRow.modelData] || "")
+                            onClicked: {
+                                shortcutSection.recording = shortcutRow.modelData
+                                forceActiveFocus()
+                            }
+                            onActiveFocusChanged: if (!activeFocus && active) shortcutSection.recording = ""
+                            Keys.onPressed: function(event) {
+                                if (active) shortcutSection.record(shortcutRow.modelData, event)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1888,11 +2058,11 @@ ApplicationWindow {
         }
     }
 
-    Shortcut { sequences: [StandardKey.New]; context: Qt.WindowShortcut; enabled: backend.ready; onActivated: window.createNote() }
+    Shortcut { sequence: window.keys.new_note || "Ctrl+N"; context: Qt.WindowShortcut; enabled: backend.ready; onActivated: window.createNote() }
     Shortcut { sequences: [StandardKey.Quit]; context: Qt.WindowShortcut; onActivated: window.close() }
-    Shortcut { sequences: ["Ctrl+K", "Ctrl+Shift+P"]; context: Qt.WindowShortcut; onActivated: commandPalette.open() }
-    Shortcut { sequences: [StandardKey.Find]; context: Qt.WindowShortcut; onActivated: searchField.forceActiveFocus() }
-    Shortcut { sequences: ["Ctrl+Alt+Space"]; onActivated: window.openQuickCapture() }
+    Shortcut { sequences: [window.keys.command_palette || "Ctrl+K", "Ctrl+Shift+P"]; context: Qt.WindowShortcut; onActivated: commandPalette.open() }
+    Shortcut { sequence: window.keys.focus_search || "Ctrl+F"; context: Qt.WindowShortcut; onActivated: searchField.forceActiveFocus() }
+    Shortcut { sequence: window.keys.quick_capture || "Ctrl+Alt+Space"; onActivated: window.openQuickCapture() }
 
     // Automatic backups are due daily at most; checking hourly is plenty.
     Timer {

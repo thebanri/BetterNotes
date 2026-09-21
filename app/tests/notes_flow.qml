@@ -497,6 +497,28 @@ Window {
         library.settingsPopupItem.close()
     }
 
+    // Accent colours and themes reach open notes; shortcuts change, refuse
+    // conflicts and reset.
+    function assertAppearanceAndShortcuts(library) {
+        const backend = library.libraryBackend
+        const sticky = library.createNote()
+        check(backend.setAccentColor("#14b8a6"), "Setting the accent failed")
+        check(Qt.colorEqual(library.theme.accent, "#14b8a6") && Qt.colorEqual(sticky.theme.accent, "#14b8a6"), "The accent did not reach the open note")
+        check(!backend.setAccentColor("teal"), "An invalid accent was accepted")
+        check(backend.setThemeMode("sepia") && !sticky.theme.isDark && sticky.theme.isSepia, "Sepia theme did not reach the note")
+        check(backend.setThemeMode("black") && sticky.theme.isDark && Qt.colorEqual(library.theme.windowBackground, "#000000"), "Black theme failed")
+        check(backend.setThemeMode("system") && backend.setAccentColor("#6366f1"), "Could not restore the appearance")
+
+        check(backend.setShortcut("bold", "Ctrl+Shift+B") === "", "Changing a shortcut failed")
+        check(sticky.keys.bold === "Ctrl+Shift+B", "The new shortcut did not reach the open note")
+        check(backend.setShortcut("italic", "Ctrl+Shift+B").length > 0, "A conflicting shortcut was accepted")
+        const recorder = library.keySequencesItem
+        check(recorder.fromKey(Qt.Key_B, Qt.ControlModifier | Qt.ShiftModifier) === "Ctrl+Shift+B", "Key recording text is wrong")
+        check(recorder.fromKey(Qt.Key_Control, Qt.ControlModifier) === "", "A lone modifier was recorded")
+        check(backend.resetShortcuts() && sticky.keys.bold === "Ctrl+B", "Resetting shortcuts failed")
+        check(sticky.deleteConfirmed(), "Could not clean up the appearance note")
+    }
+
     // A reminder set on a note shows in the library, can be edited there and
     // fires once when due.
     function assertReminders(library, note) {
@@ -803,6 +825,7 @@ Window {
                 harness.assertTrashAndSelection(harness.library)
                 harness.assertArrangeAndOpenFiles(harness.library)
                 harness.assertBackups(harness.library)
+                harness.assertAppearanceAndShortcuts(harness.library)
                 const extras = harness.library.createNote()
                 harness.assertEditorExtras(extras)
                 harness.check(extras.deleteConfirmed(), "Editor extras note could not be deleted")

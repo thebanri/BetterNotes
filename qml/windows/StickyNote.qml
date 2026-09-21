@@ -181,7 +181,21 @@ ApplicationWindow {
         border.color: noteWindow.activeBorder
     }
 
-    Themes.Theme { id: theme; themeMode: backend.themeMode }
+    // The library passes its appearance and shortcuts, so changes reach open
+    // notes at once; a note on its own reads them from its backend.
+    property string appearanceMode: ""
+    property string appearanceAccent: ""
+    property var keys: ({})
+    KeySequences { id: keySequences }
+    // A shortcut as this desktop writes it, for tooltips.
+    function shortcutText(action, fallback) {
+        return keySequences.display(keys[action] || fallback)
+    }
+    Themes.Theme {
+        id: theme
+        themeMode: noteWindow.appearanceMode || backend.themeMode
+        accentColor: noteWindow.appearanceAccent || backend.accentColor
+    }
     NotesBackend { id: backend; objectName: "notesBackend" }
     Connections {
         target: backend
@@ -1049,72 +1063,78 @@ ApplicationWindow {
     }
 
     Shortcut {
-        sequence: "Ctrl+B"
+        sequence: noteWindow.keys.bold || "Ctrl+B"
         enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
         onActivated: noteWindow.toggleInlineStyle("b")
     }
     Shortcut {
-        sequence: "Ctrl+I"
+        sequence: noteWindow.keys.italic || "Ctrl+I"
         enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
         onActivated: noteWindow.toggleInlineStyle("i")
     }
     Shortcut {
-        sequence: "Ctrl+U"
+        sequence: noteWindow.keys.underline || "Ctrl+U"
         enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
         onActivated: noteWindow.toggleInlineStyle("u")
     }
+    // Ticks the checklist item at the caret.
     Shortcut {
-        sequence: "Ctrl+Shift+9"
+        sequence: noteWindow.keys.toggle_check || "Ctrl+Return"
+        enabled: contentEditor.activeFocus
+        onActivated: noteWindow.toggleCheck(contentEditor.cursorPosition)
+    }
+    Shortcut {
+        sequence: noteWindow.keys.checklist || "Ctrl+Shift+9"
         enabled: contentEditor.activeFocus
         onActivated: noteWindow.toggleList("check")
     }
     Shortcut {
-        sequences: [StandardKey.Find]
+        sequence: noteWindow.keys.find || "Ctrl+F"
         context: Qt.WindowShortcut
         onActivated: noteWindow.openFind(false)
     }
     Shortcut {
-        sequences: ["Ctrl+H", StandardKey.Replace]
+        sequence: noteWindow.keys.replace || "Ctrl+H"
         context: Qt.WindowShortcut
         onActivated: noteWindow.openFind(true)
     }
     Shortcut {
-        sequences: ["Ctrl+Shift+L"]
+        sequence: noteWindow.keys.align_left || "Ctrl+Shift+L"
         enabled: contentEditor.activeFocus
         onActivated: noteWindow.align("left")
     }
     Shortcut {
-        sequences: ["Ctrl+Shift+E"]
+        sequence: noteWindow.keys.align_center || "Ctrl+Shift+E"
         enabled: contentEditor.activeFocus
         onActivated: noteWindow.align("center")
     }
     Shortcut {
-        sequences: ["Ctrl+Shift+R"]
+        sequence: noteWindow.keys.align_right || "Ctrl+Shift+R"
         enabled: contentEditor.activeFocus
         onActivated: noteWindow.align("right")
     }
     Shortcut {
-        sequences: ["Ctrl+Shift+J"]
+        sequence: noteWindow.keys.align_justify || "Ctrl+Shift+J"
         enabled: contentEditor.activeFocus
         onActivated: noteWindow.align("justify")
     }
     Shortcut {
-        sequence: "Ctrl+Shift+8"
+        sequence: noteWindow.keys.bullet_list || "Ctrl+Shift+8"
         enabled: contentEditor.activeFocus
         onActivated: noteWindow.toggleList("bullet")
     }
     Shortcut {
-        sequence: "Ctrl+Shift+7"
+        sequence: noteWindow.keys.numbered_list || "Ctrl+Shift+7"
         enabled: contentEditor.activeFocus
         onActivated: noteWindow.toggleList("number")
     }
     Shortcut {
-        sequence: "Ctrl+1"
+        sequence: noteWindow.keys.heading1 || "Ctrl+1"
         enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
         onActivated: noteWindow.toggleHeading(1)
     }
     Shortcut {
-        sequence: "Ctrl+2"
+        sequence: noteWindow.keys.heading2 || "Ctrl+2"
         enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
         onActivated: noteWindow.toggleHeading(2)
     }
@@ -1470,7 +1490,7 @@ ApplicationWindow {
                     rightPadding: 0
                     Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Heading 1 (Ctrl+1)")
+                    ToolTip.text: qsTr("Heading 1 (%1)").arg(noteWindow.shortcutText("heading1", "Ctrl+1"))
                     onClicked: noteWindow.toggleHeading(1)
                 }
 
@@ -1490,7 +1510,7 @@ ApplicationWindow {
                     rightPadding: 0
                     Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Heading 2 (Ctrl+2)")
+                    ToolTip.text: qsTr("Heading 2 (%1)").arg(noteWindow.shortcutText("heading2", "Ctrl+2"))
                     onClicked: noteWindow.toggleHeading(2)
                 }
 
@@ -1517,7 +1537,7 @@ ApplicationWindow {
                     rightPadding: 0
                     Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Bold (Ctrl+B)")
+                    ToolTip.text: qsTr("Bold (%1)").arg(noteWindow.shortcutText("bold", "Ctrl+B"))
                     onClicked: noteWindow.toggleInlineStyle("b")
                 }
 
@@ -1537,7 +1557,7 @@ ApplicationWindow {
                     rightPadding: 0
                     Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Italic (Ctrl+I)")
+                    ToolTip.text: qsTr("Italic (%1)").arg(noteWindow.shortcutText("italic", "Ctrl+I"))
                     onClicked: noteWindow.toggleInlineStyle("i")
                 }
 
@@ -1557,7 +1577,7 @@ ApplicationWindow {
                     rightPadding: 0
                     Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Underline (Ctrl+U)")
+                    ToolTip.text: qsTr("Underline (%1)").arg(noteWindow.shortcutText("underline", "Ctrl+U"))
                     onClicked: noteWindow.toggleInlineStyle("u")
                 }
 
@@ -1585,7 +1605,7 @@ ApplicationWindow {
                     rightPadding: 0
                     Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Bulleted list (Ctrl+Shift+8) — or type \"- \"")
+                    ToolTip.text: qsTr("Bulleted list (%1) — or type \"- \"").arg(noteWindow.shortcutText("bullet_list", "Ctrl+Shift+8"))
                     onClicked: noteWindow.toggleList("bullet")
                 }
                 UI.StyledButton {
@@ -1603,7 +1623,7 @@ ApplicationWindow {
                     rightPadding: 0
                     Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Numbered list (Ctrl+Shift+7) — or type \"1. \"")
+                    ToolTip.text: qsTr("Numbered list (%1) — or type \"1. \"").arg(noteWindow.shortcutText("numbered_list", "Ctrl+Shift+7"))
                     onClicked: noteWindow.toggleList("number")
                 }
                 UI.StyledButton {
@@ -1621,7 +1641,7 @@ ApplicationWindow {
                     rightPadding: 0
                     Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Checklist (Ctrl+Shift+9) — or type \"[ ] \"")
+                    ToolTip.text: qsTr("Checklist (%1) — or type \"[ ] \"").arg(noteWindow.shortcutText("checklist", "Ctrl+Shift+9"))
                     onClicked: noteWindow.toggleList("check")
                 }
 
@@ -1808,11 +1828,11 @@ ApplicationWindow {
                         }
                         MenuSeparator {}
                         MenuItem {
-                            text: qsTr("Find… (Ctrl+F)")
+                            text: qsTr("Find… (%1)").arg(noteWindow.shortcutText("find", "Ctrl+F"))
                             onTriggered: noteWindow.openFind(false)
                         }
                         MenuItem {
-                            text: qsTr("Replace… (Ctrl+H)")
+                            text: qsTr("Replace… (%1)").arg(noteWindow.shortcutText("replace", "Ctrl+H"))
                             onTriggered: noteWindow.openFind(true)
                         }
                         MenuSeparator {}
@@ -1963,10 +1983,6 @@ ApplicationWindow {
                 Keys.onPressed: function(event) {
                     if (event.matches(StandardKey.Paste)) {
                         event.accepted = noteWindow.pasteImages()
-                    } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                               && event.modifiers === Qt.ControlModifier) {
-                        // Ctrl+Enter ticks the checklist item at the caret.
-                        event.accepted = noteWindow.toggleCheck(contentEditor.cursorPosition)
                     }
                 }
 

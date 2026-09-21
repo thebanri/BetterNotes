@@ -62,6 +62,9 @@ pub mod ffi {
         #[qproperty(QString, theme_mode, READ, NOTIFY = theme_changed, cxx_name = "themeMode")]
         #[qproperty(bool, autostart_enabled, READ, NOTIFY = autostart_changed, cxx_name = "autostartEnabled")]
         #[qproperty(bool, notes_stay_below, READ, NOTIFY = layer_changed, cxx_name = "notesStayBelow")]
+        #[qproperty(QString, accent_color, READ, NOTIFY = theme_changed, cxx_name = "accentColor")]
+        /// Every configurable shortcut as a JSON object {action: sequence}.
+        #[qproperty(QString, shortcuts_json, READ, NOTIFY = theme_changed, cxx_name = "shortcutsJson")]
         type NotesBackend = super::NotesBackendRust;
 
         #[qsignal]
@@ -367,6 +370,17 @@ pub mod ffi {
         fn run_auto_backup(&self);
 
         #[qinvokable]
+        #[cxx_name = "setAccentColor"]
+        fn set_accent_color(self: Pin<&mut Self>, color: QString) -> bool;
+        /// Sets a shortcut; returns "" or why it was refused.
+        #[qinvokable]
+        #[cxx_name = "setShortcut"]
+        fn set_shortcut(self: Pin<&mut Self>, action: QString, sequence: QString) -> QString;
+        #[qinvokable]
+        #[cxx_name = "resetShortcuts"]
+        fn reset_shortcuts(self: Pin<&mut Self>) -> bool;
+
+        #[qinvokable]
         #[cxx_name = "pollIpcAction"]
         fn poll_ipc_action(self: Pin<&mut Self>) -> QString;
     }
@@ -398,6 +412,8 @@ pub struct NotesBackendRust {
     note_tags: QStringList,
     note_colors: QStringList,
     note_reminders: QStringList,
+    accent_color: QString,
+    shortcuts_json: QString,
     reminder_texts: [String; 3],
     trash_ids: QStringList,
     trash_titles: QStringList,
@@ -440,6 +456,8 @@ impl Default for NotesBackendRust {
             note_tags: QStringList::default(),
             note_colors: QStringList::default(),
             note_reminders: QStringList::default(),
+            accent_color: QString::from(betternotes_core::settings::DEFAULT_ACCENT),
+            shortcuts_json: QString::default(),
             reminder_texts: [
                 "Reminder from BetterNotes".into(),
                 "Open note".into(),
@@ -736,6 +754,14 @@ impl ffi::NotesBackend {
                 let theme = session.theme().unwrap_or_default();
                 let autostart_enabled = session.is_autostart_enabled().unwrap_or(false);
                 let notes_stay_below = session.notes_stay_below().unwrap_or(true);
+                let accent_color = session
+                    .store()
+                    .accent_color()
+                    .unwrap_or_else(|_| betternotes_core::settings::DEFAULT_ACCENT.to_string());
+                let shortcuts_json = betternotes_core::keymap::load(session.store())
+                    .ok()
+                    .and_then(|keys| serde_json::to_string(&keys).ok())
+                    .unwrap_or_default();
                 state.titles = titles;
                 state.note_ids = note_ids;
                 state.snippets = snippets;
@@ -763,6 +789,8 @@ impl ffi::NotesBackend {
                 state.theme_mode = QString::from(theme.as_str());
                 state.autostart_enabled = autostart_enabled;
                 state.notes_stay_below = notes_stay_below;
+                state.accent_color = QString::from(&accent_color);
+                state.shortcuts_json = QString::from(&shortcuts_json);
             }
         }
         self.as_mut().list_changed();
@@ -1462,6 +1490,33 @@ impl ffi::NotesBackend {
                 Err(error) => eprintln!("BetterNotes: automatic backup failed: {error}"),
             }
         });
+    }
+
+    pub fn set_accent_color(self: Pin<&mut Self>, color: QString) -> bool {
+        self.perform(false, |session| {
+            session.store().set_accent_color(&color.to_string())
+        })
+    }
+
+    pub fn set_shortcut(mut self: Pin<&mut Self>, action: QString, sequence: QString) -> QString {
+        let mut refused = String::new();
+        self.as_mut().perform(false, |session| {
+            if let Err(error) = betternotes_core::keymap::set(
+                session.store(),
+                &action.to_string(),
+                &sequence.to_string(),
+            ) {
+                refused = error.to_string();
+            }
+            Ok(())
+        });
+        QString::from(&refused)
+    }
+
+    pub fn reset_shortcuts(self: Pin<&mut Self>) -> bool {
+        self.perform(false, |session| {
+            betternotes_core::keymap::reset(session.store())
+        })
     }
 
     pub fn recent_searches(&self) -> QStringList {

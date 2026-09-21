@@ -4,32 +4,50 @@ QtObject {
     id: theme
 
     property string themeMode: "system"
+    // "#rrggbb"; the rest of the accent family is derived from it.
+    property color accentColor: "#6366f1"
     readonly property bool isDark: {
-        if (themeMode === "dark") return true
-        if (themeMode === "light") return false
+        if (themeMode === "dark" || themeMode === "black") return true
+        if (themeMode === "light" || themeMode === "sepia") return false
         return Application.styleHints.colorScheme === Qt.ColorScheme.Dark
+    }
+    readonly property bool isSepia: themeMode === "sepia"
+    readonly property bool isBlack: themeMode === "black"
+
+    // Picks the colour for the current theme: light, dark, and optional
+    // sepia and black variants that otherwise follow light and dark.
+    function pick(light, dark, sepia, black) {
+        if (isSepia && sepia !== undefined) return sepia
+        if (isBlack && black !== undefined) return black
+        return isDark ? dark : light
+    }
+
+    // Mixes a colour toward another by amount (0..1).
+    function mix(from, to, amount) {
+        const a = Qt.color(from), b = Qt.color(to)
+        return Qt.rgba(a.r + (b.r - a.r) * amount, a.g + (b.g - a.g) * amount, a.b + (b.b - a.b) * amount, 1)
     }
 
     // Core Canvas & Surface
-    readonly property color windowBackground: isDark ? "#18181b" : "#f8fafc"
-    readonly property color surface: isDark ? "#27272a" : "#ffffff"
-    readonly property color surfaceElevated: isDark ? "#202024" : "#f8fafc"
-    readonly property color surfaceHover: isDark ? "#3f3f46" : "#f1f5f9"
-    readonly property color surfaceActive: isDark ? "#52525b" : "#e2e8f0"
-    readonly property color border: isDark ? "#3f3f46" : "#e2e8f0"
-    readonly property color borderSubtle: isDark ? "#27272a" : "#f1f5f9"
+    readonly property color windowBackground: pick("#f8fafc", "#18181b", "#f4ecd8", "#000000")
+    readonly property color surface: pick("#ffffff", "#27272a", "#fbf6ea", "#0c0c0e")
+    readonly property color surfaceElevated: pick("#f8fafc", "#202024", "#f6efdd", "#08080a")
+    readonly property color surfaceHover: pick("#f1f5f9", "#3f3f46", "#ece2c9", "#1c1c20")
+    readonly property color surfaceActive: pick("#e2e8f0", "#52525b", "#e2d5b6", "#2a2a30")
+    readonly property color border: pick("#e2e8f0", "#3f3f46", "#e0d3b3", "#232328")
+    readonly property color borderSubtle: pick("#f1f5f9", "#27272a", "#eee4cc", "#141417")
 
     // Typography
-    readonly property color textPrimary: isDark ? "#f4f4f5" : "#0f172a"
-    readonly property color textSecondary: isDark ? "#a1a1aa" : "#64748b"
-    readonly property color textMuted: isDark ? "#71717a" : "#94a3b8"
+    readonly property color textPrimary: pick("#0f172a", "#f4f4f5", "#3b2f22", "#f4f4f5")
+    readonly property color textSecondary: pick("#64748b", "#a1a1aa", "#7a6650", "#a1a1aa")
+    readonly property color textMuted: pick("#94a3b8", "#71717a", "#a08c72", "#71717a")
 
     // Brand / Accent
-    readonly property color accent: "#6366f1"
-    readonly property color accentHover: "#4f46e5"
-    readonly property color accentActive: "#4338ca"
+    readonly property color accent: accentColor
+    readonly property color accentHover: Qt.darker(accentColor, 1.12)
+    readonly property color accentActive: Qt.darker(accentColor, 1.25)
     readonly property color accentText: "#ffffff"
-    readonly property color accentSubtle: isDark ? "#312e81" : "#e0e7ff"
+    readonly property color accentSubtle: isDark ? mix(accentColor, "#000000", 0.62) : mix(accentColor, "#ffffff", 0.85)
     // Links in note text: blue that stays readable on the tinted note colours.
     readonly property color link: isDark ? "#8ab4ff" : "#1d4ed8"
 

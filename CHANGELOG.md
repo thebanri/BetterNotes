@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Reminder notifications have **Open note** and **Snooze 10 min** buttons (snooze is offered for one-time reminders), where the desktop's notification service supports buttons.
 - A note's title bar shows its reminder; click it to edit.
+- Two more themes, **Sepia** (warm paper) and **Black** (pure black for OLED screens), and a choice of accent colour. Theme and accent changes reach open notes at once.
+- Keyboard shortcuts can be changed in Settings: click one, press the new keys. Shortcuts that clash within the library or within a note are refused, and **Reset All** restores the defaults. Tooltips show the current keys.
 - Automatic backups, on by default: daily or weekly, keeping the newest 7 (1–100), in a folder of your choice. Settings also offer **Back Up Now** and show when the last backup was made.
 - **Arrange notes** (sidebar, command palette, tray) lines the open notes up on the library's screen. X11 and KDE Plasma (Wayland) move them; other Wayland desktops do not let apps place windows, so the notes are only brought on screen there.
 - Open text, Markdown and image files with BetterNotes from a file manager's **Open with**, or `betternotes --open FILE...`: each becomes a new note. A running BetterNotes receives them.
