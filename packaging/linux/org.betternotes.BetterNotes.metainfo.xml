@@ -4,18 +4,26 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>BetterNotes</name>
-  <summary>Native, lightweight, Linux-first sticky notes and desktop workspace</summary>
+  <summary>Sticky notes for the Linux desktop</summary>
+
+  <developer id="io.github.thebanri">
+    <name>BetterNotes Contributors</name>
+  </developer>
+
+  <url type="homepage">https://github.com/thebanri/BetterNotes</url>
+  <url type="bugtracker">https://github.com/thebanri/BetterNotes/issues</url>
+  <url type="vcs-browser">https://github.com/thebanri/BetterNotes</url>
 
   <description>
     <p>
-      BetterNotes is a production-quality, open-source, Linux-first sticky notes and desktop workspace application built with Rust and Qt 6. Designed for performance, data privacy, and keyboard-first productivity, it provides independent floating note windows with persistent geometry, full-text search, and desktop integration across modern Linux environments.
+      BetterNotes is an open-source, Linux-first sticky notes and desktop workspace application built with Rust and Qt 6. Designed for performance, data privacy, and keyboard-first productivity, it provides independent floating note windows with persistent geometry, full-text search, and desktop integration across modern Linux environments.
     </p>
     <p>Key Features:</p>
     <ul>
       <li>Native Wayland and X11 support with compositor compatibility policies for KDE Plasma, GNOME, XFCE, Hyprland, and Sway</li>
       <li>Instant offline SQLite storage with FTS5 full-text search and tagging</li>
       <li>Independent, resizable sticky notes with always-on-top window pin support</li>
-      <li>Global Quick Capture scratchpad (Ctrl+Alt+Space) and Command Palette (Ctrl+K)</li>
+      <li>Quick Capture scratchpad and Command Palette (Ctrl+K)</li>
       <li>One-time and recurring desktop reminders (Daily, Weekly, Monthly, Yearly)</li>
       <li>Safe file and image attachments stored isolated in XDG data directories</li>
       <li>Data sovereignty: JSON and Markdown import/export, atomic crash-safe backup and recovery</li>
@@ -32,8 +40,6 @@
 
   <categories>
     <category>Utility</category>
-    <category>Office</category>
-    <category>TextEditor</category>
   </categories>
 
   <keywords>
@@ -45,10 +51,12 @@
     <keyword>todo</keyword>
   </keywords>
 
+  <content_rating type="oars-1.1"/>
+
   <releases>
-    <release version="1.0.0" date="2026-09-20">
+    <release version="0.1.0" date="2026-09-21">
       <description>
-        <p>Initial release of BetterNotes for Linux desktop environments.</p>
+        <p>First packaged preview of BetterNotes for Linux desktop environments.</p>
       </description>
     </release>
   </releases>

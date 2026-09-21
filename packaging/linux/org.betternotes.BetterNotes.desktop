@@ -1,18 +1,16 @@
 [Desktop Entry]
+Type=Application
 Name=BetterNotes
-GenericName=Sticky Notes & Desktop Workspace
-Comment=Native, lightweight, Linux-first sticky notes and desktop workspace
-Exec=betternotes %U
+GenericName=Sticky Notes
+Comment=Sticky notes for the Linux desktop
+Exec=betternotes
 Icon=org.betternotes.BetterNotes
 Terminal=false
-Type=Application
-Categories=Utility;Office;TextEditor;
+Categories=Utility;
 StartupNotify=true
 StartupWMClass=betternotes
-MimeType=text/plain;text/markdown;application/json;
 Keywords=notes;sticky;workspace;markdown;reminders;todo;scratchpad;
-
-Actions=NewNote;QuickCapture;Diagnostics;
+Actions=NewNote;QuickCapture;
 
 [Desktop Action NewNote]
 Name=New Note
@@ -21,7 +19,3 @@ Exec=betternotes new ""
 [Desktop Action QuickCapture]
 Name=Quick Capture
 Exec=betternotes --quick-capture
-
-[Desktop Action Diagnostics]
-Name=Desktop Diagnostics
-Exec=betternotes --diagnostics

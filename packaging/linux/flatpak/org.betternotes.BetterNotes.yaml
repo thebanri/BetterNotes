@@ -1,43 +1,46 @@
-app-id: org.betternotes.BetterNotes
+id: org.betternotes.BetterNotes
 runtime: org.kde.Platform
-runtime-version: '6.7'
+runtime-version: '6.9'
 sdk: org.kde.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
 command: betternotes
 
 finish-args:
-  # Display servers
   - --socket=wayland
   - --socket=fallback-x11
   - --share=ipc
   - --device=dri
-
-  # Desktop notifications & autostart
-  - --socket=session-bus
+  # Desktop notifications for reminders.
   - --talk-name=org.freedesktop.Notifications
-  - --filesystem=xdg-config/autostart:create
-
-  # Storage and private runtime directories
-  - --filesystem=xdg-data/betternotes:create
-  - --filesystem=xdg-config/betternotes:create
-  - --filesystem=xdg-run/betternotes:create
+  # System tray icon (StatusNotifierItem).
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.StatusNotifierItem-*
+  # The app's own bus name (org.betternotes.BetterNotes) needs no permission.
 
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
   env:
     CARGO_HOME: /run/build/betternotes/cargo
+  # Cargo downloads the crates during the build. That is fine for the bundle
+  # the release workflow publishes; Flathub builds offline and would need the
+  # crates listed as sources instead (flatpak-cargo-generator).
+  build-args:
+    - --share=network
 
 modules:
   - name: betternotes
     buildsystem: simple
     build-commands:
-      - cargo --version
-      - cargo build --release --locked
+      - cargo build --release --locked -p betternotes
       - install -Dm755 target/release/betternotes /app/bin/betternotes
       - install -Dm644 packaging/linux/org.betternotes.BetterNotes.desktop /app/share/applications/org.betternotes.BetterNotes.desktop
       - install -Dm644 packaging/linux/org.betternotes.BetterNotes.metainfo.xml /app/share/metainfo/org.betternotes.BetterNotes.metainfo.xml
       - install -Dm644 assets/icons/org.betternotes.BetterNotes.svg /app/share/icons/hicolor/scalable/apps/org.betternotes.BetterNotes.svg
     sources:
       - type: dir
-        path: ../../../
+        path: ../../..
+        skip:
+          - target
+          - dist
+          - betternotes_markdown_export

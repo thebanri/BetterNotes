@@ -16,7 +16,7 @@
 class WindowPlacement : public QObject {
     Q_OBJECT
     QML_ELEMENT
-    Q_CLASSINFO("D-Bus Interface", "io.github.thebanri.BetterNotes.Placement")
+    Q_CLASSINFO("D-Bus Interface", "org.betternotes.BetterNotes.Placement")
     Q_PROPERTY(bool available READ available CONSTANT)
 
   public:

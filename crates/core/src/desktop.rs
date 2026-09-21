@@ -168,14 +168,18 @@ impl DesktopEnvironment {
 fn setup_kde_plasma_taskbar_integration() {
     let script_content = r#"
 // Talks to WindowPlacement in the app (app/src/window_placement.h).
-var PLACEMENT = ["io.github.thebanri.BetterNotes", "/Placement",
-                 "io.github.thebanri.BetterNotes.Placement"];
+var PLACEMENT = ["org.betternotes.BetterNotes", "/Placement",
+                 "org.betternotes.BetterNotes.Placement"];
+
+// X11 reports the binary name as the window class; Wayland reports the app id.
+function isBetterNotes(win) {
+    var ids = ["betternotes", "org.betternotes.betternotes"];
+    return ids.indexOf((win.resourceClass || "").toLowerCase()) !== -1 ||
+        ids.indexOf((win.resourceName || "").toLowerCase()) !== -1;
+}
 
 function isNote(win) {
-    if (!win) return false;
-    var cls = (win.resourceClass || "").toLowerCase();
-    var name = (win.resourceName || "").toLowerCase();
-    if (cls !== "betternotes" && name !== "betternotes") return false;
+    if (!win || !isBetterNotes(win)) return false;
     var cap = win.caption || "";
     return cap.indexOf("All notes") === -1 && cap.indexOf("Quick Capture") === -1;
 }
@@ -221,11 +225,7 @@ function reachable(x, y, width) {
 }
 
 function isLibrary(win) {
-    if (!win) return false;
-    var cls = (win.resourceClass || "").toLowerCase();
-    var name = (win.resourceName || "").toLowerCase();
-    return (cls === "betternotes" || name === "betternotes") &&
-        (win.caption || "").indexOf("All notes") !== -1;
+    return !!win && isBetterNotes(win) && (win.caption || "").indexOf("All notes") !== -1;
 }
 
 // Centres a window on the screen the user is working on, inside the area left

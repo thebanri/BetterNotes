@@ -46,4 +46,7 @@ pub use window_state::WindowState;
 
 /// Development codename, not a final product name.
 pub const APPLICATION_NAME: &str = "BetterNotes";
+/// Reverse-DNS application id: the desktop entry, icon and metainfo names, the
+/// Wayland app_id and the session-bus name prefix.
+pub const APPLICATION_ID: &str = "org.betternotes.BetterNotes";
 pub const APPLICATION_VERSION: &str = env!("CARGO_PKG_VERSION");

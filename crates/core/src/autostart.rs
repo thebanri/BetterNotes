@@ -12,7 +12,7 @@ Name=BetterNotes
 GenericName=Sticky Notes
 Comment=Lightweight desktop sticky notes and workspace
 Exec={EXEC} --background
-Icon=betternotes
+Icon=org.betternotes.BetterNotes
 Terminal=false
 Categories=Utility;
 X-GNOME-Autostart-enabled=true
@@ -25,8 +25,39 @@ pub fn is_autostart_enabled() -> Result<bool> {
 
 pub fn set_autostart(enabled: bool, exec_path: Option<&str>) -> Result<()> {
     let path = paths::autostart_file_path()?;
-    let exec = exec_path.unwrap_or("betternotes");
-    set_autostart_at(&path, enabled, exec)
+    let exec = match exec_path {
+        Some(exec) => exec.to_string(),
+        None => launch_command(std::env::var_os("APPIMAGE").as_deref()),
+    };
+    set_autostart_at(&path, enabled, &exec)
+}
+
+/// The command that starts this installation of the app from a desktop entry.
+///
+/// A distribution package puts `betternotes` on the PATH. An AppImage does
+/// not: it has to be started by its own file, whose path the AppImage runtime
+/// exports as `APPIMAGE`.
+fn launch_command(appimage: Option<&std::ffi::OsStr>) -> String {
+    match appimage.map(|path| path.to_string_lossy()) {
+        Some(path) if !path.is_empty() => desktop_exec_quote(&path),
+        _ => "betternotes".to_string(),
+    }
+}
+
+/// Quotes one argument for a desktop entry's Exec key, as the Desktop Entry
+/// Specification requires for paths containing spaces or reserved characters.
+fn desktop_exec_quote(argument: &str) -> String {
+    let mut quoted = String::with_capacity(argument.len() + 2);
+    quoted.push('"');
+    for character in argument.chars() {
+        if matches!(character, '"' | '`' | '$' | '\\') {
+            quoted.push('\\');
+        }
+        quoted.push(character);
+    }
+    quoted.push('"');
+    // A literal percent sign must be doubled, even inside quotes.
+    quoted.replace('%', "%%")
 }
 
 pub fn is_autostart_enabled_at(path: &Path) -> bool {
@@ -80,5 +111,20 @@ mod tests {
         set_autostart_at(&path, false, "/usr/bin/betternotes").unwrap();
         assert!(!is_autostart_enabled_at(&path));
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn autostart_starts_an_appimage_by_its_own_path() {
+        use std::ffi::OsStr;
+        assert_eq!(launch_command(None), "betternotes");
+        assert_eq!(launch_command(Some(OsStr::new(""))), "betternotes");
+        assert_eq!(
+            launch_command(Some(OsStr::new("/home/me/Apps/BetterNotes.AppImage"))),
+            "\"/home/me/Apps/BetterNotes.AppImage\""
+        );
+        assert_eq!(
+            launch_command(Some(OsStr::new("/home/me/My Apps/$x\"100%.AppImage"))),
+            "\"/home/me/My Apps/\\$x\\\"100%%.AppImage\""
+        );
     }
 }

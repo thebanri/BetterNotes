@@ -28,6 +28,9 @@ fn run() -> Result<i32, &'static str> {
         .set_application_name(&betternotes_core::APPLICATION_NAME.into());
     app.as_mut()
         .set_application_version(&betternotes_core::APPLICATION_VERSION.into());
+    // Names the installed desktop entry. On Wayland this becomes the app_id, so
+    // the desktop shows the right name and icon for the app's windows.
+    QGuiApplication::set_desktop_file_name(&betternotes_core::APPLICATION_ID.into());
 
     // Configure Linux desktop window manager rules/scripts (e.g. skip taskbar on KDE Plasma)
     betternotes_core::DesktopEnvironment::detect().setup_window_manager_integration();

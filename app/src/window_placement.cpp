@@ -4,7 +4,7 @@
 #include <cstdlib>
 
 namespace {
-const auto kService = QStringLiteral("io.github.thebanri.BetterNotes");
+const auto kService = QStringLiteral("org.betternotes.BetterNotes");
 const auto kPath = QStringLiteral("/Placement");
 // Far beyond any real desktop, but keeps nonsense out of the database.
 constexpr int kCoordinateLimit = 100000;

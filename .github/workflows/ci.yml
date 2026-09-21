@@ -2,58 +2,51 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   test:
-    name: Build & Test (Linux)
+    name: Build & test (Debian 13, Qt 6.8)
     runs-on: ubuntu-24.04
-
+    # The app needs Qt 6.5 or newer; Ubuntu 24.04 ships 6.4.
+    container: debian:trixie
+    env:
+      QMAKE: /usr/lib/qt6/bin/qmake
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install system dependencies
+      - name: Install build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            pkg-config \
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential pkg-config curl ca-certificates git \
             libsqlite3-dev \
-            qt6-base-dev \
-            qt6-base-dev-tools \
-            qt6-declarative-dev \
-            qt6-declarative-dev-tools \
-            libqt6core6 \
-            libqt6gui6 \
-            libqt6qml6 \
-            libqt6quick6 \
-            qml6-module-qtquick-controls \
-            qml6-module-qtquick-layouts \
-            qml6-module-qtquick-templates \
-            qml6-module-qt-labs-platform
+            qt6-base-dev qt6-base-dev-tools \
+            qt6-declarative-dev qt6-declarative-dev-tools \
+            qt6-qpa-plugins \
+            qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+            qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates qml6-module-qtquick-controls \
+            qml6-module-qtquick-dialogs qml6-module-qtquick-shapes \
+            qml6-module-qt-labs-platform qml6-module-qt-labs-folderlistmodel \
+            qml6-module-qttest
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Verify formatting
+      - name: Check formatting
         run: cargo fmt --check
 
-      - name: Run Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
-      - name: Run tests
-        env:
-          QT_QPA_PLATFORM: offscreen
-          QT_QUICK_BACKEND: software
+      - name: Tests
         run: cargo test --locked
 
-      - name: Build release binary
+      - name: Release build
         run: cargo build --release --locked

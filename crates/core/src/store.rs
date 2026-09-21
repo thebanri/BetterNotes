@@ -335,7 +335,7 @@ impl NoteStore {
     pub fn notes_stay_below(&self) -> Result<bool> {
         Ok(self
             .get_setting(NOTES_STAY_BELOW_KEY)?
-            .map_or(true, |value| value != "false"))
+            .is_none_or(|value| value != "false"))
     }
 
     pub fn set_notes_stay_below(&self, enabled: bool) -> Result<()> {

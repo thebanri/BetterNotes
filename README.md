@@ -1,6 +1,6 @@
 # BetterNotes
 
-Linux-first desktop notes application — **v1.0.0 (Linux Release)**.
+Linux-first desktop notes application.
 BetterNotes is an open-source, native, lightweight, Linux-first sticky notes and desktop workspace application built with Rust and Qt 6/QML.
 
 Create, edit and organize notes in independent floating windows, with autosave, SQLite persistence, saved window geometry, light/dark/system themes, FTS5 full-text search, system tray, global quick capture, desktop notifications, Wayland/X11 compositor compatibility, always-on-top window pinning, one-time and recurring reminders, safe file attachments, JSON/Markdown import/export, crash-safe atomic backup & restore, unified CLI, and single-instance local IPC.
@@ -43,37 +43,41 @@ qml/components/         Reusable UI components (buttons, badges, command palette
 qml/windows/Main.qml   Notes library, system tray, and window ownership
 qml/windows/StickyNote.qml Independent sticky note editor
 qml/windows/QuickCapture.qml Floating scratchpad window
-packaging/linux/        Flatpak, AppImage, and Arch PKGBUILD recipes
+packaging/linux/        .deb, .rpm, Arch, AppImage and Flatpak recipes
 ```
 
 ---
 
 ## Installation & Packaging
 
-### 1. Flatpak (Recommended)
+Every tagged release on GitHub carries ready-made packages, built and
+install-tested by `.github/workflows/packages.yml`:
+
+| Format | For | Install |
+|---|---|---|
+| `.deb` | Debian 13+, Ubuntu 25.04+ | `sudo apt install ./betternotes_<version>_amd64.deb` |
+| `.rpm` | Fedora | `sudo dnf install ./betternotes-<version>-1.fc*.x86_64.rpm` |
+| `.pkg.tar.zst` | Arch Linux, CachyOS, Manjaro | `sudo pacman -U betternotes-<version>-1-x86_64.pkg.tar.zst` |
+| AppImage | most distributions from 2022 on | `chmod +x BetterNotes-*.AppImage && ./BetterNotes-*.AppImage` |
+| Flatpak | any distribution with Flatpak | `flatpak install --user BetterNotes-*.flatpak` |
+
+The app needs Qt 6.5 or newer, which is why the `.deb` targets Debian 13 and
+Ubuntu 25.04 onwards. The AppImage and Flatpak bring their own Qt.
+
+To build a package yourself, run the matching script on that distribution;
+each writes to `dist/`. See [packaging/linux/README.md](packaging/linux/README.md)
+for dependencies and per-format notes.
+
 ```bash
-flatpak-builder --user --install --force-clean build-dir packaging/linux/flatpak/org.betternotes.BetterNotes.yaml
-flatpak run org.betternotes.BetterNotes
+packaging/linux/deb/build-deb.sh              # Debian / Ubuntu
+packaging/linux/rpm/build-rpm.sh              # Fedora
+packaging/linux/arch/build-arch.sh            # Arch Linux
+packaging/linux/appimage/build-appimage.sh    # AppImage
 ```
 
-### 2. AppImage
+### Build from Source
 ```bash
-./packaging/linux/appimage/build-appimage.sh
-./target/BetterNotes-x86_64.AppImage
-```
-
-### 3. Arch Linux / CachyOS (PKGBUILD)
-```bash
-cd packaging/linux/arch
-makepkg -si
-```
-
-### 4. Build from Source
-```bash
-# Build release binary
 cargo build --release --locked
-
-# Run BetterNotes
 ./target/release/betternotes
 ```
 
