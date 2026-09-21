@@ -21,6 +21,9 @@ use std::{
 const MARKER: &str = "X-BetterNotes-Installed=true";
 
 const SVG_ICON: &[u8] = include_bytes!("../../../assets/icons/org.betternotes.BetterNotes.svg");
+/// The bundled icon notifications show when no theme provides one.
+pub(crate) const NOTIFICATION_ICON: &[u8] =
+    include_bytes!("../../../assets/icons/hicolor/org.betternotes.BetterNotes-128.png");
 const PNG_ICONS: [(u32, &[u8]); 8] = [
     (
         16,

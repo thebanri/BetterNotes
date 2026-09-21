@@ -25,6 +25,8 @@ fn main() {
     std::env::set_var("QT_QPA_PLATFORM", "offscreen");
     std::env::set_var("QT_QUICK_BACKEND", "software");
     std::env::set_var("QT_FORCE_STDERR_LOGGING", "1");
+    // Notifications go to `true` instead of the desktop.
+    std::env::set_var("BETTERNOTES_NOTIFY_SEND", "true");
     let directory = tempfile::tempdir().unwrap();
     std::env::set_var("XDG_DATA_HOME", directory.path());
     std::env::set_var("XDG_CONFIG_HOME", directory.path().join("config"));

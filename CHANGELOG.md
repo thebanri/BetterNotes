@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - After `betternotes install` (and the curl installer) the applications menu shows the BetterNotes icon right away. Installing and uninstalling now tell the desktop that icons and menu entries changed; KDE Plasma had kept showing a blank icon from its cache.
+- Desktop notifications show the BetterNotes icon, also from an AppImage or a build that is not installed, and are linked to the app's desktop entry. A note title starting with `-` is no longer read as a `notify-send` option.
+- Running the test suites no longer shows notifications on the desktop.
 
 ## [0.1.2] - 2026-09-21
 

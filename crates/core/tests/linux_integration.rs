@@ -45,7 +45,9 @@ fn autostart_desktop_file_lifecycle() {
 
 #[test]
 fn notifications_and_shortcuts_graceful_handling() {
-    // NotificationService should never panic, even if no daemon is listening
+    // NotificationService should never panic, even if no daemon is listening.
+    // `true` stands in for notify-send so the test shows nothing on screen.
+    std::env::set_var("BETTERNOTES_NOTIFY_SEND", "true");
     let res = NotificationService::notify("Test Title", "Test Body");
     assert!(res.is_ok());
 
