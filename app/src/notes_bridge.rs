@@ -48,6 +48,7 @@ pub mod ffi {
         #[qproperty(QString, window_error, READ, NOTIFY = status_changed, cxx_name = "windowError")]
         #[qproperty(QString, theme_mode, READ, NOTIFY = theme_changed, cxx_name = "themeMode")]
         #[qproperty(bool, autostart_enabled, READ, NOTIFY = autostart_changed, cxx_name = "autostartEnabled")]
+        #[qproperty(bool, notes_stay_below, READ, NOTIFY = layer_changed, cxx_name = "notesStayBelow")]
         type NotesBackend = super::NotesBackendRust;
 
         #[qsignal]
@@ -62,6 +63,8 @@ pub mod ffi {
         fn search_changed(self: Pin<&mut Self>);
         #[qsignal]
         fn autostart_changed(self: Pin<&mut Self>);
+        #[qsignal]
+        fn layer_changed(self: Pin<&mut Self>);
 
         #[qinvokable]
         fn initialize(self: Pin<&mut Self>) -> bool;
@@ -127,6 +130,9 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "setThemeMode"]
         fn set_theme_mode(self: Pin<&mut Self>, mode: QString) -> bool;
+        #[qinvokable]
+        #[cxx_name = "setNotesStayBelow"]
+        fn set_notes_stay_below(self: Pin<&mut Self>, enabled: bool) -> bool;
         #[qinvokable]
         fn search(self: Pin<&mut Self>, query: QString);
         #[qinvokable]
@@ -245,6 +251,7 @@ pub struct NotesBackendRust {
     window_state: WindowState,
     theme_mode: QString,
     autostart_enabled: bool,
+    notes_stay_below: bool,
 }
 
 impl Default for NotesBackendRust {
@@ -279,6 +286,7 @@ impl Default for NotesBackendRust {
             window_state: WindowState::default(),
             theme_mode: QString::from("system"),
             autostart_enabled: false,
+            notes_stay_below: true,
         }
     }
 }
@@ -499,6 +507,7 @@ impl ffi::NotesBackend {
                 let dirty = session.dirty();
                 let theme = session.theme().unwrap_or_default();
                 let autostart_enabled = session.is_autostart_enabled().unwrap_or(false);
+                let notes_stay_below = session.notes_stay_below().unwrap_or(true);
                 state.titles = titles;
                 state.note_ids = note_ids;
                 state.snippets = snippets;
@@ -519,6 +528,7 @@ impl ffi::NotesBackend {
                 state.dirty = dirty;
                 state.theme_mode = QString::from(theme.as_str());
                 state.autostart_enabled = autostart_enabled;
+                state.notes_stay_below = notes_stay_below;
             }
         }
         self.as_mut().list_changed();
@@ -527,6 +537,7 @@ impl ffi::NotesBackend {
         }
         self.as_mut().theme_changed();
         self.as_mut().autostart_changed();
+        self.as_mut().layer_changed();
         self.status_changed();
         success
     }
@@ -589,6 +600,23 @@ impl ffi::NotesBackend {
         if result.is_ok() {
             self.as_mut().rust_mut().theme_mode = mode;
             self.as_mut().theme_changed();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn set_notes_stay_below(mut self: Pin<&mut Self>, enabled: bool) -> bool {
+        let result = self
+            .as_mut()
+            .rust_mut()
+            .session
+            .as_mut()
+            .ok_or(Error::NoSelection)
+            .and_then(|session| session.set_notes_stay_below(enabled));
+        if result.is_ok() {
+            self.as_mut().rust_mut().notes_stay_below = enabled;
+            self.as_mut().layer_changed();
             true
         } else {
             false

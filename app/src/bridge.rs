@@ -39,6 +39,10 @@ pub mod ffi {
         fn display_server(&self) -> QString;
 
         #[qinvokable]
+        #[cxx_name = "supportsNoteLayers"]
+        fn supports_note_layers(&self) -> bool;
+
+        #[qinvokable]
         #[cxx_name = "isTilingCompositor"]
         fn is_tiling_compositor(&self) -> bool;
 
@@ -88,6 +92,11 @@ impl ffi::ApplicationInfo {
             .name()
             .to_string()
             .into()
+    }
+
+    pub fn supports_note_layers(&self) -> bool {
+        betternotes_core::DesktopEnvironment::detect()
+            .supports_note_layers(betternotes_core::DisplayServer::detect())
     }
 
     pub fn is_tiling_compositor(&self) -> bool {

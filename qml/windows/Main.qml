@@ -31,6 +31,7 @@ ApplicationWindow {
     Component {
         id: stickyComponent
         StickyNote {
+            stayBelow: backend.notesStayBelow
             onSaved: backend.reload()
             onDismissed: function(id) { window.releaseWindow(id) }
             onQuitRequested: window.quitApplication()
@@ -249,6 +250,18 @@ ApplicationWindow {
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Command palette (Ctrl+K)")
                 onClicked: commandPalette.open()
+            }
+
+            UI.StyledButton {
+                iconName: "settings"
+                theme: window.theme
+                variant: settingsPopup.visible ? "accent" : "ghost"
+                implicitWidth: 32
+                implicitHeight: 32
+                padding: 0
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Settings")
+                onClicked: settingsPopup.open()
             }
 
             UI.StyledButton {
@@ -582,6 +595,96 @@ ApplicationWindow {
         }
     }
 
+
+    // One labelled switch in the settings popup.
+    component SettingRow: RowLayout {
+        id: row
+        property string title: ""
+        property string detail: ""
+        property alias checked: toggle.checked
+        signal toggled(bool checked)
+        spacing: 12
+        Layout.fillWidth: true
+
+        ColumnLayout {
+            spacing: 2
+            Layout.fillWidth: true
+            Label {
+                text: row.title
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                color: row.enabled ? theme.textPrimary : theme.textMuted
+                Layout.fillWidth: true
+            }
+            Label {
+                text: row.detail
+                visible: text.length > 0
+                wrapMode: Text.WordWrap
+                font.pixelSize: 11
+                color: theme.textSecondary
+                Layout.fillWidth: true
+            }
+        }
+        Switch {
+            id: toggle
+            Accessible.name: row.title
+            Layout.alignment: Qt.AlignVCenter
+            onToggled: row.toggled(checked)
+        }
+    }
+
+    Popup {
+        id: settingsPopup
+        parent: Overlay.overlay
+        x: Math.round((window.width - width) / 2)
+        y: 64
+        width: Math.min(440, window.width - 32)
+        padding: 18
+        modal: true
+        focus: true
+        background: Rectangle {
+            radius: theme.radiusLg
+            color: theme.surface
+            border.width: 1
+            border.color: theme.border
+        }
+
+        readonly property bool layersSupported: applicationInfo.supportsNoteLayers()
+
+        contentItem: ColumnLayout {
+            spacing: 16
+
+            Label {
+                text: qsTr("Settings")
+                font.pixelSize: 15
+                font.weight: Font.DemiBold
+                color: theme.textPrimary
+            }
+
+            SettingRow {
+                id: stayBelowRow
+                title: qsTr("Keep notes on the desktop")
+                detail: settingsPopup.layersSupported
+                    ? qsTr("Unpinned notes stay beneath other windows. Pinned notes always stay on top.")
+                    : qsTr("Not available on this desktop: on Wayland only KDE Plasma lets notes stay beneath other windows.")
+                enabled: settingsPopup.layersSupported && backend.ready
+                checked: backend.notesStayBelow
+                onToggled: function(checked) {
+                    if (!backend.setNotesStayBelow(checked)) stayBelowRow.checked = backend.notesStayBelow
+                }
+            }
+
+            SettingRow {
+                id: autostartRow
+                title: qsTr("Start at login")
+                detail: qsTr("Open BetterNotes in the background when you sign in.")
+                checked: backend.autostartEnabled
+                onToggled: function(checked) {
+                    if (!backend.setAutostart(checked)) autostartRow.checked = backend.autostartEnabled
+                }
+            }
+        }
+    }
 
     UI.CommandPalette {
         id: commandPalette

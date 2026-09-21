@@ -92,6 +92,14 @@ impl NotesSession {
         self.store.set_theme(theme)
     }
 
+    pub fn notes_stay_below(&self) -> Result<bool> {
+        self.store.notes_stay_below()
+    }
+
+    pub fn set_notes_stay_below(&mut self, enabled: bool) -> Result<()> {
+        self.store.set_notes_stay_below(enabled)
+    }
+
     pub fn is_autostart_enabled(&self) -> Result<bool> {
         crate::autostart::is_autostart_enabled()
     }

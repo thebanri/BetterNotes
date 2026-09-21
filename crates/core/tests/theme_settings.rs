@@ -63,6 +63,24 @@ fn session_manages_theme_preference() {
 }
 
 #[test]
+fn session_manages_notes_stay_below_preference() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("notes.sqlite3");
+    let mut session = NotesSession::open(&path).unwrap();
+
+    // Sticky notes sit at desktop level unless the user opts out.
+    assert!(session.notes_stay_below().unwrap());
+    session.set_notes_stay_below(false).unwrap();
+    assert!(!session.notes_stay_below().unwrap());
+
+    drop(session);
+    let mut session = NotesSession::open(&path).unwrap();
+    assert!(!session.notes_stay_below().unwrap());
+    session.set_notes_stay_below(true).unwrap();
+    assert!(session.notes_stay_below().unwrap());
+}
+
+#[test]
 fn theme_preference_parsing_and_formatting() {
     assert_eq!(
         "light".parse::<ThemePreference>().unwrap(),

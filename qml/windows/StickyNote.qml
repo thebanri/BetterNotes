@@ -33,6 +33,13 @@ ApplicationWindow {
     signal newNoteRequested()
 
     property bool alwaysOnTop: false
+    // Library-wide preference: unpinned notes stay beneath ordinary windows.
+    property bool stayBelow: true
+    // Invisible caption suffix naming this note's layer. Wayland gives a client
+    // no way to set its own layer, so on KDE Plasma the desktop integration's
+    // KWin script reads it from the caption and applies keep-below/keep-above.
+    // Must match the markers in crates/core/src/desktop.rs.
+    readonly property string layerMarker: alwaysOnTop ? "\u2064" : (stayBelow ? "\u2063" : "")
     property string noteTint: "yellow"
     property string noteFontFamily: "default"
     property int noteFontSize: 13
@@ -139,9 +146,11 @@ ApplicationWindow {
     readonly property color activeBorder: tintPalettes[noteTint] ? tintPalettes[noteTint].border : (noteTint.startsWith("#") ? computeCustomTint(noteTint, "border") : theme.noteBorder)
 
     // QObject ownership belongs to the library; these remain independent windows.
-    // By default, sticky notes stay on bottom (desktop level) unless toggled to always-on-top.
-    // Both stacking hints are X11-only: Wayland has no protocol for a client to
-    // place itself in a layer, so on Wayland a note is an ordinary window.
+    // Unpinned notes stay on bottom (desktop level) while stayBelow is set;
+    // pinned notes stay on top. The window hints below only work on X11:
+    // Wayland has no protocol for a client to place itself in a layer. There,
+    // KDE Plasma applies the layer from layerMarker; other Wayland desktops
+    // treat a note as an ordinary window.
     //
     // Deliberately not Qt.Tool. On X11 Qt makes a tool window without a
     // transient parent transient for the whole application group
@@ -150,8 +159,9 @@ ApplicationWindow {
     // straight over other applications, keep-below or not. Hiding notes from
     // the taskbar and switcher is done by the desktop integration instead.
     transientParent: null
-    flags: Qt.Window | Qt.FramelessWindowHint | (alwaysOnTop ? Qt.WindowStaysOnTopHint : Qt.WindowStaysOnBottomHint)
-    title: (titleEditor.text.trim().length ? titleEditor.text : qsTr("Untitled note")) + " — BetterNotes"
+    flags: Qt.Window | Qt.FramelessWindowHint
+        | (alwaysOnTop ? Qt.WindowStaysOnTopHint : (stayBelow ? Qt.WindowStaysOnBottomHint : 0))
+    title: (titleEditor.text.trim().length ? titleEditor.text : qsTr("Untitled note")) + " — BetterNotes" + layerMarker
     width: 380
     height: 360
     minimumWidth: 240
@@ -229,7 +239,7 @@ ApplicationWindow {
     // Wayland the raise() half is the only part that takes effect.
     function restoreStacking() {
         if (alwaysOnTop) raise()
-        else lower()
+        else if (stayBelow) lower()
     }
 
     function recover(fallbackScreen) {

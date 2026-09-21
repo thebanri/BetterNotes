@@ -62,6 +62,18 @@ pub enum DesktopEnvironment {
 }
 
 impl DesktopEnvironment {
+    /// Whether sticky notes can be kept beneath ordinary windows here. X11
+    /// window managers honour the keep-below hint directly. Wayland has no
+    /// protocol for it, so only KDE Plasma works, through the KWin script in
+    /// [`Self::setup_window_manager_integration`].
+    pub fn supports_note_layers(&self, display: DisplayServer) -> bool {
+        match display {
+            DisplayServer::X11 => true,
+            DisplayServer::Wayland => matches!(self, Self::KdePlasma),
+            DisplayServer::Offscreen | DisplayServer::Unknown => false,
+        }
+    }
+
     pub fn detect() -> Self {
         if env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some() {
             return Self::Hyprland;
@@ -139,7 +151,8 @@ impl DesktopEnvironment {
     }
 
     /// Automatically registers window manager rules and scripts to ensure sticky notes
-    /// do not appear as windows in the taskbar or switcher.
+    /// do not appear as windows in the taskbar or switcher, and sit in the layer
+    /// their caption asks for.
     pub fn setup_window_manager_integration(&self) {
         if matches!(self, Self::KdePlasma) {
             setup_kde_plasma_taskbar_integration();
@@ -147,6 +160,11 @@ impl DesktopEnvironment {
     }
 }
 
+// Layer markers: a sticky note appends an invisible character to its window
+// caption -- U+2063 for keep-below, U+2064 for keep-above (pinned). Wayland
+// gives a client no way to choose its own layer, and the caption is the only
+// per-window value a KWin script can read, so the note states its layer there.
+// Must match `layerMarker` in StickyNote.qml.
 fn setup_kde_plasma_taskbar_integration() {
     let script_content = r#"
 function checkAndHide(win) {
@@ -159,6 +177,13 @@ function checkAndHide(win) {
         win.skipTaskbar = true;
         win.skipPager = true;
         win.skipSwitcher = true;
+        // The note names its layer with an invisible caption marker; no marker
+        // means an ordinary window. Re-evaluated on every caption change, so
+        // pinning or the global setting takes effect immediately.
+        var below = cap.indexOf("\u2063") !== -1;
+        var above = cap.indexOf("\u2064") !== -1;
+        if (win.keepBelow !== below) win.keepBelow = below;
+        if (win.keepAbove !== above) win.keepAbove = above;
     }
 }
 
@@ -185,6 +210,21 @@ for (var i = 0; i < existing.length; i++) {
     ) {
         let script_path = data_dir.join("kwin_skip_taskbar.js");
         if std::fs::write(&script_path, script_content).is_ok() {
+            // KWin keeps a loaded script until it is unloaded, and loading the
+            // same path again returns the old copy. Unload first so a newer
+            // version of this script replaces it.
+            let _ = std::process::Command::new("busctl")
+                .args([
+                    "--user",
+                    "call",
+                    "org.kde.KWin",
+                    "/Scripting",
+                    "org.kde.kwin.Scripting",
+                    "unloadScript",
+                    "s",
+                    script_path.to_str().unwrap_or_default(),
+                ])
+                .output();
             if let Ok(out) = std::process::Command::new("busctl")
                 .args([
                     "--user",
@@ -362,6 +402,15 @@ impl DesktopReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn note_layers_need_x11_or_kwin_on_wayland() {
+        assert!(DesktopEnvironment::Gnome.supports_note_layers(DisplayServer::X11));
+        assert!(DesktopEnvironment::KdePlasma.supports_note_layers(DisplayServer::Wayland));
+        assert!(!DesktopEnvironment::Gnome.supports_note_layers(DisplayServer::Wayland));
+        assert!(!DesktopEnvironment::Sway.supports_note_layers(DisplayServer::Wayland));
+        assert!(!DesktopEnvironment::KdePlasma.supports_note_layers(DisplayServer::Unknown));
+    }
 
     #[test]
     fn display_server_and_desktop_detection_does_not_panic() {

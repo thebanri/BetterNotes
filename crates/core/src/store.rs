@@ -15,6 +15,7 @@ const SEARCH_ORG_SCHEMA: &str =
 const PRODUCTIVITY_SCHEMA: &str = include_str!("../../../migrations/0005_productivity.sql");
 /// Preview length for list rows and search results, in characters.
 const PREVIEW_CHARS: usize = 140;
+const NOTES_STAY_BELOW_KEY: &str = "notes_stay_below";
 
 pub struct NoteStore {
     connection: Connection,
@@ -309,6 +310,18 @@ impl NoteStore {
 
     pub fn set_theme(&self, theme: ThemePreference) -> Result<()> {
         self.set_setting("theme", theme.as_str())
+    }
+
+    /// Whether unpinned sticky notes stay beneath ordinary windows. On by
+    /// default: sticky notes behave like part of the desktop unless pinned.
+    pub fn notes_stay_below(&self) -> Result<bool> {
+        Ok(self
+            .get_setting(NOTES_STAY_BELOW_KEY)?
+            .map_or(true, |value| value != "false"))
+    }
+
+    pub fn set_notes_stay_below(&self, enabled: bool) -> Result<()> {
+        self.set_setting(NOTES_STAY_BELOW_KEY, if enabled { "true" } else { "false" })
     }
 
     pub fn raw_connection(&self) -> &Connection {
