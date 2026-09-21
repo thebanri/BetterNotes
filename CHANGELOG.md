@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - A code block started under an image, or made with the code button over a selection that includes an image, no longer takes the image along: images now sit in a paragraph of their own, and images in older notes are separated when the note opens.
 - Checklist items have proper checkboxes that are easy to click, and ticked items are struck through.
+- Turning a ticked checklist item into code removes its checkbox and strike-through.
 - Selecting everything and deleting it no longer leaves an empty bullet, checkbox or code block behind.
 - Search matches the text of notes instead of their HTML: searching for words like "indent" no longer finds every formatted note, and result previews no longer show markup such as `text-indent:0px;">`. Existing notes are reindexed on first start.
 - Export no longer writes into the directory BetterNotes was started from.

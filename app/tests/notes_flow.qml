@@ -364,6 +364,16 @@ Window {
         for (let i = 0; i < body.children.length; ++i) if (body.children[i].objectName === "checkBox") rects.push(body.children[i].x)
         check(rects.length === 4 && Math.max.apply(null, rects) > Math.min.apply(null, rects), "Sub-item boxes are not indented: " + rects)
 
+        // A ticked item turned into code loses its box and strike-through.
+        body.text = ""
+        type("[ ] done item")
+        input.keyClick(Qt.Key_Return, Qt.ControlModifier)
+        check(body.text.indexOf("line-through") >= 0, "The item was not ticked")
+        window.toggleCode()
+        check(formatter.codeActive(body.textDocument, 0, 0), "The item did not become code")
+        check(formatter.checkState(body.textDocument, 0) === 0 && body.text.indexOf("line-through") < 0, "Code kept the checklist box or strike-through")
+        window.toggleCode()
+
         // Select all and delete leaves a plain, empty note behind.
         body.forceActiveFocus()
         body.selectAll()

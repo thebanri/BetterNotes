@@ -332,6 +332,8 @@ void setCode(const QTextBlock &block, bool code) {
             continue;
         if (code) {
             format.merge(codeFont());
+            // Code is not a ticked checklist item.
+            format.setFontStrikeOut(false);
         } else {
             format.clearProperty(QTextFormat::FontFamilies);
             format.clearProperty(QTextFormat::FontFixedPitch);
@@ -348,6 +350,7 @@ void setCode(const QTextBlock &block, bool code) {
     auto charFormat = block.charFormat();
     if (code) {
         charFormat.merge(codeFont());
+        charFormat.setFontStrikeOut(false);
     } else {
         charFormat.clearProperty(QTextFormat::FontFamilies);
         charFormat.clearProperty(QTextFormat::FontFixedPitch);
@@ -718,15 +721,16 @@ void TextFormatter::toggleCode(QQuickTextDocument *quickDocument, int start,
     for (const auto &block : blocks) {
         if (isImageOnly(block))
             continue;
-        // Code is not a list item; take it out of any list first.
+        // Code is not a list or checklist item; take it out of any list
+        // first, checkbox included.
         if (code) {
-            if (auto *list = block.textList()) {
+            if (auto *list = block.textList())
                 list->remove(block);
-                QTextCursor paragraph(block);
-                auto format = paragraph.blockFormat();
-                format.setIndent(0);
-                paragraph.setBlockFormat(format);
-            }
+            QTextCursor paragraph(block);
+            auto format = paragraph.blockFormat();
+            format.setIndent(0);
+            format.setMarker(QTextBlockFormat::MarkerType::NoMarker);
+            paragraph.setBlockFormat(format);
         }
         setCode(block, code);
     }
