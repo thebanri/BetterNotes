@@ -23,6 +23,7 @@ ApplicationWindow {
     property alias libraryBackend: backend
     property alias theme: theme
     property alias reminderEditorItem: reminderEditor
+    property alias deleteForeverDialog: deleteDialog
     property var noteWindows: ({})
     property string windowError: ""
     property string filterTab: "all"
@@ -31,6 +32,13 @@ ApplicationWindow {
     // that shows which notes are open also reads this counter.
     property int windowsRevision: 0
     property string searchFilter: ""
+    // Multi-selection in the library: selected note ids, and the card a
+    // Shift+click range starts from. selectionRevision makes bindings see
+    // changes to the plain object.
+    property var selectedIds: ({})
+    property int selectionRevision: 0
+    property string selectionAnchor: ""
+    readonly property int selectionCount: selectionRevision >= 0 ? Object.keys(selectedIds).length : 0
     property var quickCaptureWindow: null
 
     Themes.Theme { id: theme; themeMode: backend.themeMode }
@@ -251,8 +259,20 @@ ApplicationWindow {
                 archived: known && backend.archivedStates[i] === "true",
                 priority: known ? parseInt(backend.priorities[i] || "0") : 0,
                 tint: known ? (backend.noteColors[i] || "yellow") : "yellow",
-                reminder: known ? (backend.noteReminders[i] || "") : ""
+                reminder: known ? (backend.noteReminders[i] || "") : "",
+                trashed: false,
+                deletedAt: 0
             }
+        }
+        if (filterTab === "trash" && searchFilter.length === 0) {
+            for (let t = 0; t < backend.trashIds.length; ++t) {
+                rows.push({
+                    id: backend.trashIds[t], title: backend.trashTitles[t], snippet: backend.trashSnippets[t] || "",
+                    tags: [], pinned: false, archived: false, priority: 0, tint: "yellow", reminder: "",
+                    trashed: true, deletedAt: parseFloat(backend.trashDeletedAt[t] || "0")
+                })
+            }
+            return rows
         }
         if (searchFilter.length > 0) {
             for (let k = 0; k < backend.searchResultIds.length; ++k) {
@@ -277,10 +297,12 @@ ApplicationWindow {
         if (filterTab === "pinned") return qsTr("Pinned")
         if (filterTab === "archived") return qsTr("Archive")
         if (filterTab === "reminders") return qsTr("Reminders")
+        if (filterTab === "trash") return qsTr("Trash")
         return qsTr("All notes")
     }
 
     function showSection(tab, tag) {
+        clearSelection()
         filterTab = tab
         tagFilter = tag || ""
         searchField.text = ""
@@ -331,9 +353,82 @@ ApplicationWindow {
         } else if (action === "reminder") {
             editReminder(id)
         } else if (action === "delete") {
-            deleteDialog.noteId = id
+            // The trash keeps it for 30 days, so this needs no confirmation.
+            if (sticky) sticky.deleteConfirmed()
+            else backend.deleteNoteById(id)
+            showToast(qsTr("Moved to the trash"))
+        } else if (action === "restore-trash") {
+            if (backend.restoreNote(id)) showToast(qsTr("Restored"))
+        } else if (action === "delete-forever") {
+            deleteDialog.noteIds = [id]
             deleteDialog.open()
         }
+    }
+
+    // ---- Selection ----------------------------------------------------------
+
+    function toggleSelected(id, range) {
+        const ids = visibleNotes.map(function(note) { return note.id })
+        if (range && selectionAnchor.length && ids.indexOf(selectionAnchor) >= 0) {
+            const from = ids.indexOf(selectionAnchor)
+            const to = ids.indexOf(id)
+            for (let i = Math.min(from, to); i <= Math.max(from, to); ++i) selectedIds[ids[i]] = true
+        } else if (selectedIds[id]) {
+            delete selectedIds[id]
+        } else {
+            selectedIds[id] = true
+        }
+        selectionAnchor = id
+        selectionRevision += 1
+    }
+
+    function selectAllVisible() {
+        for (const note of visibleNotes) selectedIds[note.id] = true
+        selectionRevision += 1
+    }
+
+    function clearSelection() {
+        selectedIds = ({})
+        selectionAnchor = ""
+        selectionRevision += 1
+    }
+
+    // Runs a card action on every selected note, then clears the selection.
+    function bulkAction(action) {
+        const ids = Object.keys(selectedIds)
+        clearSelection()
+        if (action === "delete-forever") {
+            deleteDialog.noteIds = ids
+            deleteDialog.open()
+            return
+        }
+        for (const id of ids) {
+            const sticky = noteWindows[id]
+            if (action === "delete") {
+                if (sticky) sticky.deleteConfirmed()
+                else backend.deleteNoteById(id)
+            } else if (action === "restore-trash") {
+                backend.restoreNote(id)
+            } else {
+                noteAction(id, action)
+            }
+        }
+        if (action === "delete") showToast(qsTr("Moved %n note(s) to the trash", "", ids.length))
+    }
+
+    function bulkTag(tag) {
+        const ids = Object.keys(selectedIds)
+        for (const id of ids) {
+            const sticky = noteWindows[id]
+            if (sticky) {
+                sticky.addTags(tag)
+                sticky.flush()
+            } else {
+                backend.addNoteTag(id, tag)
+            }
+        }
+        clearSelection()
+        showToast(qsTr("Tagged %n note(s)", "", ids.length))
     }
 
     // Reminders live beside the note, not in its text, so the library sets
@@ -350,10 +445,9 @@ ApplicationWindow {
         if (sticky) sticky.refreshReminder()
     }
 
-    function deleteNoteConfirmed(id) {
-        const sticky = noteWindows[id]
-        if (sticky) sticky.deleteConfirmed()
-        else backend.deleteNoteById(id)
+    function deleteForeverConfirmed(ids) {
+        for (const id of ids) backend.deleteForever(id)
+        showToast(qsTr("Deleted %n note(s) for good", "", ids.length))
     }
 
     function showToast(message) {
@@ -549,6 +643,14 @@ ApplicationWindow {
                     count: window.countNotes("archived")
                     selected: window.searchFilter.length === 0 && window.filterTab === "archived"
                     onClicked: window.showSection("archived")
+                }
+                SidebarItem {
+                    objectName: "trashSection"
+                    text: qsTr("Trash")
+                    iconName: "trash"
+                    count: backend.trashIds.length
+                    selected: window.searchFilter.length === 0 && window.filterTab === "trash"
+                    onClicked: window.showSection("trash")
                 }
 
                 Label {
@@ -815,7 +917,7 @@ ApplicationWindow {
                 Layout.rightMargin: 24
                 Layout.bottomMargin: 12
                 spacing: 10
-                visible: backend.ready
+                visible: backend.ready && window.selectionCount === 0
 
                 Label {
                     text: window.sectionTitle
@@ -830,6 +932,105 @@ ApplicationWindow {
                     text: window.visibleNotes.length === 1 ? qsTr("1 note") : qsTr("%1 notes").arg(window.visibleNotes.length)
                     font.pixelSize: 12
                     color: theme.textMuted
+                }
+                UI.StyledButton {
+                    objectName: "emptyTrashButton"
+                    visible: window.filterTab === "trash" && window.searchFilter.length === 0 && backend.trashIds.length > 0
+                    theme: window.theme
+                    variant: "danger"
+                    text: qsTr("Empty Trash")
+                    onClicked: emptyTrashDialog.open()
+                }
+            }
+
+            Label {
+                visible: backend.ready && window.filterTab === "trash" && window.searchFilter.length === 0 && window.selectionCount === 0
+                text: qsTr("Deleted notes stay here for 30 days, then they are deleted for good.")
+                font.pixelSize: 12
+                color: theme.textSecondary
+                Layout.leftMargin: 24
+                Layout.bottomMargin: 10
+            }
+
+            // Actions for the selected notes, in place of the heading.
+            RowLayout {
+                objectName: "selectionBar"
+                visible: backend.ready && window.selectionCount > 0
+                Layout.fillWidth: true
+                Layout.leftMargin: 24
+                Layout.rightMargin: 24
+                Layout.bottomMargin: 12
+                spacing: 6
+                readonly property bool inTrash: window.filterTab === "trash" && window.searchFilter.length === 0
+
+                UI.StyledButton {
+                    iconName: "x"
+                    theme: window.theme
+                    variant: "ghost"
+                    implicitWidth: 30
+                    implicitHeight: 30
+                    padding: 0
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Clear selection (Esc)")
+                    onClicked: window.clearSelection()
+                }
+                Label {
+                    text: qsTr("%n selected", "", window.selectionCount)
+                    font.pixelSize: 18
+                    font.weight: Font.DemiBold
+                    color: theme.textPrimary
+                    Layout.fillWidth: true
+                }
+                UI.StyledButton {
+                    theme: window.theme
+                    variant: "ghost"
+                    text: qsTr("Select All")
+                    onClicked: window.selectAllVisible()
+                }
+                UI.StyledButton {
+                    visible: !parent.inTrash
+                    theme: window.theme
+                    iconName: "pin"
+                    text: qsTr("Pin")
+                    onClicked: window.bulkAction("pin")
+                }
+                UI.StyledButton {
+                    visible: !parent.inTrash
+                    theme: window.theme
+                    iconName: window.filterTab === "archived" ? "archive-restore" : "archive"
+                    text: window.filterTab === "archived" ? qsTr("Unarchive") : qsTr("Archive")
+                    onClicked: window.bulkAction(window.filterTab === "archived" ? "restore" : "archive")
+                }
+                UI.StyledButton {
+                    visible: !parent.inTrash
+                    theme: window.theme
+                    iconName: "tag"
+                    text: qsTr("Tag…")
+                    onClicked: bulkTagDialog.open()
+                }
+                UI.StyledButton {
+                    visible: !parent.inTrash
+                    objectName: "bulkTrashButton"
+                    theme: window.theme
+                    variant: "danger"
+                    iconName: "trash"
+                    text: qsTr("Move to Trash")
+                    onClicked: window.bulkAction("delete")
+                }
+                UI.StyledButton {
+                    visible: parent.inTrash
+                    theme: window.theme
+                    iconName: "archive-restore"
+                    text: qsTr("Restore")
+                    onClicked: window.bulkAction("restore-trash")
+                }
+                UI.StyledButton {
+                    visible: parent.inTrash
+                    theme: window.theme
+                    variant: "danger"
+                    iconName: "trash"
+                    text: qsTr("Delete for Good")
+                    onClicked: window.bulkAction("delete-forever")
                 }
             }
 
@@ -948,7 +1149,24 @@ ApplicationWindow {
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
                 Keys.onReturnPressed: if (currentIndex >= 0) window.noteAction(window.visibleNotes[currentIndex].id, "open")
-                Keys.onDeletePressed: if (currentIndex >= 0) window.noteAction(window.visibleNotes[currentIndex].id, "delete")
+                Keys.onDeletePressed: {
+                    if (window.selectionCount > 0) {
+                        window.bulkAction(window.filterTab === "trash" ? "delete-forever" : "delete")
+                    } else if (currentIndex >= 0) {
+                        const note = window.visibleNotes[currentIndex]
+                        window.noteAction(note.id, note.trashed ? "delete-forever" : "delete")
+                    }
+                }
+                Keys.onEscapePressed: function(event) {
+                    event.accepted = window.selectionCount > 0
+                    window.clearSelection()
+                }
+                Keys.onPressed: function(event) {
+                    if (event.matches(StandardKey.SelectAll)) {
+                        window.selectAllVisible()
+                        event.accepted = true
+                    }
+                }
                 onActiveFocusChanged: if (activeFocus && currentIndex < 0 && count > 0) currentIndex = 0
 
                 delegate: Item {
@@ -971,6 +1189,14 @@ ApplicationWindow {
                         priority: cell.modelData.priority
                         tint: cell.modelData.tint
                         reminder: cell.modelData.reminder
+                        trashed: cell.modelData.trashed
+                        deletedAt: cell.modelData.deletedAt
+                        selected: window.selectionRevision >= 0 && !!window.selectedIds[cell.modelData.id]
+                        selecting: window.selectionCount > 0
+                        onSelectRequested: function(range) {
+                            noteGrid.currentIndex = cell.index
+                            window.toggleSelected(cell.modelData.id, range)
+                        }
                         onDesktop: window.windowsRevision >= 0 && !!window.noteWindows[cell.modelData.id]
                         current: noteGrid.activeFocus && noteGrid.currentIndex === cell.index
                         onOpenRequested: {
@@ -1029,27 +1255,66 @@ ApplicationWindow {
 
     Dialog {
         id: deleteDialog
-        property string noteId: ""
-        readonly property string noteTitle: {
-            const i = backend.noteIds.indexOf(noteId)
-            return i >= 0 && backend.titles[i].trim().length ? backend.titles[i] : qsTr("Untitled note")
-        }
+        objectName: "deleteForeverDialog"
+        property var noteIds: []
         parent: Overlay.overlay
         anchors.centerIn: parent
         width: Math.min(400, window.width - 48)
         modal: true
-        title: qsTr("Delete “%1”?").arg(noteTitle)
+        title: qsTr("Delete %n note(s) for good?", "", noteIds.length)
         standardButtons: Dialog.Cancel | Dialog.Ok
         Label {
             width: parent.width
-            text: qsTr("The note and its unsaved changes will be deleted. This cannot be undone. Use Archive to put a note away instead.")
+            text: qsTr("They and their attached files will be deleted. This cannot be undone.")
             wrapMode: Text.WordWrap
         }
         Component.onCompleted: {
             const ok = standardButton(Dialog.Ok)
-            if (ok) ok.text = qsTr("Delete")
+            if (ok) ok.text = qsTr("Delete for Good")
         }
-        onAccepted: window.deleteNoteConfirmed(noteId)
+        onAccepted: window.deleteForeverConfirmed(noteIds)
+    }
+
+    Dialog {
+        id: emptyTrashDialog
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(400, window.width - 48)
+        modal: true
+        title: qsTr("Empty the trash?")
+        standardButtons: Dialog.Cancel | Dialog.Ok
+        Label {
+            width: parent.width
+            text: qsTr("All %n note(s) in the trash and their attached files will be deleted. This cannot be undone.", "", backend.trashIds.length)
+            wrapMode: Text.WordWrap
+        }
+        Component.onCompleted: {
+            const ok = standardButton(Dialog.Ok)
+            if (ok) ok.text = qsTr("Empty Trash")
+        }
+        onAccepted: {
+            const count = backend.emptyTrash()
+            if (count >= 0) window.showToast(qsTr("Deleted %n note(s) for good", "", count))
+        }
+    }
+
+    Dialog {
+        id: bulkTagDialog
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(360, window.width - 48)
+        modal: true
+        title: qsTr("Add a tag to %n note(s)", "", window.selectionCount)
+        standardButtons: Dialog.Cancel | Dialog.Ok
+        onOpened: { bulkTagField.text = ""; bulkTagField.forceActiveFocus() }
+        UI.StyledTextField {
+            id: bulkTagField
+            width: parent.width
+            theme: window.theme
+            placeholderText: qsTr("Tag name")
+            onAccepted: bulkTagDialog.accept()
+        }
+        onAccepted: if (bulkTagField.text.trim().length) window.bulkTag(bulkTagField.text)
     }
 
     // One labelled switch in the settings popup.

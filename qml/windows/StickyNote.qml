@@ -2306,10 +2306,10 @@ ApplicationWindow {
     Dialog {
         id: deleteDialog
         anchors.centerIn: parent
-        title: qsTr("Delete this note?")
+        title: qsTr("Move this note to the trash?")
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
-        Label { text: qsTr("The note and its unsaved edits will be deleted."); wrapMode: Text.WordWrap; width: Math.min(300, noteWindow.width - 64) }
+        Label { text: qsTr("You can restore it from the library's Trash for 30 days. Unsaved edits are not kept."); wrapMode: Text.WordWrap; width: Math.min(300, noteWindow.width - 64) }
         onAccepted: noteWindow.deleteConfirmed()
     }
     Dialog {

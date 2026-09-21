@@ -24,12 +24,33 @@ FocusScope {
     property bool current: false
     // "<unix seconds>|<recurrence>", or "" when the note has no reminder.
     property string reminder: ""
+    // A note in the trash, deleted at deletedAt (Unix ms); it can only be
+    // restored or deleted for good.
+    property bool trashed: false
+    property real deletedAt: 0
+    // Multi-selection: this card is selected, and whether any card is (then
+    // a plain click selects instead of opening).
+    property bool selected: false
+    property bool selecting: false
+
+    // A click with Ctrl (toggle) or Shift (range), or any click while cards
+    // are selected.
+    signal selectRequested(bool range)
+
+    readonly property string trashLabel: {
+        if (!trashed) return ""
+        const days = Math.floor((Date.now() - deletedAt) / 86400000)
+        const left = Math.max(0, 30 - days)
+        const ago = days === 0 ? qsTr("Deleted today") : qsTr("Deleted %n day(s) ago", "", days)
+        return ago + " · " + qsTr("gone for good in %n day(s)", "", left)
+    }
 
     signal openRequested()
-    // "pin", "unpin", "archive", "restore", "copy", "locate", "reminder" or "delete".
+    // "pin", "unpin", "archive", "restore", "copy", "locate", "reminder",
+    // "delete" (to the trash), "restore-trash" or "delete-forever".
     signal actionRequested(string action)
 
-    readonly property bool hot: hover.hovered || card.activeFocus || actionsMenu.visible
+    readonly property bool hot: hover.hovered || card.activeFocus || actionsMenu.visible || trashMenu.visible
     readonly property color background: theme ? theme.noteTint(tint, "bg") : "#fefce8"
     readonly property color edge: theme ? theme.noteTint(tint, "border") : "#fde047"
     readonly property color ink: theme ? theme.noteText : "#1c1917"
@@ -50,21 +71,45 @@ FocusScope {
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: (noteTitle.trim().length ? noteTitle : qsTr("Untitled note"))
-    Keys.onReturnPressed: card.openRequested()
-    Keys.onEnterPressed: card.openRequested()
-    Keys.onDeletePressed: card.actionRequested("delete")
-    Keys.onMenuPressed: actionsMenu.popup(card, card.width / 2, card.height / 2)
+    Keys.onReturnPressed: if (!card.trashed) card.openRequested()
+    Keys.onEnterPressed: if (!card.trashed) card.openRequested()
+    Keys.onDeletePressed: card.actionRequested(card.trashed ? "delete-forever" : "delete")
+    Keys.onSpacePressed: card.selectRequested(false)
+    Keys.onMenuPressed: (card.trashed ? trashMenu : actionsMenu).popup(card, card.width / 2, card.height / 2)
 
     Rectangle {
         id: surface
         anchors.fill: parent
         radius: 14
         color: card.background
-        border.width: card.current || card.activeFocus ? 2 : 1
-        border.color: card.current || card.activeFocus
+        border.width: card.selected || card.current || card.activeFocus ? 2 : 1
+        border.color: card.selected || card.current || card.activeFocus
             ? (card.theme ? card.theme.accent : "#6366f1")
             : card.edge
-        opacity: card.isArchived && !card.hot ? 0.7 : 1
+        opacity: (card.isArchived || card.trashed) && !card.hot && !card.selected ? 0.7 : 1
+
+        // Selection mark.
+        Rectangle {
+            objectName: "selectionMark"
+            visible: card.selected || (card.selecting && card.hot)
+            z: 2
+            x: 10
+            y: 12
+            width: 20
+            height: 20
+            radius: 10
+            color: card.selected ? (card.theme ? card.theme.accent : "#6366f1") : (card.theme ? card.theme.surface : "white")
+            border.width: 2
+            border.color: card.theme ? card.theme.accent : "#6366f1"
+            AppIcon {
+                anchors.centerIn: parent
+                visible: card.selected
+                name: "check"
+                size: 12
+                strokeWidth: 3
+                color: "white"
+            }
+        }
         scale: tap.pressed ? 0.985 : 1
 
         Behavior on scale { NumberAnimation { duration: 90 } }
@@ -90,6 +135,8 @@ FocusScope {
 
             RowLayout {
                 Layout.fillWidth: true
+                // Room for the selection mark.
+                Layout.leftMargin: card.selected || card.selecting ? 22 : 0
                 spacing: 6
 
                 AppIcon {
@@ -184,7 +231,17 @@ FocusScope {
                 ToolTip.delay: 400
             }
 
+            Label {
+                visible: card.trashed
+                text: card.trashLabel
+                font.pixelSize: 11
+                color: card.inkSoft
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+
             RowLayout {
+                visible: !card.trashed
                 Layout.fillWidth: true
                 spacing: 4
 
@@ -266,27 +323,42 @@ FocusScope {
             }
 
             QuickAction {
+                visible: card.trashed
+                cardAction: "restore-trash"
+                iconName: "archive-restore"
+                hint: qsTr("Restore")
+            }
+            QuickAction {
+                visible: card.trashed
+                cardAction: "delete-forever"
+                iconName: "trash"
+                hint: qsTr("Delete for good")
+            }
+            QuickAction {
+                visible: !card.trashed
                 cardAction: card.isPinned ? "unpin" : "pin"
                 iconName: card.isPinned ? "pin-off" : "pin"
                 hint: card.isPinned ? qsTr("Unpin") : qsTr("Pin to the top of the list")
             }
             QuickAction {
+                visible: !card.trashed
                 cardAction: card.isArchived ? "restore" : "archive"
                 iconName: card.isArchived ? "archive-restore" : "archive"
                 hint: card.isArchived ? qsTr("Restore from archive") : qsTr("Archive")
             }
-            QuickAction { cardAction: "copy"; iconName: "copy"; hint: qsTr("Copy text") }
+            QuickAction { visible: !card.trashed; cardAction: "copy"; iconName: "copy"; hint: qsTr("Copy text") }
             QuickAction {
+                visible: !card.trashed
                 cardAction: "reminder"
                 iconName: "bell"
                 hint: card.reminder.length > 0 ? qsTr("Edit reminder") : qsTr("Add reminder")
             }
-            QuickAction { cardAction: "delete"; iconName: "trash"; hint: qsTr("Delete") }
+            QuickAction { visible: !card.trashed; cardAction: "delete"; iconName: "trash"; hint: qsTr("Move to trash") }
             QuickAction {
                 id: moreButton
                 iconName: "more"
                 hint: qsTr("More actions")
-                onClicked: actionsMenu.popup(moreButton, 0, moreButton.height)
+                onClicked: (card.trashed ? trashMenu : actionsMenu).popup(moreButton, 0, moreButton.height)
             }
         }
     }
@@ -298,20 +370,32 @@ FocusScope {
         acceptedButtons: Qt.LeftButton
         onTapped: {
             card.forceActiveFocus()
-            card.openRequested()
+            const modifiers = tap.point.modifiers
+            if (modifiers & Qt.ShiftModifier) card.selectRequested(true)
+            else if ((modifiers & Qt.ControlModifier) || card.selecting || card.trashed) card.selectRequested(false)
+            else card.openRequested()
         }
     }
     TapHandler {
         acceptedButtons: Qt.RightButton
         onTapped: function(eventPoint) {
             card.forceActiveFocus()
-            actionsMenu.popup(card, eventPoint.position.x, eventPoint.position.y)
+            (card.trashed ? trashMenu : actionsMenu).popup(card, eventPoint.position.x, eventPoint.position.y)
         }
+    }
+
+    Menu {
+        id: trashMenu
+        MenuItem { text: qsTr("Restore"); onTriggered: card.actionRequested("restore-trash") }
+        MenuItem { text: qsTr("Delete for Good…"); onTriggered: card.actionRequested("delete-forever") }
+        MenuSeparator {}
+        MenuItem { text: card.selected ? qsTr("Deselect") : qsTr("Select"); onTriggered: card.selectRequested(false) }
     }
 
     Menu {
         id: actionsMenu
         MenuItem { text: qsTr("Open"); onTriggered: card.openRequested() }
+        MenuItem { text: card.selected ? qsTr("Deselect") : qsTr("Select"); onTriggered: card.selectRequested(false) }
         MenuItem {
             text: qsTr("Bring here")
             onTriggered: card.actionRequested("locate")
@@ -331,6 +415,6 @@ FocusScope {
             onTriggered: card.actionRequested("reminder")
         }
         MenuSeparator {}
-        MenuItem { text: qsTr("Delete…"); onTriggered: card.actionRequested("delete") }
+        MenuItem { text: qsTr("Move to Trash"); onTriggered: card.actionRequested("delete") }
     }
 }

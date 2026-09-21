@@ -6,7 +6,7 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x424e4f54; // BNOT, an internal identifier, not a public app ID.
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 const INITIAL_SCHEMA: &str = include_str!("../../../migrations/0001_notes.sql");
 const WINDOW_SCHEMA: &str = include_str!("../../../migrations/0002_note_windows.sql");
 const SETTINGS_SCHEMA: &str = include_str!("../../../migrations/0003_settings.sql");
@@ -14,6 +14,9 @@ const SEARCH_ORG_SCHEMA: &str =
     include_str!("../../../migrations/0004_search_and_organization.sql");
 const PRODUCTIVITY_SCHEMA: &str = include_str!("../../../migrations/0005_productivity.sql");
 const PLAIN_SEARCH_SCHEMA: &str = include_str!("../../../migrations/0006_plain_search_text.sql");
+const TRASH_SCHEMA: &str = include_str!("../../../migrations/0007_trash.sql");
+/// How long a note stays in the trash before it is deleted for good.
+pub const TRASH_RETENTION_MS: i64 = 30 * 24 * 60 * 60 * 1000;
 /// Preview length for list rows and search results, in characters.
 const PREVIEW_CHARS: usize = 140;
 const NOTES_STAY_BELOW_KEY: &str = "notes_stay_below";
@@ -46,6 +49,7 @@ impl NoteStore {
             "SELECT n.id, n.title, substr(n.content, 1, 2000), n.priority, n.is_archived, n.is_pinned,
                     COALESCE((SELECT group_concat(t.name, ',') FROM note_tags nt JOIN tags t ON nt.tag_id = t.id WHERE nt.note_id = n.id), '')
              FROM notes n
+             WHERE n.deleted_at IS NULL
              ORDER BY n.is_pinned DESC, n.updated_at DESC, n.id DESC",
         )?;
         let rows = statement.query_map([], |row| {
@@ -210,7 +214,7 @@ impl NoteStore {
             "SELECT n.id, n.title, snippet(notes_fts, 1, char(57344), char(57345), '…', 24)
              FROM notes_fts
              JOIN notes n ON notes_fts.rowid = n.id
-             WHERE notes_fts MATCH ?1
+             WHERE notes_fts MATCH ?1 AND n.deleted_at IS NULL
              ORDER BY rank
              LIMIT 50",
         )?;
@@ -240,6 +244,80 @@ impl NoteStore {
         )?;
         if changed != 1 {
             return Err(Error::Conflict);
+        }
+        Ok(())
+    }
+
+    /// Moves a note to the trash, at the revision the caller last saw, and
+    /// closes its window.
+    pub fn move_to_trash(&self, note: &Note) -> Result<()> {
+        let changed = self.connection.execute(
+            "UPDATE notes SET deleted_at = ?1 WHERE id = ?2 AND revision = ?3 AND deleted_at IS NULL",
+            params![now_millis()?, note.id, note.revision],
+        )?;
+        if changed != 1 {
+            return Err(Error::Conflict);
+        }
+        self.connection.execute(
+            "UPDATE note_windows SET is_open = 0 WHERE note_id = ?1",
+            [note.id],
+        )?;
+        Ok(())
+    }
+
+    pub fn restore_from_trash(&self, id: i64) -> Result<()> {
+        let changed = self.connection.execute(
+            "UPDATE notes SET deleted_at = NULL WHERE id = ?1 AND deleted_at IS NOT NULL",
+            [id],
+        )?;
+        if changed != 1 {
+            return Err(Error::NotFound(id));
+        }
+        Ok(())
+    }
+
+    /// Notes in the trash with when each was deleted, newest first.
+    pub fn trash(&self) -> Result<Vec<(NoteSummary, i64)>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, title, substr(search_text, 1, 400), priority, is_archived, is_pinned, deleted_at
+             FROM notes WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC, id DESC",
+        )?;
+        let rows = statement.query_map([], |row| {
+            let text: String = row.get(2)?;
+            Ok((
+                NoteSummary {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    snippet: crate::preview::plain_preview(&text, PREVIEW_CHARS),
+                    priority: row.get(3)?,
+                    is_archived: row.get::<_, i32>(4)? != 0,
+                    is_pinned: row.get::<_, i32>(5)? != 0,
+                    tags: Vec::new(),
+                },
+                row.get(6)?,
+            ))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Ids of trashed notes deleted before `before_ms` (all when None).
+    pub fn trashed_ids(&self, before_ms: Option<i64>) -> Result<Vec<i64>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT id FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?1")?;
+        let rows = statement.query_map([before_ms.unwrap_or(i64::MAX)], |row| row.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Deletes a note that is in the trash, for good. Its attachment rows go
+    /// with it; the caller removes the attachment files.
+    pub fn delete_from_trash(&self, id: i64) -> Result<()> {
+        let changed = self.connection.execute(
+            "DELETE FROM notes WHERE id = ?1 AND deleted_at IS NOT NULL",
+            [id],
+        )?;
+        if changed != 1 {
+            return Err(Error::NotFound(id));
         }
         Ok(())
     }
@@ -282,9 +360,10 @@ impl NoteStore {
     }
 
     pub fn open_window_ids(&self) -> Result<Vec<i64>> {
-        let mut statement = self
-            .connection
-            .prepare("SELECT note_id FROM note_windows WHERE is_open = 1 ORDER BY note_id")?;
+        let mut statement = self.connection.prepare(
+            "SELECT w.note_id FROM note_windows w JOIN notes n ON n.id = w.note_id
+                 WHERE w.is_open = 1 AND n.deleted_at IS NULL ORDER BY w.note_id",
+        )?;
         let rows = statement.query_map([], |row| row.get(0))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
@@ -388,6 +467,7 @@ impl NoteStore {
             "SELECT n.title, n.content, n.priority, n.is_archived, n.is_pinned, n.created_at, n.updated_at,
                     COALESCE((SELECT group_concat(t.name, ',') FROM note_tags nt JOIN tags t ON nt.tag_id = t.id WHERE nt.note_id = n.id), '')
              FROM notes n
+             WHERE n.deleted_at IS NULL
              ORDER BY n.id ASC",
         )?;
         let rows = statement.query_map([], |row| {
@@ -481,6 +561,10 @@ fn migrate(connection: &mut Connection, initial_schema: &str) -> Result<()> {
         }
     }
     transaction.prepare("SELECT search_text FROM notes LIMIT 0")?;
+    if version < 7 {
+        transaction.execute_batch(TRASH_SCHEMA)?;
+    }
+    transaction.prepare("SELECT deleted_at FROM notes LIMIT 0")?;
     if version < SCHEMA_VERSION {
         transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     }

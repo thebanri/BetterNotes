@@ -45,7 +45,7 @@ pub use reminders::{
 pub use session::NotesSession;
 pub use settings::ThemePreference;
 pub use shortcuts::GlobalShortcutService;
-pub use store::{NoteStore, RECENT_SEARCH_LIMIT};
+pub use store::{NoteStore, RECENT_SEARCH_LIMIT, TRASH_RETENTION_MS};
 pub use window_state::WindowState;
 
 /// Development codename, not a final product name.

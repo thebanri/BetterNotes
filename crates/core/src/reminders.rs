@@ -115,7 +115,7 @@ pub fn get_due_reminders(connection: &Connection, now_sec: i64) -> Result<Vec<Du
         "SELECT r.id, r.note_id, n.title, r.remind_at, r.recurrence
          FROM reminders r
          JOIN notes n ON r.note_id = n.id
-         WHERE r.dismissed = 0 AND r.remind_at <= ?1
+         WHERE r.dismissed = 0 AND r.remind_at <= ?1 AND n.deleted_at IS NULL
          ORDER BY r.remind_at ASC",
     )?;
     let rows = stmt.query_map([now_sec], |row| {
@@ -184,8 +184,10 @@ pub fn complete_reminder(connection: &Connection, reminder_id: i64, now: i64) ->
 pub fn active_reminders(
     connection: &Connection,
 ) -> Result<std::collections::HashMap<i64, (i64, Recurrence)>> {
-    let mut stmt = connection
-        .prepare("SELECT note_id, remind_at, recurrence FROM reminders WHERE dismissed = 0")?;
+    let mut stmt = connection.prepare(
+        "SELECT r.note_id, r.remind_at, r.recurrence FROM reminders r
+             JOIN notes n ON n.id = r.note_id WHERE r.dismissed = 0 AND n.deleted_at IS NULL",
+    )?;
     let rows = stmt.query_map([], |row| {
         let recurrence: String = row.get(2)?;
         Ok((row.get(0)?, (row.get(1)?, Recurrence::parse(&recurrence))))

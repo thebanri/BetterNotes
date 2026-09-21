@@ -276,6 +276,76 @@ impl NotesSession {
         self.reload()
     }
 
+    /// Moves the selected note to the trash, discarding its unsaved draft
+    /// (the UI confirms first).
+    pub fn trash_current(&mut self) -> Result<()> {
+        let note = self.current.as_ref().ok_or(Error::NoSelection)?;
+        self.store.move_to_trash(note)?;
+        self.summaries.retain(|summary| summary.id != note.id);
+        self.current = None;
+        self.dirty = false;
+        Ok(())
+    }
+
+    /// Moves any listed note to the trash. See [`Self::set_note_pinned`].
+    pub fn trash_note(&mut self, id: i64) -> Result<()> {
+        self.save()?;
+        let note = self.store.get(id)?;
+        self.store.move_to_trash(&note)?;
+        self.reload()
+    }
+
+    pub fn restore_note(&mut self, id: i64) -> Result<()> {
+        self.store.restore_from_trash(id)?;
+        self.reload()
+    }
+
+    pub fn trash(&self) -> Result<Vec<(NoteSummary, i64)>> {
+        self.store.trash()
+    }
+
+    /// Deletes trashed notes for good, with their attachment files: those
+    /// deleted before `before_ms`, or every one when None. Returns how many.
+    pub fn empty_trash(&mut self, before_ms: Option<i64>) -> Result<usize> {
+        let ids = self.store.trashed_ids(before_ms)?;
+        for &id in &ids {
+            self.delete_forever(id)?;
+        }
+        Ok(ids.len())
+    }
+
+    /// Deletes one trashed note for good, with its attachment files.
+    pub fn delete_forever(&mut self, id: i64) -> Result<()> {
+        let attachments = self.list_attachments(id)?;
+        self.store.delete_from_trash(id)?;
+        if let Ok(data_dir) = crate::paths::data_directory(
+            std::env::var_os("XDG_DATA_HOME").as_deref(),
+            std::env::var_os("HOME").as_deref(),
+        ) {
+            for attachment in attachments {
+                let _ = std::fs::remove_file(crate::stored_path(&data_dir, &attachment));
+            }
+        }
+        Ok(())
+    }
+
+    /// Adds a tag to any listed note. See [`Self::set_note_pinned`].
+    pub fn add_note_tag(&mut self, id: i64, tag: &str) -> Result<()> {
+        let tag = tag.trim().trim_start_matches('#').trim().to_string();
+        if tag.is_empty() {
+            return Ok(());
+        }
+        self.change_note(id, |note| {
+            if !note
+                .tags
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(&tag))
+            {
+                note.tags.push(tag);
+            }
+        })
+    }
+
     /// The note's title and body as plain text, for copying out of the app.
     pub fn plain_text(&self, id: i64) -> Result<String> {
         let note = self.store.get(id)?;

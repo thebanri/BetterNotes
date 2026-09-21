@@ -34,6 +34,11 @@ pub mod ffi {
         #[qproperty(QStringList, priorities, READ, NOTIFY = list_changed)]
         #[qproperty(QStringList, note_tags, READ, NOTIFY = list_changed, cxx_name = "noteTags")]
         #[qproperty(QStringList, note_colors, READ, NOTIFY = list_changed, cxx_name = "noteColors")]
+        #[qproperty(QStringList, trash_ids, READ, NOTIFY = list_changed, cxx_name = "trashIds")]
+        #[qproperty(QStringList, trash_titles, READ, NOTIFY = list_changed, cxx_name = "trashTitles")]
+        #[qproperty(QStringList, trash_snippets, READ, NOTIFY = list_changed, cxx_name = "trashSnippets")]
+        /// When each trashed note was deleted, in Unix milliseconds.
+        #[qproperty(QStringList, trash_deleted_at, READ, NOTIFY = list_changed, cxx_name = "trashDeletedAt")]
         /// Per listed note: "<unix seconds>|<recurrence>" or "" without a reminder.
         #[qproperty(QStringList, note_reminders, READ, NOTIFY = list_changed, cxx_name = "noteReminders")]
         #[qproperty(QStringList, all_tags, READ, NOTIFY = list_changed, cxx_name = "allTags")]
@@ -147,6 +152,20 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "deleteNoteById"]
         fn delete_note_by_id(self: Pin<&mut Self>, id: QString) -> bool;
+        #[qinvokable]
+        #[cxx_name = "restoreNote"]
+        fn restore_note(self: Pin<&mut Self>, id: QString) -> bool;
+        /// Deletes a note in the trash for good.
+        #[qinvokable]
+        #[cxx_name = "deleteForever"]
+        fn delete_forever(self: Pin<&mut Self>, id: QString) -> bool;
+        /// Deletes every note in the trash for good; returns how many, or -1.
+        #[qinvokable]
+        #[cxx_name = "emptyTrash"]
+        fn empty_trash(self: Pin<&mut Self>) -> i32;
+        #[qinvokable]
+        #[cxx_name = "addNoteTag"]
+        fn add_note_tag(self: Pin<&mut Self>, id: QString, tag: QString) -> bool;
         #[qinvokable]
         #[cxx_name = "notePlainText"]
         fn note_plain_text(&self, id: QString) -> QString;
@@ -331,6 +350,10 @@ pub struct NotesBackendRust {
     note_tags: QStringList,
     note_colors: QStringList,
     note_reminders: QStringList,
+    trash_ids: QStringList,
+    trash_titles: QStringList,
+    trash_snippets: QStringList,
+    trash_deleted_at: QStringList,
     all_tags: QStringList,
     restore_ids: QStringList,
     current_id: QString,
@@ -368,6 +391,10 @@ impl Default for NotesBackendRust {
             note_tags: QStringList::default(),
             note_colors: QStringList::default(),
             note_reminders: QStringList::default(),
+            trash_ids: QStringList::default(),
+            trash_titles: QStringList::default(),
+            trash_snippets: QStringList::default(),
+            trash_deleted_at: QStringList::default(),
             all_tags: QStringList::default(),
             restore_ids: QStringList::default(),
             current_id: QString::default(),
@@ -400,7 +427,17 @@ impl ffi::NotesBackend {
             return true;
         }
         let result = paths::database_path().and_then(|path| {
-            let session = NotesSession::open(&path)?;
+            let mut session = NotesSession::open(&path)?;
+            // Notes leave the trash for good after 30 days.
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|elapsed| elapsed.as_millis() as i64)
+                .unwrap_or(0);
+            if let Err(error) =
+                session.empty_trash(Some(now - betternotes_core::TRASH_RETENTION_MS))
+            {
+                eprintln!("BetterNotes: could not empty old notes from the trash: {error}");
+            }
             let ids = session.open_window_ids()?;
             Ok((session, ids))
         });
@@ -607,6 +644,23 @@ impl ffi::NotesBackend {
                         None => QString::default(),
                     })
                     .collect();
+                let trash = session.trash().unwrap_or_default();
+                let trash_ids = trash
+                    .iter()
+                    .map(|(note, _)| QString::from(&note.id.to_string()))
+                    .collect();
+                let trash_titles = trash
+                    .iter()
+                    .map(|(note, _)| QString::from(&note.title))
+                    .collect();
+                let trash_snippets = trash
+                    .iter()
+                    .map(|(note, _)| QString::from(&note.snippet))
+                    .collect();
+                let trash_deleted_at = trash
+                    .iter()
+                    .map(|(_, at)| QString::from(&at.to_string()))
+                    .collect();
                 let all_tags = session
                     .list_tags()
                     .unwrap_or_default()
@@ -637,6 +691,10 @@ impl ffi::NotesBackend {
                 state.note_tags = note_tags;
                 state.note_colors = note_colors;
                 state.note_reminders = note_reminders;
+                state.trash_ids = trash_ids;
+                state.trash_titles = trash_titles;
+                state.trash_snippets = trash_snippets;
+                state.trash_deleted_at = trash_deleted_at;
                 state.all_tags = all_tags;
                 state.current_id = current_id;
                 state.current_index = index;
@@ -672,8 +730,9 @@ impl ffi::NotesBackend {
             session.select(usize::try_from(index).map_err(|_| Error::InvalidSelection)?)
         })
     }
+    /// Moves the note to the trash; it can be restored for 30 days.
     pub fn delete_note(self: Pin<&mut Self>) -> bool {
-        self.perform(true, NotesSession::delete_current)
+        self.perform(true, NotesSession::trash_current)
     }
     pub fn reload(self: Pin<&mut Self>) -> bool {
         self.perform(true, NotesSession::reload)
@@ -761,7 +820,41 @@ impl ffi::NotesBackend {
 
     pub fn delete_note_by_id(self: Pin<&mut Self>, id: QString) -> bool {
         match parse_note_id(&id) {
-            Ok(id) => self.perform(false, |session| session.delete_note(id)),
+            Ok(id) => self.perform(false, |session| session.trash_note(id)),
+            Err(error) => self.finish(Err(error), false),
+        }
+    }
+
+    pub fn restore_note(self: Pin<&mut Self>, id: QString) -> bool {
+        match parse_note_id(&id) {
+            Ok(id) => self.perform(false, |session| session.restore_note(id)),
+            Err(error) => self.finish(Err(error), false),
+        }
+    }
+
+    pub fn delete_forever(self: Pin<&mut Self>, id: QString) -> bool {
+        match parse_note_id(&id) {
+            Ok(id) => self.perform(false, |session| session.delete_forever(id)),
+            Err(error) => self.finish(Err(error), false),
+        }
+    }
+
+    pub fn empty_trash(self: Pin<&mut Self>) -> i32 {
+        let mut count = 0;
+        let success = self.perform(false, |session| {
+            count = session.empty_trash(None)?;
+            Ok(())
+        });
+        if success {
+            i32::try_from(count).unwrap_or(i32::MAX)
+        } else {
+            -1
+        }
+    }
+
+    pub fn add_note_tag(self: Pin<&mut Self>, id: QString, tag: QString) -> bool {
+        match parse_note_id(&id) {
+            Ok(id) => self.perform(false, |session| session.add_note_tag(id, &tag.to_string())),
             Err(error) => self.finish(Err(error), false),
         }
     }

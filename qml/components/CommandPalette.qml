@@ -58,7 +58,7 @@ Popup {
         { id: "export_json", title: qsTr("💾 Export notes to JSON"), subtitle: qsTr("Choose where to save a JSON file of all notes"), shortcut: "" },
         { id: "export_markdown", title: qsTr("📝 Export notes to Markdown"), subtitle: qsTr("Choose a folder for one Markdown file per note"), shortcut: "" },
         { id: "import", title: qsTr("📥 Import notes"), subtitle: qsTr("Add notes from a JSON export or Markdown files"), shortcut: "" },
-        { id: "delete_note", title: qsTr("🗑️ Delete active note"), subtitle: qsTr("Remove note permanently"), shortcut: "" }
+        { id: "delete_note", title: qsTr("🗑️ Delete active note"), subtitle: qsTr("Move the active note to the trash"), shortcut: "" }
     ]
 
     property var displayedItems: []

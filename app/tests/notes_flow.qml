@@ -392,6 +392,57 @@ Window {
         window.imagePreviewWindow.close()
     }
 
+    // Deleted notes go to the trash and come back; several notes can be
+    // selected and tagged, trashed or deleted for good at once.
+    function assertTrashAndSelection(library) {
+        const backend = library.libraryBackend
+        const make = function(title) {
+            const sticky = library.createNote()
+            findItem(sticky.contentItem, "titleEditor").text = title
+            sticky.editorBackend.editTitle(title)
+            check(sticky.flush(), "Could not save " + title)
+            const id = sticky.noteId
+            sticky.close()
+            backend.reload()
+            return id
+        }
+        const a = make("Trash A")
+        const b = make("Trash B")
+        const c = make("Trash C")
+
+        library.noteAction(a, "delete")
+        check(backend.noteIds.indexOf(a) < 0 && backend.trashIds.indexOf(a) >= 0, "Delete did not move the note to the trash")
+        library.showSection("trash")
+        check(library.visibleNotes.some(function(n) { return n.id === a && n.trashed }), "Trash section does not list the note")
+        library.noteAction(a, "restore-trash")
+        check(backend.noteIds.indexOf(a) >= 0 && backend.trashIds.indexOf(a) < 0, "Restore did not bring the note back")
+
+        library.showSection("all")
+        library.toggleSelected(a, false)
+        library.toggleSelected(c, true)
+        check(library.selectionCount === 3, "Shift range did not select the notes between: " + library.selectionCount)
+        library.toggleSelected(b, false)
+        check(library.selectionCount === 2, "Ctrl click did not deselect")
+        library.bulkTag("bulk")
+        check(library.selectionCount === 0, "Selection stayed after tagging")
+        for (const id of [a, c]) {
+            check(library.noteTagsAt(backend.noteIds.indexOf(id)).indexOf("bulk") >= 0, "Bulk tag missing on a note")
+        }
+        check(library.noteTagsAt(backend.noteIds.indexOf(b)).indexOf("bulk") < 0, "Bulk tag reached an unselected note")
+
+        for (const id of [a, b, c]) library.toggleSelected(id, false)
+        library.bulkAction("delete")
+        check([a, b, c].every(function(id) { return backend.trashIds.indexOf(id) >= 0 }), "Bulk move to trash failed")
+        library.showSection("trash")
+        library.selectAllVisible()
+        library.bulkAction("delete-forever")
+        const dialog = library.deleteForeverDialog
+        check(dialog.visible && dialog.noteIds.length >= 3, "Delete for good did not ask first")
+        dialog.accept()
+        check([a, b, c].every(function(id) { return backend.trashIds.indexOf(id) < 0 }), "Delete for good left notes in the trash")
+        library.showSection("all")
+    }
+
     // A reminder set on a note shows in the library, can be edited there and
     // fires once when due.
     function assertReminders(library, note) {
@@ -693,6 +744,7 @@ Window {
                 harness.assertMediaAndLists(media)
                 harness.assertReminders(harness.library, media)
                 harness.assertSearchAndTransfer(harness.library, media)
+                harness.assertTrashAndSelection(harness.library)
                 const extras = harness.library.createNote()
                 harness.assertEditorExtras(extras)
                 harness.check(extras.deleteConfirmed(), "Editor extras note could not be deleted")
