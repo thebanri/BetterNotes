@@ -13,5 +13,13 @@
         <file>components/AppIcon.qml</file>
         <file>windows/QuickCapture.qml</file>
         <file>components/CommandPalette.qml</file>
+        <file alias="icons/app-16.png">../assets/icons/hicolor/org.betternotes.BetterNotes-16.png</file>
+        <file alias="icons/app-22.png">../assets/icons/hicolor/org.betternotes.BetterNotes-22.png</file>
+        <file alias="icons/app-24.png">../assets/icons/hicolor/org.betternotes.BetterNotes-24.png</file>
+        <file alias="icons/app-32.png">../assets/icons/hicolor/org.betternotes.BetterNotes-32.png</file>
+        <file alias="icons/app-48.png">../assets/icons/hicolor/org.betternotes.BetterNotes-48.png</file>
+        <file alias="icons/app-64.png">../assets/icons/hicolor/org.betternotes.BetterNotes-64.png</file>
+        <file alias="icons/app-128.png">../assets/icons/hicolor/org.betternotes.BetterNotes-128.png</file>
+        <file alias="icons/app-256.png">../assets/icons/hicolor/org.betternotes.BetterNotes-256.png</file>
     </qresource>
 </RCC>

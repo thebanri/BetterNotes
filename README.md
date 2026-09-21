@@ -18,7 +18,8 @@ an account or a cloud service. Notes stay on your machine.
 ## Features
 
 - Independent sticky windows with autosave, resizing, collapse and saved window state.
-- Rich text editing, checklists, links, colors, and light, dark or system themes.
+- Rich text editing, automatic bulleted and numbered lists, checklists, links, colors, and light, dark or system themes.
+- Images and animated GIFs: pick them or drop them onto a note, then drag a corner to resize.
 - SQLite storage, FTS5 search, tags, priorities and archiving.
 - Quick Capture, a command palette, a system tray and start-at-login settings.
 - Reminders, desktop notifications and file attachments.
@@ -76,6 +77,23 @@ flatpak run org.betternotes.BetterNotes
 
 BetterNotes itself is **not published on Flathub**. The bundle has additional
 [KDE integration and autostart limitations](packaging/linux/README.md#desktop-integration-per-format).
+
+### Add a downloaded build to the applications menu
+
+A build from source or an AppImage has no menu entry of its own. Run it once with
+`install` (or turn on **Show in applications menu** in the settings) to add one
+for your user, with its icon; no root is needed:
+
+```bash
+./target/release/betternotes install      # copies the binary to ~/.local/bin
+./BetterNotes-0.1.0-x86_64.AppImage install   # launches the AppImage where it is
+betternotes uninstall                     # removes the entry, icons and copied binary; notes stay
+```
+
+The entry goes to `$XDG_DATA_HOME/applications` and the icons to
+`$XDG_DATA_HOME/icons/hicolor`. On Wayland, desktops that do not support the
+xdg-toplevel-icon protocol show the window icon only once this entry exists.
+Package and Flatpak installs already have one.
 
 ### Verify a download
 
@@ -139,6 +157,8 @@ betternotes export ./markdown-notes/
 betternotes import notes.json
 betternotes backup ~/Backups
 betternotes restore /path/to/betternotes-backup-directory
+betternotes install
+betternotes uninstall
 betternotes --help
 ```
 

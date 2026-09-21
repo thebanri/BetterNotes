@@ -57,6 +57,20 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "diagnosticsReport"]
         fn diagnostics_report(&self) -> QString;
+
+        #[qinvokable]
+        #[cxx_name = "isInstalled"]
+        fn is_installed(&self) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "canInstall"]
+        fn can_install(&self) -> bool;
+
+        /// Installs or uninstalls for this user; returns "" on success or the
+        /// reason it failed.
+        #[qinvokable]
+        #[cxx_name = "setInstalled"]
+        fn set_installed(&self, installed: bool) -> QString;
     }
 }
 
@@ -126,5 +140,29 @@ impl ffi::ApplicationInfo {
         betternotes_core::DesktopReport::current()
             .format_report()
             .into()
+    }
+
+    pub fn is_installed(&self) -> bool {
+        betternotes_core::install::InstallLayout::current()
+            .is_ok_and(|layout| betternotes_core::install::is_installed(&layout))
+    }
+
+    pub fn can_install(&self) -> bool {
+        !matches!(
+            betternotes_core::install::InstallSource::detect(),
+            Ok(betternotes_core::install::InstallSource::Managed) | Err(_)
+        )
+    }
+
+    pub fn set_installed(&self, installed: bool) -> cxx_qt_lib::QString {
+        let result = if installed {
+            betternotes_core::install::install_for_current_user()
+        } else {
+            betternotes_core::install::uninstall_for_current_user()
+        };
+        match result {
+            Ok(_) => cxx_qt_lib::QString::default(),
+            Err(error) => error.to_string().into(),
+        }
     }
 }

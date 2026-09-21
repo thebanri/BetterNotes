@@ -64,6 +64,8 @@ pub enum Error {
     Ipc(String),
     #[error("Serialization error: {0}")]
     Serialization(String),
+    #[error("{0}")]
+    Install(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

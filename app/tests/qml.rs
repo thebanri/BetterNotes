@@ -28,7 +28,31 @@ fn main() {
     let directory = tempfile::tempdir().unwrap();
     std::env::set_var("XDG_DATA_HOME", directory.path());
     std::env::set_var("XDG_CONFIG_HOME", directory.path().join("config"));
+    // Images the editor tests insert, in the XDG Pictures folder the image
+    // picker opens.
+    let fixtures = directory.path().join("fixtures");
+    std::fs::create_dir_all(&fixtures).unwrap();
+    std::fs::create_dir_all(directory.path().join("config")).unwrap();
+    std::fs::write(
+        directory.path().join("config/user-dirs.dirs"),
+        format!("XDG_PICTURES_DIR=\"{}\"\n", fixtures.display()),
+    )
+    .unwrap();
+    std::fs::write(
+        fixtures.join("still.png"),
+        include_bytes!("fixtures/still.png"),
+    )
+    .unwrap();
+    std::fs::write(
+        fixtures.join("animated.gif"),
+        include_bytes!("fixtures/animated.gif"),
+    )
+    .unwrap();
     let mut app = QGuiApplication::new();
+    assert!(
+        notes_bridge::ffi::platformSetApplicationIcon(),
+        "the bundled application icon must load"
+    );
     let engine = load_engine(MAIN_QML).expect("embedded QML window must load");
     drop(engine);
     assert!(load_engine("qrc:/betternotes/missing.qml").is_err());

@@ -2,7 +2,7 @@
 //! Qt adapter for the independent Rust editing session. No SQL or note rules in QML.
 use betternotes_core::{paths, Error, NotesSession, Result, ThemePreference, WindowState};
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::{QString, QStringList};
+use cxx_qt_lib::{QString, QStringList, QUrl};
 use std::pin::Pin;
 
 #[cxx_qt::bridge]
@@ -17,6 +17,8 @@ pub mod ffi {
         fn platformGetClipboardText() -> QString;
         fn platformCursorGlobalX() -> i32;
         fn platformCursorGlobalY() -> i32;
+        fn platformSetApplicationIcon() -> bool;
+        fn platformPicturesFolder() -> QString;
     }
     extern "RustQt" {
         #[qobject]
@@ -178,6 +180,9 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "setNoteFontSize"]
         fn set_note_font_size(self: Pin<&mut Self>, size: i32) -> bool;
+        #[qinvokable]
+        #[cxx_name = "picturesFolder"]
+        fn pictures_folder(&self) -> QString;
         #[qinvokable]
         #[cxx_name = "attachImage"]
         fn attach_image(self: Pin<&mut Self>, file_url: QString) -> QString;
@@ -804,26 +809,42 @@ impl ffi::NotesBackend {
         result.is_ok()
     }
 
+    pub fn pictures_folder(&self) -> QString {
+        ffi::platformPicturesFolder()
+    }
+
     pub fn attach_image(mut self: Pin<&mut Self>, file_url: QString) -> QString {
-        let url_str = file_url.to_string();
-        let path_str = if let Some(stripped) = url_str.strip_prefix("file://") {
-            stripped
-        } else {
-            &url_str
+        // Dropped and chosen files arrive as percent-encoded file URLs.
+        let url = QUrl::from(&file_url);
+        let path = match url.to_local_file() {
+            Some(path) => path.to_string(),
+            None => file_url.to_string(),
         };
-        let source_path = std::path::Path::new(path_str);
-        if let Some(session) = self.as_mut().rust_mut().session.as_mut() {
-            if let Ok(att) = session.add_attachment_file(source_path) {
-                if let Ok(data_dir) = betternotes_core::paths::data_directory(
-                    std::env::var_os("XDG_DATA_HOME").as_deref(),
-                    std::env::var_os("HOME").as_deref(),
-                ) {
-                    let full_path = data_dir.join("attachments").join(&att.stored_rel_path);
-                    return QString::from(&format!("file://{}", full_path.display()));
-                }
+        let result = match self.as_mut().rust_mut().session.as_mut() {
+            Some(session) => session
+                .add_attachment_file(std::path::Path::new(&path))
+                .and_then(|attachment| {
+                    let data_dir = betternotes_core::paths::data_directory(
+                        std::env::var_os("XDG_DATA_HOME").as_deref(),
+                        std::env::var_os("HOME").as_deref(),
+                    )?;
+                    Ok(data_dir
+                        .join("attachments")
+                        .join(&attachment.stored_rel_path))
+                }),
+            None => Err(Error::NoSelection),
+        };
+        match result {
+            Ok(stored) => QUrl::from_local_file(&QString::from(stored.to_string_lossy().as_ref()))
+                .to_qstring(),
+            Err(error) => {
+                eprintln!("BetterNotes: could not attach image: {error}");
+                self.as_mut().rust_mut().error_message =
+                    QString::from(&format!("Could not add the image: {error}"));
+                self.as_mut().status_changed();
+                QString::default()
             }
         }
-        QString::default()
     }
 
     pub fn set_autostart(mut self: Pin<&mut Self>, enabled: bool) -> bool {

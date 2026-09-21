@@ -1,9 +1,13 @@
 #include "text_formatter.h"
 
+#include <QImage>
+#include <QImageReader>
+#include <QPixmap>
 #include <QRegularExpression>
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTextFragment>
+#include <QTextList>
 
 namespace {
 QTextCursor selection(QQuickTextDocument *quickDocument, int start, int end) {
@@ -276,4 +280,161 @@ int TextFormatter::linkify(QQuickTextDocument *quickDocument,
     }
     cursor.endEditBlock();
     return int(runs.size());
+}
+
+namespace {
+// "- ", "* ", "• " and ". " start a bulleted list; "1. " or "1) " starts a
+// numbered list at that number. Anything else is ordinary text.
+bool listStyleFor(const QString &prefix, QTextListFormat::Style *style,
+                  int *start) {
+    static const QRegularExpression numbered(
+        QStringLiteral(R"(^(\d{1,3})[.)] $)"));
+    if (prefix == QStringLiteral("- ") || prefix == QStringLiteral("* ") ||
+        prefix == QStringLiteral("\u2022 ") || prefix == QStringLiteral(". ")) {
+        *style = QTextListFormat::ListDisc;
+        *start = 1;
+        return true;
+    }
+    const auto match = numbered.match(prefix);
+    if (!match.hasMatch())
+        return false;
+    *style = QTextListFormat::ListDecimal;
+    *start = qMax(1, match.captured(1).toInt());
+    return true;
+}
+
+// The image character at a document position, if there is one.
+QTextImageFormat imageFormatAt(QTextDocument *document, int position) {
+    if (!document || position < 0 || position >= document->characterCount() - 1)
+        return {};
+    const auto block = document->findBlock(position);
+    for (auto it = block.begin(); !it.atEnd(); ++it) {
+        const auto fragment = it.fragment();
+        if (position >= fragment.position() &&
+            position < fragment.position() + fragment.length()) {
+            const auto format = fragment.charFormat();
+            return format.isImageFormat() ? format.toImageFormat()
+                                          : QTextImageFormat();
+        }
+    }
+    return {};
+}
+
+// The image's own size, from the document's loaded resource when it has one.
+QSize naturalImageSize(QTextDocument *document, const QString &name) {
+    const QVariant resource =
+        document->resource(QTextDocument::ImageResource, QUrl(name));
+    if (resource.canConvert<QImage>()) {
+        const auto image = resource.value<QImage>();
+        if (!image.isNull())
+            return image.size();
+    }
+    if (resource.canConvert<QPixmap>()) {
+        const auto pixmap = resource.value<QPixmap>();
+        if (!pixmap.isNull())
+            return pixmap.size();
+    }
+    const QUrl url(name);
+    return QImageReader(url.isLocalFile() ? url.toLocalFile() : name).size();
+}
+} // namespace
+
+bool TextFormatter::startsList(const QString &text, int position) const {
+    if (position < 0 || position > text.size())
+        return false;
+    const int lineStart = int(text.lastIndexOf(u'\n', position - 1)) + 1;
+    QTextListFormat::Style style;
+    int start;
+    return listStyleFor(text.mid(lineStart, position - lineStart), &style,
+                        &start);
+}
+
+int TextFormatter::autoList(QQuickTextDocument *quickDocument, int position) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || position < 0 || position >= document->characterCount())
+        return -1;
+    const auto block = document->findBlock(position);
+    if (!block.isValid() || block.textList())
+        return -1;
+    QTextListFormat::Style style;
+    int start;
+    if (!listStyleFor(block.text().left(position - block.position()), &style,
+                      &start))
+        return -1;
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    cursor.setPosition(block.position());
+    cursor.setPosition(position, QTextCursor::KeepAnchor);
+    cursor.removeSelectedText();
+    QTextListFormat format;
+    format.setStyle(style);
+    format.setStart(start);
+    format.setIndent(1);
+    cursor.createList(format);
+    cursor.endEditBlock();
+    return block.position();
+}
+
+bool TextFormatter::endEmptyListItem(QQuickTextDocument *quickDocument,
+                                     int position) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || position < 0 || position >= document->characterCount())
+        return false;
+    const auto block = document->findBlock(position);
+    auto *list = block.textList();
+    if (!list || !block.text().isEmpty())
+        return false;
+    QTextCursor cursor(block);
+    cursor.beginEditBlock();
+    list->remove(block);
+    auto format = cursor.blockFormat();
+    format.setIndent(0);
+    cursor.setBlockFormat(format);
+    cursor.endEditBlock();
+    return true;
+}
+
+QVariantMap TextFormatter::imageAt(QQuickTextDocument *quickDocument,
+                                   int position) const {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    const auto format = imageFormatAt(document, position);
+    if (!format.isValid() || format.name().isEmpty())
+        return {};
+    const QSize natural = naturalImageSize(document, format.name());
+    qreal width = format.hasProperty(QTextFormat::ImageWidth)
+                      ? format.width()
+                      : natural.width();
+    qreal height = format.hasProperty(QTextFormat::ImageHeight)
+                       ? format.height()
+                       : (natural.width() > 0
+                              ? width * natural.height() / natural.width()
+                              : natural.height());
+    return {{QStringLiteral("name"), format.name()},
+            {QStringLiteral("width"), qRound(width)},
+            {QStringLiteral("height"), qRound(height)}};
+}
+
+bool TextFormatter::resizeImage(QQuickTextDocument *quickDocument, int position,
+                                int width) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    auto format = imageFormatAt(document, position);
+    if (!format.isValid() || width < 1)
+        return false;
+    format.setWidth(qBound(24, width, 4096));
+    // Without a height Qt keeps the image's aspect ratio.
+    format.clearProperty(QTextFormat::ImageHeight);
+    QTextCursor cursor(document);
+    cursor.setPosition(position);
+    cursor.setPosition(position + 1, QTextCursor::KeepAnchor);
+    cursor.setCharFormat(format);
+    return true;
+}
+
+int TextFormatter::fittedImageWidth(const QUrl &url, int maxWidth) const {
+    if (!url.isLocalFile())
+        return 0;
+    const QSize size = QImageReader(url.toLocalFile()).size();
+    if (!size.isValid() || size.isEmpty())
+        return 0;
+    return qMax(16, qMin(size.width(), qMax(16, maxWidth)));
 }

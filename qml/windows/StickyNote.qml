@@ -13,6 +13,8 @@ ApplicationWindow {
     id: noteWindow
     required property string noteId
     property alias editorBackend: backend
+    property alias imageAnimator: gifs
+    property alias imageFormatter: formatter
     property alias theme: theme
     property bool collapsed: false
     property bool initialized: false
@@ -69,6 +71,8 @@ ApplicationWindow {
         contentEditor.textFormat = isRichText ? TextEdit.RichText : TextEdit.PlainText
         contentEditor.text = backend.draftContent
         loadingContent = false
+        selectedImage = -1
+        gifs.refresh()
     }
 
     function ensureRichText() {
@@ -159,6 +163,13 @@ ApplicationWindow {
     }
     ApplicationInfo { id: platformInfo }
     TextFormatter { id: formatter }
+    // GIFs play only while someone can see them.
+    ImageAnimator {
+        id: gifs
+        document: contentEditor.textDocument
+        running: noteWindow.visible && !noteWindow.collapsed
+            && noteWindow.visibility !== Window.Minimized
+    }
 
     function present(fallbackScreen) {
         if (!backend.initializeNote(noteId)) return false
@@ -334,7 +345,10 @@ ApplicationWindow {
     Timer {
         id: linkScan
         interval: 350
-        onTriggered: noteWindow.linkifyContent()
+        onTriggered: {
+            noteWindow.linkifyContent()
+            gifs.refresh()
+        }
     }
     Timer {
         id: autosave
@@ -502,7 +516,7 @@ ApplicationWindow {
     // correctly, but positionAt() snaps to the nearest caret position, so check
     // that the point really lies on the character before or after it --
     // otherwise clicking past the end of a line would open a link at its end.
-    function linkAt(x, y) {
+    function characterAt(x, y) {
         const position = contentEditor.positionAt(x, y)
         for (const character of [position - 1, position]) {
             if (character < 0 || character >= contentEditor.length) continue
@@ -511,9 +525,131 @@ ApplicationWindow {
             if (from.y !== to.y) continue // the character ends a wrapped line
             if (x >= Math.min(from.x, to.x) && x < Math.max(from.x, to.x)
                     && y >= from.y && y < from.y + from.height)
-                return formatter.anchorAt(contentEditor.textDocument, character)
+                return character
         }
-        return ""
+        return -1
+    }
+
+    function linkAt(x, y) {
+        const character = characterAt(x, y)
+        return character < 0 ? "" : formatter.anchorAt(contentEditor.textDocument, character)
+    }
+
+    // ---- Images -----------------------------------------------------------
+
+    // Document position of the image selected for resizing, or -1.
+    property int selectedImage: -1
+    property rect selectedImageRect: Qt.rect(0, 0, 0, 0)
+    readonly property int maxImageWidth: Math.max(48, Math.round(contentEditor.width - 8))
+    readonly property var imageSuffixes: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]
+
+    function isImageUrl(url) {
+        const path = url.toString().split(/[?#]/)[0].toLowerCase()
+        if (!path.startsWith("file:")) return false
+        return imageSuffixes.indexOf(path.substring(path.lastIndexOf(".") + 1)) >= 0
+    }
+
+    // Selects the image under a point so it can be resized or deleted.
+    function selectImageAt(x, y) {
+        const character = characterAt(x, y)
+        if (character < 0 || !formatter.imageAt(contentEditor.textDocument, character).name) return false
+        contentEditor.select(character, character + 1)
+        selectedImage = character
+        updateImageSelection()
+        return true
+    }
+
+    function updateImageSelection() {
+        if (selectedImage < 0) return
+        const image = formatter.imageAt(contentEditor.textDocument, selectedImage)
+        if (!image.name) {
+            selectedImage = -1
+            return
+        }
+        const start = contentEditor.positionToRectangle(selectedImage)
+        selectedImageRect = Qt.rect(start.x, start.y, image.width, image.height)
+    }
+
+    function resizeSelectedImage(width) {
+        if (selectedImage < 0) return
+        const clamped = Math.max(24, Math.min(maxImageWidth, Math.round(width)))
+        if (formatter.resizeImage(contentEditor.textDocument, selectedImage, clamped)) {
+            contentEditor.select(selectedImage, selectedImage + 1)
+            updateImageSelection()
+        }
+    }
+
+    // Copies each image into the note's attachments and inserts it at the
+    // position, each on its own line, at most as wide as the note.
+    function insertImages(urls, position) {
+        let inserted = 0
+        for (let i = 0; i < urls.length; ++i) {
+            const url = urls[i].toString()
+            if (!isImageUrl(url)) continue
+            const width = formatter.fittedImageWidth(url, maxImageWidth)
+            if (width <= 0) continue
+            const stored = backend.attachImage(url)
+            if (!stored || stored.length === 0) continue
+            ensureRichText()
+            const at = Math.max(0, Math.min(position, contentEditor.length))
+            const lineStart = at === 0 || contentEditor.getText(at - 1, at) === "\n"
+                || contentEditor.getText(at - 1, at) === "\u2029"
+            const tag = (lineStart ? "" : "<br>") + "<img src=\"" + stored + "\" width=\"" + width + "\" /><br>"
+            const before = contentEditor.length
+            contentEditor.insert(at, tag)
+            position = at + (contentEditor.length - before)
+            ++inserted
+        }
+        if (inserted === 0) return 0
+        contentEditor.forceActiveFocus()
+        contentEditor.cursorPosition = Math.min(position, contentEditor.length)
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+        gifs.refresh()
+        return inserted
+    }
+
+    // ---- Lists ------------------------------------------------------------
+
+    // Typing "- ", "* ", ". " or "1. " at the start of a line starts a list.
+    function continueList() {
+        const position = contentEditor.cursorPosition
+        if (position < 2 || contentEditor.getText(position - 1, position) !== " ") return
+        if (!isRichText) {
+            if (!formatter.startsList(plainContent, position)) return
+            ensureRichText()
+        }
+        const caret = formatter.autoList(contentEditor.textDocument, contentEditor.cursorPosition)
+        if (caret < 0) return
+        contentEditor.cursorPosition = caret
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+    }
+
+    // ---- Tags -------------------------------------------------------------
+
+    function addTags(text) {
+        const tags = []
+        for (let i = 0; i < backend.tags.length; ++i) tags.push(backend.tags[i])
+        const lower = tags.map(function(tag) { return tag.toLowerCase() })
+        let changed = false
+        for (let part of text.split(",")) {
+            part = part.trim().replace(/^#+/, "").trim()
+            if (part.length === 0 || lower.indexOf(part.toLowerCase()) >= 0) continue
+            tags.push(part)
+            lower.push(part.toLowerCase())
+            changed = true
+        }
+        if (!changed) return
+        backend.setTags(tags.join(", "))
+        autosave.restart()
+    }
+
+    function removeTag(index) {
+        const tags = []
+        for (let i = 0; i < backend.tags.length; ++i) if (i !== index) tags.push(backend.tags[i])
+        backend.setTags(tags.join(", "))
+        autosave.restart()
     }
 
     // Opens a clicked link in the desktop's browser or mail client. Note
@@ -554,17 +690,6 @@ ApplicationWindow {
         formatter.toggleStyle(contentEditor.textDocument, contentEditor.selectionStart, contentEditor.selectionEnd, tag)
     }
 
-    function insertImageTag(imageUrl) {
-        contentEditor.forceActiveFocus()
-        ensureRichText()
-        var imgWidth = Math.max(160, Math.min(300, Math.round(contentEditor.width - 24)))
-        var imgTag = "<br><img src=\"" + imageUrl + "\" width=\"" + imgWidth + "\" /><br>"
-        var pos = contentEditor.cursorPosition
-        contentEditor.insert(pos, imgTag)
-        backend.editContent(contentEditor.text)
-        autosave.restart()
-    }
-
     Shortcut {
         sequence: "Ctrl+B"
         enabled: contentEditor.activeFocus && noteWindow.hasTextSelection
@@ -593,18 +718,18 @@ ApplicationWindow {
 
     FileDialog {
         id: imageDialog
-        title: qsTr("Insert Image or GIF")
+        title: qsTr("Insert Images or GIFs")
+        fileMode: FileDialog.OpenFiles
+        currentFolder: backend.picturesFolder()
         nameFilters: [
-            qsTr("Images and GIFs (*.png *.jpg *.jpeg *.gif *.webp *.svg)"),
-            qsTr("All files (*)")
+            qsTr("Images and GIFs (*.png *.jpg *.jpeg *.gif *.webp *.bmp *.svg)"),
+            qsTr("Animated GIFs (*.gif)")
         ]
         onAccepted: {
-            if (selectedFile) {
-                var localUrl = backend.attachImage(selectedFile.toString())
-                if (localUrl && localUrl.length > 0) {
-                    noteWindow.insertImageTag(localUrl)
-                }
-            }
+            const urls = []
+            for (let i = 0; i < selectedFiles.length; ++i) urls.push(selectedFiles[i])
+            if (urls.length > 0) currentFolder = urls[0].toString().replace(/\/[^\/]*$/, "")
+            noteWindow.insertImages(urls, contentEditor.cursorPosition)
         }
     }
 
@@ -664,27 +789,114 @@ ApplicationWindow {
             Layout.fillWidth: true
             spacing: 6
 
-            TextField {
-                id: tagsEditor
-                Layout.preferredHeight: 24
-                Layout.minimumWidth: 0
+            // Tags as removable chips; typing a tag and pressing Enter (or a
+            // comma) adds it, Backspace in the empty field removes the last.
+            Flow {
+                id: tagFlow
+                objectName: "tagFlow"
                 Layout.fillWidth: true
-                placeholderText: qsTr("Tags (e.g. work, rust)...")
-                Accessible.name: qsTr("Note tags")
-                text: backend.tagsText
-                selectByMouse: true
-                font.pixelSize: 11
-                color: theme.noteText
-                placeholderTextColor: theme.noteTextSecondary
-                background: Rectangle {
-                    color: "transparent"
-                    border.width: tagsEditor.activeFocus ? 1 : 0
-                    border.color: theme.border
-                    radius: theme.radiusSm
+                Layout.minimumWidth: 0
+                Layout.preferredHeight: implicitHeight
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 4
+
+                Repeater {
+                    model: backend.tags
+                    delegate: Rectangle {
+                        id: chip
+                        required property string modelData
+                        required property int index
+                        height: 22
+                        width: Math.min(chipRow.implicitWidth + 12, tagFlow.width)
+                        radius: height / 2
+                        color: theme.isDark ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(0, 0, 0, 0.07)
+                        border.width: 1
+                        border.color: theme.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.08)
+
+                        RowLayout {
+                            id: chipRow
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 4
+                            spacing: 2
+                            Label {
+                                text: "#" + chip.modelData
+                                textFormat: Text.PlainText
+                                elide: Text.ElideRight
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
+                                color: theme.noteText
+                                Layout.fillWidth: true
+                                Layout.maximumWidth: tagFlow.width - 34
+                            }
+                            Rectangle {
+                                implicitWidth: 16
+                                implicitHeight: 16
+                                radius: 8
+                                color: removeArea.containsMouse ? (theme.isDark ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(0, 0, 0, 0.1)) : "transparent"
+                                UI.AppIcon {
+                                    anchors.centerIn: parent
+                                    name: "x"
+                                    size: 10
+                                    color: theme.noteTextSecondary
+                                }
+                                MouseArea {
+                                    id: removeArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    Accessible.role: Accessible.Button
+                                    Accessible.name: qsTr("Remove tag %1").arg(chip.modelData)
+                                    onClicked: noteWindow.removeTag(chip.index)
+                                }
+                            }
+                        }
+                    }
                 }
-                onEditingFinished: {
-                    backend.setTags(text)
-                    autosave.restart()
+
+                TextField {
+                    id: tagsEditor
+                    objectName: "tagInput"
+                    height: 22
+                    width: Math.min(tagFlow.width, Math.max(90, contentWidth + leftPadding + rightPadding + 8))
+                    topPadding: 2
+                    bottomPadding: 2
+                    leftPadding: 6
+                    rightPadding: 6
+                    placeholderText: backend.tags.length > 0 ? qsTr("Add tag") : qsTr("Add tags, press Enter")
+                    Accessible.name: qsTr("Add a tag")
+                    selectByMouse: true
+                    font.pixelSize: 11
+                    color: theme.noteText
+                    placeholderTextColor: theme.noteTextSecondary
+                    background: Rectangle {
+                        color: "transparent"
+                        radius: height / 2
+                        border.width: tagsEditor.activeFocus ? 1 : 0
+                        border.color: theme.border
+                    }
+                    onTextEdited: {
+                        if (text.indexOf(",") >= 0) {
+                            noteWindow.addTags(text)
+                            text = ""
+                        }
+                    }
+                    onAccepted: {
+                        noteWindow.addTags(text)
+                        text = ""
+                    }
+                    onEditingFinished: {
+                        if (text.trim().length > 0) {
+                            noteWindow.addTags(text)
+                            text = ""
+                        }
+                    }
+                    Keys.onPressed: function(event) {
+                        if (event.key === Qt.Key_Backspace && text.length === 0 && backend.tags.length > 0) {
+                            noteWindow.removeTag(backend.tags.length - 1)
+                            event.accepted = true
+                        }
+                    }
                 }
             }
 
@@ -697,6 +909,7 @@ ApplicationWindow {
                 }
                 theme: noteWindow.theme
                 variant: backend.priority > 0 ? "accent" : "ghost"
+                Layout.alignment: Qt.AlignTop
                 implicitHeight: 24
                 padding: 2
                 leftPadding: 6
@@ -936,7 +1149,7 @@ ApplicationWindow {
                     rightPadding: 0
                     Layout.alignment: Qt.AlignVCenter
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Insert Image or GIF")
+                    ToolTip.text: qsTr("Insert images or GIFs — or drop them onto the note")
                     onClicked: imageDialog.open()
                 }
 
@@ -970,24 +1183,118 @@ ApplicationWindow {
                 font.pixelSize: noteWindow.noteFontSize > 0 ? noteWindow.noteFontSize : 13
                 color: theme.noteText
                 placeholderTextColor: theme.noteTextSecondary
-                selectionColor: theme.accent
+                // A selected image keeps its own colors under a light tint.
+                selectionColor: noteWindow.selectedImage >= 0
+                    ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.18) : theme.accent
                 selectedTextColor: theme.accentText
                 background: null
                 onTextChanged: {
-                    if (!noteWindow.loadingContent && text !== backend.draftContent) {
+                    // A GIF frame redraws the document without editing it.
+                    if (gifs.updating || noteWindow.loadingContent) return
+                    if (text !== backend.draftContent) {
                         backend.editContent(text)
                         autosave.restart()
                         linkScan.restart()
+                        // The caret moves past typed text after this signal.
+                        Qt.callLater(noteWindow.continueList)
                     }
+                    noteWindow.updateImageSelection()
+                }
+                onWidthChanged: noteWindow.updateImageSelection()
+                // Any other selection ends image resizing.
+                onSelectionStartChanged: if (noteWindow.selectedImage >= 0 && selectionStart !== noteWindow.selectedImage) noteWindow.selectedImage = -1
+                onSelectionEndChanged: if (noteWindow.selectedImage >= 0 && selectionEnd !== noteWindow.selectedImage + 1) noteWindow.selectedImage = -1
+
+                // Enter on an empty list item ends the list.
+                Keys.onReturnPressed: function(event) {
+                    event.accepted = noteWindow.isRichText && event.modifiers === Qt.NoModifier
+                        && formatter.endEmptyListItem(contentEditor.textDocument, contentEditor.cursorPosition)
+                }
+                Keys.onEscapePressed: function(event) {
+                    event.accepted = noteWindow.selectedImage >= 0
+                    if (event.accepted) contentEditor.deselect()
                 }
 
-                // A plain click on a link opens it; anywhere else the click
-                // places the caret as usual.
+                // A plain click on a link opens it and a click on an image
+                // selects it for resizing; anywhere else the click places the
+                // caret as usual.
                 TapHandler {
                     acceptedButtons: Qt.LeftButton
                     onTapped: function(eventPoint) {
                         const link = noteWindow.linkAt(eventPoint.position.x, eventPoint.position.y)
                         if (link.length > 0) noteWindow.openLink(link)
+                        else noteWindow.selectImageAt(eventPoint.position.x, eventPoint.position.y)
+                    }
+                }
+
+                // Frame and corner handle of the selected image. Dragging the
+                // handle resizes the image, keeping its aspect ratio.
+                Item {
+                    id: imageFrame
+                    objectName: "imageFrame"
+                    visible: noteWindow.selectedImage >= 0
+                    x: noteWindow.selectedImageRect.x
+                    y: noteWindow.selectedImageRect.y
+                    width: noteWindow.selectedImageRect.width
+                    height: noteWindow.selectedImageRect.height
+                    z: 5
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "transparent"
+                        border.width: 2
+                        border.color: theme.accent
+                        radius: 2
+                    }
+
+                    Rectangle {
+                        visible: resizeHandle.pressed
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.margins: 6
+                        width: sizeLabel.implicitWidth + 12
+                        height: sizeLabel.implicitHeight + 6
+                        radius: height / 2
+                        color: Qt.rgba(0, 0, 0, 0.65)
+                        Label {
+                            id: sizeLabel
+                            anchors.centerIn: parent
+                            text: qsTr("%1 × %2").arg(Math.round(imageFrame.width)).arg(Math.round(imageFrame.height))
+                            color: "white"
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    Rectangle {
+                        id: handleDot
+                        width: 14
+                        height: 14
+                        radius: 7
+                        x: parent.width - width / 2 - 1
+                        y: parent.height - height / 2 - 1
+                        color: theme.accent
+                        border.width: 2
+                        border.color: "white"
+
+                        MouseArea {
+                            id: resizeHandle
+                            objectName: "imageResizeHandle"
+                            anchors.fill: parent
+                            anchors.margins: -6
+                            cursorShape: Qt.SizeFDiagCursor
+                            preventStealing: true
+                            property real startX: 0
+                            property real startWidth: 0
+                            onPressed: function(mouse) {
+                                startX = mapToItem(null, mouse.x, mouse.y).x
+                                startWidth = imageFrame.width
+                            }
+                            onPositionChanged: function(mouse) {
+                                if (!pressed) return
+                                const dx = mapToItem(null, mouse.x, mouse.y).x - startX
+                                noteWindow.resizeSelectedImage(startWidth + dx)
+                            }
+                        }
                     }
                 }
                 HoverHandler {
@@ -995,6 +1302,47 @@ ApplicationWindow {
                     cursorShape: noteWindow.linkAt(linkHover.point.position.x, linkHover.point.position.y).length > 0
                         ? Qt.PointingHandCursor : Qt.IBeamCursor
                 }
+            }
+        }
+    }
+
+    // Images and GIFs dragged from a file manager are added where they are
+    // dropped, or at the end when dropped outside the text.
+    DropArea {
+        id: imageDrop
+        objectName: "imageDrop"
+        anchors.fill: parent
+        enabled: !noteWindow.collapsed
+        z: 30
+        property bool acceptable: false
+        onEntered: function(drag) {
+            acceptable = drag.hasUrls && drag.urls.some(function(url) { return noteWindow.isImageUrl(url) })
+            drag.accepted = acceptable
+            if (acceptable) drag.acceptProposedAction()
+        }
+        onExited: acceptable = false
+        onDropped: function(drop) {
+            acceptable = false
+            const point = imageDrop.mapToItem(contentEditor, drop.x, drop.y)
+            const inside = point.x >= 0 && point.y >= 0 && point.x <= contentEditor.width && point.y <= contentEditor.height
+            const position = inside ? contentEditor.positionAt(point.x, point.y) : contentEditor.length
+            if (noteWindow.insertImages(drop.urls, position) > 0) drop.acceptProposedAction()
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 4
+            visible: imageDrop.containsDrag && imageDrop.acceptable
+            color: Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.08)
+            border.width: 2
+            border.color: theme.accent
+            radius: 8
+            Label {
+                anchors.centerIn: parent
+                text: qsTr("Drop to add to the note")
+                color: theme.noteText
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
             }
         }
     }

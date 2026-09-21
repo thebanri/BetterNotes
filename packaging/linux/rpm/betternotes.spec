@@ -54,3 +54,4 @@ cargo test --release --locked
 %{_datadir}/applications/org.betternotes.BetterNotes.desktop
 %{_metainfodir}/org.betternotes.BetterNotes.metainfo.xml
 %{_datadir}/icons/hicolor/scalable/apps/org.betternotes.BetterNotes.svg
+%{_datadir}/icons/hicolor/*/apps/org.betternotes.BetterNotes.png

@@ -7,6 +7,7 @@ All formats install the same files, laid out by `stage.sh`:
 /usr/share/applications/org.betternotes.BetterNotes.desktop
 /usr/share/metainfo/org.betternotes.BetterNotes.metainfo.xml
 /usr/share/icons/hicolor/scalable/apps/org.betternotes.BetterNotes.svg
+/usr/share/icons/hicolor/<size>x<size>/apps/org.betternotes.BetterNotes.png
 ```
 
 The version comes from `Cargo.toml` (`version.sh`). Each build script writes

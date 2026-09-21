@@ -54,28 +54,67 @@ Item {
         "square": "M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"
     })
 
+    // Window-control glyphs are drawn with whole-pixel rectangles: a stroked
+    // path this small lands between pixels and its edges fade.
+    readonly property bool windowGlyph: name === "window-maximize" || name === "window-restore"
+    readonly property int glyphLine: Math.max(1, Math.round(strokeWidth * size / 24))
+    readonly property int glyphBox: Math.round(size * (name === "window-restore" ? 0.58 : 0.7))
+
     Item {
+        visible: root.windowGlyph
         anchors.centerIn: parent
-        width: 24
-        height: 24
-        scale: root.size / 24.0
-        transformOrigin: Item.Center
+        width: Math.round(root.size)
+        height: Math.round(root.size)
 
-        Shape {
-            anchors.fill: parent
-            layer.enabled: true
-            layer.samples: 4
+        // Back window of the restore glyph: its top and right edges only.
+        Rectangle {
+            visible: root.name === "window-restore"
+            x: Math.round((parent.width - root.glyphBox) / 2) + Math.round(root.size * 0.14)
+            y: Math.round((parent.height - root.glyphBox) / 2) - Math.round(root.size * 0.14)
+            width: root.glyphBox
+            height: root.glyphLine
+            color: root.color
+        }
+        Rectangle {
+            visible: root.name === "window-restore"
+            x: Math.round((parent.width - root.glyphBox) / 2) + Math.round(root.size * 0.14) + root.glyphBox - root.glyphLine
+            y: Math.round((parent.height - root.glyphBox) / 2) - Math.round(root.size * 0.14)
+            width: root.glyphLine
+            height: root.glyphBox
+            color: root.color
+        }
+        Rectangle {
+            x: Math.round((parent.width - root.glyphBox) / 2)
+            y: Math.round((parent.height - root.glyphBox) / 2)
+            width: root.glyphBox
+            height: root.glyphBox
+            radius: Math.min(2, root.glyphLine + 1)
+            color: "transparent"
+            border.width: root.glyphLine
+            border.color: root.color
+        }
+    }
 
-            ShapePath {
-                strokeColor: root.color
-                strokeWidth: root.strokeWidth
-                fillColor: root.filled ? root.color : "transparent"
-                capStyle: ShapePath.RoundCap
-                joinStyle: ShapePath.RoundJoin
+    // The path is scaled rather than the item, so the antialiasing layer is
+    // rendered at the icon's real size instead of being shrunk from 24px.
+    Shape {
+        visible: !root.windowGlyph
+        anchors.centerIn: parent
+        width: root.size
+        height: root.size
+        layer.enabled: true
+        layer.samples: 4
 
-                PathSvg {
-                    path: root.iconPaths[root.name] || ""
-                }
+        ShapePath {
+            scale: Qt.size(root.size / 24.0, root.size / 24.0)
+            strokeColor: root.color
+            strokeWidth: root.strokeWidth * root.size / 24.0
+            fillColor: root.filled ? root.color : "transparent"
+            capStyle: ShapePath.RoundCap
+            joinStyle: ShapePath.RoundJoin
+
+            PathSvg {
+                path: root.iconPaths[root.name] || ""
             }
         }
     }

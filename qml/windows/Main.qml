@@ -680,8 +680,7 @@ ApplicationWindow {
                         onClicked: window.showMinimized()
                     }
                     WindowButton {
-                        iconName: "square"
-                        iconSize: 12
+                        iconName: window.maximized ? "window-restore" : "window-maximize"
                         hint: window.maximized ? qsTr("Restore") : qsTr("Maximise")
                         onClicked: window.toggleMaximized()
                     }
@@ -1055,6 +1054,23 @@ ApplicationWindow {
                     if (!backend.setAutostart(checked)) autostartRow.checked = backend.autostartEnabled
                 }
             }
+
+            SettingRow {
+                id: installRow
+                readonly property bool available: applicationInfo.canInstall()
+                title: qsTr("Show in applications menu")
+                detail: available
+                    ? qsTr("Install BetterNotes for your user with its icon, so it can be launched from the menu and pinned to the taskbar. No administrator rights needed; removing it keeps your notes.")
+                    : qsTr("Already installed by your package manager or Flatpak.")
+                enabled: available
+                checked: !available || applicationInfo.isInstalled()
+                onToggled: function(checked) {
+                    const error = applicationInfo.setInstalled(checked)
+                    installRow.checked = applicationInfo.isInstalled()
+                    if (error.length > 0) window.showToast(error)
+                    else window.showToast(checked ? qsTr("Added to the applications menu") : qsTr("Removed from the applications menu"))
+                }
+            }
         }
     }
 
@@ -1088,7 +1104,9 @@ ApplicationWindow {
     Platform.SystemTrayIcon {
         id: systemTray
         visible: false
-        icon.name: "accessories-notes"
+        // The bundled icon, the same one the windows use. A theme icon name
+        // would show nothing where the theme lacks it.
+        icon.source: "qrc:/betternotes/icons/app-64.png"
         tooltip: applicationInfo.name()
 
         onActivated: function(reason) {

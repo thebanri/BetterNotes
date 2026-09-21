@@ -57,6 +57,10 @@ pub fn guess_mime_type(filename: &str) -> &'static str {
         "image/jpeg"
     } else if lower.ends_with(".gif") {
         "image/gif"
+    } else if lower.ends_with(".webp") {
+        "image/webp"
+    } else if lower.ends_with(".bmp") {
+        "image/bmp"
     } else if lower.ends_with(".svg") {
         "image/svg+xml"
     } else if lower.ends_with(".txt") {

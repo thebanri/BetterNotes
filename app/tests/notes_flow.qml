@@ -266,6 +266,76 @@ Window {
         check(window.deleteConfirmed(), "Formatting test cleanup failed")
     }
 
+    // Tag chips, automatic lists, inserted and resized images, and GIFs that
+    // play without counting as edits.
+    function assertMediaAndLists(window) {
+        const backend = window.editorBackend
+        const body = findItem(window.contentItem, "contentEditor")
+        const formatter = window.imageFormatter
+
+        window.addTags("work, #rust")
+        check(backend.tags.length === 2 && backend.tags[0] === "work" && backend.tags[1] === "rust", "Tags were not added as chips")
+        window.addTags("Work")
+        check(backend.tags.length === 2, "A duplicate tag was added")
+        const tagInput = findItem(window.contentItem, "tagInput")
+        tagInput.text = "desk"
+        tagInput.accepted()
+        check(backend.tags.length === 3 && tagInput.text === "", "Enter did not add the typed tag")
+        window.removeTag(0)
+        check(backend.tagsText === "rust, desk", "Removing a tag chip failed")
+
+        body.forceActiveFocus()
+        input.wait(10)
+        for (const key of ["-", " ", "a"]) {
+            input.keyClick(key)
+            input.wait(1)
+        }
+        check(body.text.indexOf("<ul") >= 0 && window.plainContent === "a", "'- ' did not start a bulleted list")
+        input.keyClick(Qt.Key_Return)
+        input.keyClick(Qt.Key_Return)
+        check((body.text.match(/<li/g) || []).length === 1, "Enter on an empty list item did not end the list")
+        for (const key of ["1", ".", " ", "b"]) {
+            input.keyClick(key)
+            input.wait(1)
+        }
+        check(body.text.indexOf("<ol") >= 0, "'1. ' did not start a numbered list")
+        body.select(0, body.length)
+        body.remove(0, body.length)
+
+        // The test points the XDG Pictures folder at its fixture images.
+        const fixtures = backend.picturesFolder() + "/"
+        check(fixtures.indexOf("/fixtures/") > 0, "Pictures folder not taken from the XDG user directories")
+        check(window.insertImages([fixtures + "still.png", fixtures + "not-an-image.txt"], 0) === 1, "Image insert failed")
+        const position = window.plainContent.indexOf("\ufffc")
+        check(position >= 0 && body.text.indexOf("attachments/") >= 0, "Image was not stored as an attachment")
+        check(formatter.imageAt(body.textDocument, position).width === 64, "A small image was scaled up")
+        const rect = body.positionToRectangle(position)
+        check(window.selectImageAt(rect.x + 4, rect.y + 4), "Clicking an image did not select it")
+        const handle = findItem(window.contentItem, "imageResizeHandle")
+        check(handle && handle.visible, "Image resize handle missing")
+        input.mousePress(handle, handle.width / 2, handle.height / 2)
+        input.mouseMove(handle, handle.width / 2 + 60, handle.height / 2)
+        input.mouseRelease(handle, handle.width / 2 + 60, handle.height / 2)
+        const resized = formatter.imageAt(body.textDocument, position)
+        check(resized.width === 124 && resized.height === 62, "Dragging the handle did not resize the image in proportion")
+        check(window.flush() && backend.draftContent.indexOf('width="124"') >= 0, "Resized image width was not saved")
+
+        check(window.insertImages([fixtures + "animated.gif"], body.length) === 1, "GIF insert failed")
+        check(window.imageAnimator.animationCount === 1, "GIF animation did not start")
+        check(window.flush(), "GIF note failed to save")
+        const gif = window.plainContent.lastIndexOf("\ufffc")
+        const at = body.positionToRectangle(gif)
+        const point = body.mapToItem(window.contentItem, at.x + 10, at.y + 10)
+        const first = input.grabImage(window.contentItem).pixel(point.x, point.y)
+        let changed = false
+        for (let i = 0; i < 20 && !changed; ++i) {
+            input.wait(30)
+            changed = !Qt.colorEqual(input.grabImage(window.contentItem).pixel(point.x, point.y), first)
+        }
+        check(changed, "The GIF did not animate")
+        check(!backend.dirty, "GIF frames were saved as edits")
+    }
+
     Timer {
         interval: 10
         running: true
@@ -352,6 +422,9 @@ Window {
                 const disposable = harness.library.createNote()
                 harness.assertEditorFormatting(disposable)
                 harness.check(harness.library.libraryBackend.titles.length === 2, "Delete failed to update library")
+                const media = harness.library.createNote()
+                harness.assertMediaAndLists(media)
+                harness.check(media.deleteConfirmed(), "Media test note could not be deleted")
                 harness.first.toggleCollapsed()
                 harness.check(harness.first.collapsed && harness.first.height === harness.first.collapsedHeight, "Collapse failed")
                 harness.check(harness.first.expandedHeight === 320, "Collapse lost expanded height")

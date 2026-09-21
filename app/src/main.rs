@@ -31,6 +31,9 @@ fn run() -> Result<i32, &'static str> {
     // Names the installed desktop entry. On Wayland this becomes the app_id, so
     // the desktop shows the right name and icon for the app's windows.
     QGuiApplication::set_desktop_file_name(&betternotes_core::APPLICATION_ID.into());
+    if !notes_bridge::ffi::platformSetApplicationIcon() {
+        eprintln!("BetterNotes: the bundled application icon could not be loaded");
+    }
 
     // Configure Linux desktop window manager rules/scripts (e.g. skip taskbar on KDE Plasma)
     betternotes_core::DesktopEnvironment::detect().setup_window_manager_integration();
@@ -60,7 +63,9 @@ fn print_help() {
     );
     println!("  restore <BACKUP_DIR>    Safely restore backup with pre-restore safety snapshot");
     println!("  export [OUTPUT_PATH]    Export all notes to JSON file or Markdown directory");
-    println!("  import <INPUT_FILE>     Import notes from JSON or Markdown file\n");
+    println!("  import <INPUT_FILE>     Import notes from JSON or Markdown file");
+    println!("  install                 Add BetterNotes to your applications menu (no root)");
+    println!("  uninstall               Remove it from the menu again; notes are kept\n");
     println!("Options:");
     println!(
         "  -b, --background        Start in background (restore notes and tray, hide main window)"
@@ -238,6 +243,24 @@ fn main() -> std::process::ExitCode {
         let report = betternotes_core::DesktopReport::current();
         println!("{}", report.format_report());
         return std::process::ExitCode::SUCCESS;
+    }
+
+    if args.len() >= 2 && (args[1] == "install" || args[1] == "uninstall") {
+        let result = if args[1] == "install" {
+            betternotes_core::install::install_for_current_user()
+        } else {
+            betternotes_core::install::uninstall_for_current_user()
+        };
+        return match result {
+            Ok(message) => {
+                println!("{message}");
+                std::process::ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("BetterNotes: {e}");
+                std::process::ExitCode::FAILURE
+            }
+        };
     }
 
     let (data_dir, db_path, socket_path) = match resolve_data_paths() {

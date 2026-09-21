@@ -4,6 +4,25 @@ All notable changes to the BetterNotes project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Animated GIFs play inside notes while the note is visible.
+- Images and GIFs can be dragged from a file manager onto a note.
+- Clicking an image selects it; dragging its corner handle resizes it, keeping its aspect ratio.
+- Typing `- `, `* `, `. ` or `1. ` at the start of a line starts a bulleted or numbered list; Enter on an empty item ends it.
+- Tags are shown as removable chips; Enter or a comma adds the typed tag and Backspace in the empty field removes the last one.
+- `betternotes install` / `betternotes uninstall` and a settings switch add BetterNotes to the user's applications menu with its icon, without root.
+
+### Changed
+- The image picker opens in the Pictures folder, accepts several files at once and inserts images no wider than the note, without scaling small ones up.
+- Windows and the system tray use the bundled application icon, so it shows before the app is installed; packages also install PNG icon sizes.
+- Icons are drawn at their real size, and the maximise/restore buttons use pixel-aligned glyphs.
+
+### Fixed
+- Image files whose path contains spaces or non-ASCII characters can be attached.
+- The system tray icon no longer disappears on icon themes without `accessories-notes`.
+
 ## [0.1.0] - 2026-09-21
 
 First Linux preview. The phase history below records the work included in this

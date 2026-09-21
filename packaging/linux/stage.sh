@@ -18,3 +18,7 @@ install -Dm755 "$binary" "$dest/usr/bin/betternotes"
 install -Dm644 "$root/packaging/linux/$id.desktop" "$dest/usr/share/applications/$id.desktop"
 install -Dm644 "$root/packaging/linux/$id.metainfo.xml" "$dest/usr/share/metainfo/$id.metainfo.xml"
 install -Dm644 "$root/assets/icons/$id.svg" "$dest/usr/share/icons/hicolor/scalable/apps/$id.svg"
+for size in 16 22 24 32 48 64 128 256; do
+    install -Dm644 "$root/assets/icons/hicolor/$id-$size.png" \
+        "$dest/usr/share/icons/hicolor/${size}x${size}/apps/$id.png"
+done

@@ -46,7 +46,7 @@ fn launch_command(appimage: Option<&std::ffi::OsStr>) -> String {
 
 /// Quotes one argument for a desktop entry's Exec key, as the Desktop Entry
 /// Specification requires for paths containing spaces or reserved characters.
-fn desktop_exec_quote(argument: &str) -> String {
+pub(crate) fn desktop_exec_quote(argument: &str) -> String {
     let mut quoted = String::with_capacity(argument.len() + 2);
     quoted.push('"');
     for character in argument.chars() {

@@ -3,6 +3,8 @@
 #include <QColor>
 #include <QObject>
 #include <QQuickTextDocument>
+#include <QUrl>
+#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
 // Presentation-only adapter: merge individual Qt text properties without
@@ -31,4 +33,26 @@ class TextFormatter : public QObject {
     Q_INVOKABLE bool containsLink(const QString &text) const;
     // The link target of the character at a document position, or empty.
     Q_INVOKABLE QString anchorAt(QQuickTextDocument *document, int position) const;
+
+    // Turns a paragraph that starts with a list marker ("- ", "* ", ". " or
+    // "1. ") into a bulleted or numbered list item once the marker is typed.
+    // Returns the caret position after the marker is removed, or -1.
+    Q_INVOKABLE int autoList(QQuickTextDocument *document, int position);
+    // Whether plain text has a list marker at the start of the line ending at
+    // position, so the caller knows to switch the note to rich text first.
+    Q_INVOKABLE bool startsList(const QString &text, int position) const;
+    // Enter on an empty list item ends the list instead of adding an item.
+    Q_INVOKABLE bool endEmptyListItem(QQuickTextDocument *document, int position);
+
+    // The image at a document position: {name, width, height}, or an empty
+    // map. Width and height are the displayed size in pixels.
+    Q_INVOKABLE QVariantMap imageAt(QQuickTextDocument *document,
+                                    int position) const;
+    // Displays the image at position with the given width; the height follows
+    // the image's aspect ratio.
+    Q_INVOKABLE bool resizeImage(QQuickTextDocument *document, int position,
+                                 int width);
+    // The displayed width for a newly inserted image: its natural width, but
+    // never wider than maxWidth. Returns 0 when the file is not an image.
+    Q_INVOKABLE int fittedImageWidth(const QUrl &url, int maxWidth) const;
 };

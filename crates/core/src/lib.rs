@@ -5,6 +5,7 @@ pub mod autostart;
 pub mod backup;
 pub mod desktop;
 pub mod export_import;
+pub mod install;
 pub mod ipc;
 pub mod links;
 mod notes;
