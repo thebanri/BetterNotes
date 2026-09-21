@@ -24,6 +24,7 @@ ApplicationWindow {
     property alias theme: theme
     property alias reminderEditorItem: reminderEditor
     property alias deleteForeverDialog: deleteDialog
+    property alias settingsPopupItem: settingsPopup
     property var noteWindows: ({})
     property string windowError: ""
     property string filterTab: "all"
@@ -77,6 +78,7 @@ ApplicationWindow {
 
     function initialize() {
         if (!backend.initialize()) return
+        backend.runAutoBackup()
         backend.setReminderTexts(qsTr("Reminder from BetterNotes"), qsTr("Open note"), qsTr("Snooze 10 min"))
         const ids = backend.restoreIds
         const errors = []
@@ -1441,8 +1443,20 @@ ApplicationWindow {
         }
 
         readonly property bool layersSupported: applicationInfo.supportsNoteLayers()
+        onOpened: backupSection.refresh()
 
-        contentItem: ColumnLayout {
+        // Scrolls once the settings are taller than the window.
+        contentItem: ScrollView {
+            id: settingsScroll
+            objectName: "librarySettingsScroll"
+            contentWidth: availableWidth
+            clip: true
+            implicitHeight: Math.min(settingsColumn.implicitHeight, window.height - 120)
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+        ColumnLayout {
+            id: settingsColumn
+            width: settingsScroll.availableWidth
             spacing: 18
 
             Label {
@@ -1522,6 +1536,138 @@ ApplicationWindow {
                     else window.showToast(checked ? qsTr("Added to the applications menu") : qsTr("Removed from the applications menu"))
                 }
             }
+
+            // ---- Backups ----------------------------------------------------
+            ColumnLayout {
+                id: backupSection
+                objectName: "backupSection"
+                spacing: 10
+                Layout.fillWidth: true
+                property var settings: ({})
+
+                function refresh() {
+                    try {
+                        settings = JSON.parse(backend.autoBackupSettings() || "{}")
+                    } catch (error) {
+                        settings = {}
+                    }
+                }
+
+                function apply(changes) {
+                    const next = Object.assign({}, settings, changes)
+                    if (!backend.setAutoBackupSettings(next.enabled, next.interval, next.keep, next.folder))
+                        window.showToast(backend.errorMessage)
+                    refresh()
+                }
+
+                Label {
+                    text: qsTr("Backups")
+                    font.pixelSize: 13
+                    font.weight: Font.Medium
+                    color: theme.textPrimary
+                }
+
+                SettingRow {
+                    id: autoBackupRow
+                    title: qsTr("Back up automatically")
+                    detail: backupSection.settings.last > 0
+                        ? qsTr("Last backup: %1").arg(new Date(backupSection.settings.last * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat))
+                        : qsTr("No backup yet. Backups copy your notes and attached files.")
+                    checked: backupSection.settings.enabled === true
+                    onToggled: function(checked) { backupSection.apply({ enabled: checked }) }
+                }
+
+                RowLayout {
+                    spacing: 8
+                    Layout.fillWidth: true
+                    enabled: backupSection.settings.enabled === true
+                    ComboBox {
+                        objectName: "backupInterval"
+                        textRole: "text"
+                        valueRole: "value"
+                        model: [
+                            { value: "daily", text: qsTr("Every day") },
+                            { value: "weekly", text: qsTr("Every week") }
+                        ]
+                        currentIndex: backupSection.settings.interval === "weekly" ? 1 : 0
+                        onActivated: backupSection.apply({ interval: currentValue })
+                        Layout.fillWidth: true
+                    }
+                    Label {
+                        text: qsTr("Keep")
+                        color: theme.textSecondary
+                        font.pixelSize: 12
+                    }
+                    SpinBox {
+                        objectName: "backupKeep"
+                        from: 1
+                        to: 100
+                        value: backupSection.settings.keep || 7
+                        editable: true
+                        onValueModified: backupSection.apply({ keep: value })
+                    }
+                }
+
+                RowLayout {
+                    spacing: 8
+                    Layout.fillWidth: true
+                    Label {
+                        text: backupSection.settings.target || ""
+                        textFormat: Text.PlainText
+                        elide: Text.ElideMiddle
+                        font.pixelSize: 11
+                        color: theme.textSecondary
+                        Layout.fillWidth: true
+                    }
+                    UI.StyledButton {
+                        theme: window.theme
+                        variant: "ghost"
+                        text: qsTr("Change Folder…")
+                        onClicked: backupFolderDialog.open()
+                    }
+                    UI.StyledButton {
+                        theme: window.theme
+                        variant: "ghost"
+                        visible: (backupSection.settings.folder || "").length > 0
+                        text: qsTr("Default")
+                        onClicked: backupSection.apply({ folder: "" })
+                    }
+                }
+
+                RowLayout {
+                    spacing: 8
+                    UI.StyledButton {
+                        objectName: "backupNowButton"
+                        theme: window.theme
+                        text: qsTr("Back Up Now")
+                        onClicked: {
+                            const made = backend.backupNow()
+                            backupSection.refresh()
+                            window.showToast(made.length > 0 ? qsTr("Backed up") : qsTr("Backup failed: %1").arg(backend.errorMessage))
+                        }
+                    }
+                    UI.StyledButton {
+                        theme: window.theme
+                        variant: "ghost"
+                        text: qsTr("Open Folder")
+                        onClicked: Qt.openUrlExternally("file://" + backupSection.settings.target)
+                    }
+                }
+                Label {
+                    text: qsTr("To restore, quit BetterNotes and run: betternotes restore <backup folder>")
+                    wrapMode: Text.WordWrap
+                    font.pixelSize: 11
+                    color: theme.textMuted
+                    Layout.fillWidth: true
+                }
+
+                FolderDialog {
+                    id: backupFolderDialog
+                    title: qsTr("Choose a Backup Folder")
+                    onAccepted: backupSection.apply({ folder: selectedFolder.toString() })
+                }
+            }
+        }
         }
     }
 
@@ -1747,6 +1893,14 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+K", "Ctrl+Shift+P"]; context: Qt.WindowShortcut; onActivated: commandPalette.open() }
     Shortcut { sequences: [StandardKey.Find]; context: Qt.WindowShortcut; onActivated: searchField.forceActiveFocus() }
     Shortcut { sequences: ["Ctrl+Alt+Space"]; onActivated: window.openQuickCapture() }
+
+    // Automatic backups are due daily at most; checking hourly is plenty.
+    Timer {
+        interval: 60 * 60 * 1000
+        running: backend.ready
+        repeat: true
+        onTriggered: backend.runAutoBackup()
+    }
 
     Timer {
         id: reminderTimer

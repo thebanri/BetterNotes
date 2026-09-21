@@ -1,6 +1,7 @@
 //! Qt-independent notes, persistence and editor state.
 
 pub mod attachments;
+pub mod auto_backup;
 pub mod autostart;
 pub mod backup;
 pub mod desktop;

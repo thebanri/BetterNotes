@@ -28,9 +28,33 @@ pub fn create_backup(
         .as_secs();
 
     let backup_dirname = format!("betternotes-backup-{}", now);
-    let backup_dir = target_parent_dir.join(backup_dirname);
+    let final_dir = target_parent_dir.join(&backup_dirname);
+    if final_dir.exists() {
+        return Err(Error::Io(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "A backup was made less than a second ago",
+        )));
+    }
+    // Written under a temporary name and renamed when complete, so an
+    // interrupted backup never looks like a finished one.
+    let backup_dir = target_parent_dir.join(format!(".{backup_dirname}.partial"));
+    let _ = fs::remove_dir_all(&backup_dir);
     fs::create_dir_all(&backup_dir)?;
+    let result = write_backup(connection, data_dir, &backup_dir, now);
+    if result.is_err() {
+        let _ = fs::remove_dir_all(&backup_dir);
+        return result.map(|_| final_dir);
+    }
+    fs::rename(&backup_dir, &final_dir)?;
+    Ok(final_dir)
+}
 
+fn write_backup(
+    connection: &Connection,
+    data_dir: &Path,
+    backup_dir: &Path,
+    now: u64,
+) -> Result<()> {
     let target_db = backup_dir.join("notes.sqlite3");
     let target_db_str = target_db.to_str().ok_or_else(|| {
         Error::Io(std::io::Error::new(
@@ -39,8 +63,9 @@ pub fn create_backup(
         ))
     })?;
 
-    // SQLite's VACUUM INTO creates a crash-consistent, compacted atomic snapshot
-    connection.execute(&format!("VACUUM INTO '{}'", target_db_str), [])?;
+    // SQLite's VACUUM INTO creates a crash-consistent, compacted atomic
+    // snapshot. Its target is a bound parameter, so any path is safe.
+    connection.execute("VACUUM INTO ?1", [target_db_str])?;
 
     // Copy attachments directory if present
     let src_attachments = data_dir.join("attachments");
@@ -71,8 +96,7 @@ pub fn create_backup(
     let manifest_json = serde_json::to_string_pretty(&manifest)
         .map_err(|e| Error::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?;
     fs::write(backup_dir.join("manifest.json"), manifest_json)?;
-
-    Ok(backup_dir)
+    Ok(())
 }
 
 pub fn restore_backup(backup_dir: &Path, data_dir: &Path) -> Result<()> {

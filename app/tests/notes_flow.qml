@@ -479,6 +479,24 @@ Window {
         }
     }
 
+    // Backup settings save, and Back Up Now writes a complete backup.
+    function assertBackups(library) {
+        const backend = library.libraryBackend
+        const defaults = JSON.parse(backend.autoBackupSettings())
+        check(defaults.enabled && defaults.interval === "daily" && defaults.keep === 7, "Unexpected backup defaults")
+        const folder = backend.picturesFolder() + "/backups"
+        check(backend.setAutoBackupSettings(true, "weekly", 3, folder), "Saving backup settings failed")
+        const saved = JSON.parse(backend.autoBackupSettings())
+        check(saved.interval === "weekly" && saved.keep === 3 && saved.target.endsWith("/fixtures/backups"), "Backup settings not saved: " + JSON.stringify(saved))
+        check(!backend.setAutoBackupSettings(true, "daily", 3, "relative/path"), "A relative backup folder was accepted")
+        const made = backend.backupNow()
+        check(made.indexOf("/fixtures/backups/betternotes-backup-") >= 0, "Back Up Now failed: " + backend.errorMessage)
+        check(JSON.parse(backend.autoBackupSettings()).last > 0, "Last backup time not recorded")
+        library.settingsPopupItem.open()
+        check(findItem(library.settingsPopupItem.contentItem, "backupSection").visible, "Settings show no backup section")
+        library.settingsPopupItem.close()
+    }
+
     // A reminder set on a note shows in the library, can be edited there and
     // fires once when due.
     function assertReminders(library, note) {
@@ -784,6 +802,7 @@ Window {
                 harness.assertSearchAndTransfer(harness.library, media)
                 harness.assertTrashAndSelection(harness.library)
                 harness.assertArrangeAndOpenFiles(harness.library)
+                harness.assertBackups(harness.library)
                 const extras = harness.library.createNote()
                 harness.assertEditorExtras(extras)
                 harness.check(extras.deleteConfirmed(), "Editor extras note could not be deleted")

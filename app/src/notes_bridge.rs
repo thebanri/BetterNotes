@@ -343,10 +343,40 @@ pub mod ffi {
         #[cxx_name = "openFiles"]
         fn open_files(self: Pin<&mut Self>, paths: QStringList) -> QStringList;
 
+        /// Automatic backup settings as JSON: {enabled, interval, keep,
+        /// folder, target, last}.
+        #[qinvokable]
+        #[cxx_name = "autoBackupSettings"]
+        fn auto_backup_settings(&self) -> QString;
+        #[qinvokable]
+        #[cxx_name = "setAutoBackupSettings"]
+        fn set_auto_backup_settings(
+            self: Pin<&mut Self>,
+            enabled: bool,
+            interval: QString,
+            keep: i32,
+            folder: QString,
+        ) -> bool;
+        /// Backs up now; returns the backup folder, or "" (see errorMessage).
+        #[qinvokable]
+        #[cxx_name = "backupNow"]
+        fn backup_now(self: Pin<&mut Self>) -> QString;
+        /// Makes an automatic backup if one is due, in the background.
+        #[qinvokable]
+        #[cxx_name = "runAutoBackup"]
+        fn run_auto_backup(&self);
+
         #[qinvokable]
         #[cxx_name = "pollIpcAction"]
         fn poll_ipc_action(self: Pin<&mut Self>) -> QString;
     }
+}
+
+fn data_directory() -> Result<std::path::PathBuf> {
+    paths::data_directory(
+        std::env::var_os("XDG_DATA_HOME").as_deref(),
+        std::env::var_os("HOME").as_deref(),
+    )
 }
 
 /// A path from QML, which passes file dialog results as file URLs.
@@ -1355,6 +1385,83 @@ impl ffi::NotesBackend {
             result
         });
         ids
+    }
+
+    pub fn auto_backup_settings(&self) -> QString {
+        let (Some(session), Ok(data_dir)) = (self.session.as_ref(), data_directory()) else {
+            return QString::default();
+        };
+        let Ok(settings) = betternotes_core::auto_backup::AutoBackupSettings::load(session.store())
+        else {
+            return QString::default();
+        };
+        QString::from(
+            &serde_json::json!({
+                "enabled": settings.enabled,
+                "interval": settings.interval,
+                "keep": settings.keep,
+                "folder": settings.folder,
+                "target": settings.target(&data_dir).to_string_lossy(),
+                "last": settings.last,
+            })
+            .to_string(),
+        )
+    }
+
+    pub fn set_auto_backup_settings(
+        self: Pin<&mut Self>,
+        enabled: bool,
+        interval: QString,
+        keep: i32,
+        folder: QString,
+    ) -> bool {
+        let folder = if folder.is_empty() {
+            String::new()
+        } else {
+            local_path(&folder)
+        };
+        self.perform(false, |session| {
+            let current = betternotes_core::auto_backup::AutoBackupSettings::load(session.store())?;
+            betternotes_core::auto_backup::AutoBackupSettings {
+                enabled,
+                interval: interval.to_string(),
+                keep: u32::try_from(keep).unwrap_or(1),
+                folder,
+                ..current
+            }
+            .save(session.store())
+        })
+    }
+
+    pub fn backup_now(mut self: Pin<&mut Self>) -> QString {
+        let mut made = String::new();
+        self.as_mut().perform(false, |session| {
+            let path =
+                betternotes_core::auto_backup::backup_now(session.store(), &data_directory()?)?;
+            made = path.to_string_lossy().into_owned();
+            Ok(())
+        });
+        QString::from(&made)
+    }
+
+    pub fn run_auto_backup(&self) {
+        // Its own connection: a backup copies every attachment and must not
+        // hold up the window.
+        std::thread::spawn(|| {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|elapsed| elapsed.as_secs() as i64)
+                .unwrap_or(0);
+            let result = paths::database_path().and_then(|path| {
+                let store = betternotes_core::NoteStore::open(&path)?;
+                betternotes_core::auto_backup::run_if_due(&store, &data_directory()?, now)
+            });
+            match result {
+                Ok(Some(path)) => eprintln!("BetterNotes: backed up to {}", path.display()),
+                Ok(None) => {}
+                Err(error) => eprintln!("BetterNotes: automatic backup failed: {error}"),
+            }
+        });
     }
 
     pub fn recent_searches(&self) -> QStringList {

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Reminder notifications have **Open note** and **Snooze 10 min** buttons (snooze is offered for one-time reminders), where the desktop's notification service supports buttons.
 - A note's title bar shows its reminder; click it to edit.
+- Automatic backups, on by default: daily or weekly, keeping the newest 7 (1–100), in a folder of your choice. Settings also offer **Back Up Now** and show when the last backup was made.
 - **Arrange notes** (sidebar, command palette, tray) lines the open notes up on the library's screen. X11 and KDE Plasma (Wayland) move them; other Wayland desktops do not let apps place windows, so the notes are only brought on screen there.
 - Open text, Markdown and image files with BetterNotes from a file manager's **Open with**, or `betternotes --open FILE...`: each becomes a new note. A running BetterNotes receives them.
 - A **Trash**: deleting a note moves it there, where it can be restored for 30 days before it is deleted for good (with its attached files). Trashed notes stay out of search, reminders, exports and restored windows. Emptying the trash or deleting a note for good asks first.
@@ -29,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Search matches the text of notes instead of their HTML: searching for words like "indent" no longer finds every formatted note, and result previews no longer show markup such as `text-indent:0px;">`. Existing notes are reindexed on first start.
 - Export no longer writes into the directory BetterNotes was started from.
+- Backups are written under a temporary name and renamed when complete, so an interrupted backup never looks finished, and a backup folder whose path contains a quote no longer breaks the backup.
 - The search field and other text fields show their placeholder hint; the library search box read as empty before.
 - The tag field's hint is no longer cut off.
 
