@@ -220,6 +220,33 @@ function reachable(x, y, width) {
     return false;
 }
 
+function isLibrary(win) {
+    if (!win) return false;
+    var cls = (win.resourceClass || "").toLowerCase();
+    var name = (win.resourceName || "").toLowerCase();
+    return (cls === "betternotes" || name === "betternotes") &&
+        (win.caption || "").indexOf("All notes") !== -1;
+}
+
+// Centres a window on the screen the user is working on, inside the area left
+// free by panels. KWin's own placement puts a new window in the top-left.
+function center(win) {
+    var area;
+    try {
+        area = workspace.clientArea(KWin.PlacementArea, workspace.activeScreen,
+                                    workspace.currentDesktop);
+    } catch (error) {
+        area = workspace.activeScreen.geometry;
+    }
+    var g = win.frameGeometry;
+    win.frameGeometry = {
+        x: Math.round(area.x + Math.max(0, (area.width - g.width) / 2)),
+        y: Math.round(area.y + Math.max(0, (area.height - g.height) / 2)),
+        width: g.width,
+        height: g.height
+    };
+}
+
 function report(win) {
     var key = noteKey(win);
     if (!key) return;
@@ -242,13 +269,17 @@ function restore(win) {
                 return;
             }
         }
-        // Nothing usable saved: keep where KWin placed it this time.
+        // Nothing usable saved: a new note starts in the middle of the screen,
+        // and that becomes its saved position.
+        center(win);
         report(win);
     });
 }
 
 function watch(win, isNew) {
     if (!win) return;
+    // The library keeps no position on Wayland; open it centred.
+    if (isNew && isLibrary(win)) center(win);
     if (isNote(win)) {
         applyLayer(win);
         // Only a newly opened note is moved; notes already on screen when this
@@ -303,20 +334,20 @@ for (var i = 0; i < existing.length; i++) {
                 .output()
             {
                 if out.status.success() {
-                    let out_str = String::from_utf8_lossy(&out.stdout);
-                    if let Some(id_str) = out_str.split_whitespace().last() {
-                        let script_obj = format!("/Scripting/Script{id_str}");
-                        let _ = std::process::Command::new("busctl")
-                            .args([
-                                "--user",
-                                "call",
-                                "org.kde.KWin",
-                                &script_obj,
-                                "org.kde.kwin.Script",
-                                "run",
-                            ])
-                            .status();
-                    }
+                    // Start every loaded script that is not running yet rather
+                    // than calling run() on /Scripting/Script<id>: KWin reuses
+                    // the id of a script it is still tearing down, and run()
+                    // can then reach that old object and silently do nothing.
+                    let _ = std::process::Command::new("busctl")
+                        .args([
+                            "--user",
+                            "call",
+                            "org.kde.KWin",
+                            "/Scripting",
+                            "org.kde.kwin.Scripting",
+                            "start",
+                        ])
+                        .status();
                 }
             }
         }
