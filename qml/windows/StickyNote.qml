@@ -557,6 +557,9 @@ ApplicationWindow {
             onDoubleClicked: noteWindow.toggleCollapsed()
         }
 
+        // A collapsed note is only as tall as this header, so a tooltip has
+        // no room above or below and would cover the buttons, taking their
+        // clicks. The header buttons show tooltips only when expanded.
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 10
@@ -572,7 +575,7 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered
+                ToolTip.visible: hovered && !noteWindow.collapsed
                 ToolTip.text: qsTr("New Note")
                 onClicked: noteWindow.newNoteRequested()
             }
@@ -585,7 +588,7 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered
+                ToolTip.visible: hovered && !noteWindow.collapsed
                 ToolTip.text: noteWindow.collapsed ? qsTr("Expand Note") : qsTr("Collapse Note")
                 onClicked: noteWindow.toggleCollapsed()
             }
@@ -663,7 +666,7 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered
+                ToolTip.visible: hovered && !noteWindow.collapsed
                 ToolTip.text: noteWindow.alwaysOnTop ? qsTr("Always on Top (Active) — Click to stay on Desktop") : qsTr("On Desktop (Always on Bottom) — Click to Pin on Top")
                 ToolTip.delay: 300
                 onClicked: {
@@ -681,7 +684,7 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered
+                ToolTip.visible: hovered && !noteWindow.collapsed
                 ToolTip.text: noteWindow.reminder.length > 0
                     ? qsTr("Reminder: %1").arg(Reminders.describe(noteWindow.reminder))
                     : qsTr("Add a reminder")
@@ -698,7 +701,7 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered && !settingsModal.visible
+                ToolTip.visible: hovered && !settingsModal.visible && !noteWindow.collapsed
                 ToolTip.text: qsTr("Note Settings & Color")
                 ToolTip.delay: 300
                 onClicked: {
@@ -714,7 +717,7 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered
+                ToolTip.visible: hovered && !noteWindow.collapsed
                 ToolTip.text: qsTr("Close Note")
                 onClicked: noteWindow.close()
             }

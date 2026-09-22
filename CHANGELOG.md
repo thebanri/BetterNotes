@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- On a collapsed note, header button tooltips no longer cover the buttons and swallow their clicks, so Expand Note can be clicked again. The collapsed note has no room for a tooltip, so the header shows tooltips only while the note is expanded.
+
 ## [0.1.8] - 2026-09-22
 
 ### Fixed
