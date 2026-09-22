@@ -47,7 +47,13 @@ fetch https://download.kde.org/stable/plasma/6.4.5/layer-shell-qt-6.4.5.tar.xz \
 python3 -c "
 p_h = 'layer-shell-qt-6.4.5/src/qwaylandlayersurface_p.h'
 with open(p_h, 'r') as f: c = f.read()
-c = c.replace('#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)\n    void setWindowGeometry(const QRect &geometry) override;\n#else\n    void setWindowSize(const QSize &size) override;\n#endif', '    void setWindowGeometry(const QRect &geometry) override;\n    void setWindowSize(const QSize &size) override;')
+c = c.replace('#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)\n    void setWindowGeometry(const QRect &geometry) override;\n#else\n    void setWindowSize(const QSize &size) override;\n#endif', '''#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
+    void setWindowGeometry(const QRect &geometry) override;
+#else
+    void setWindowGeometry(const QRect &geometry) override;
+    void setWindowSize(const QSize &size) override;
+#endif''')
+c = c.replace('#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)\n    bool m_configuring = false;\n#endif', '    bool m_configuring = false;')
 with open(p_h, 'w') as f: f.write(c)
 
 cpp = 'layer-shell-qt-6.4.5/src/qwaylandlayersurface.cpp'
@@ -101,6 +107,7 @@ replacement = '''void QWaylandLayerSurface::setWindowGeometry(const QRect &geome
     }
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
 void QWaylandLayerSurface::setWindowSize(const QSize &size)
 {
     if (m_configuring) {
@@ -110,7 +117,8 @@ void QWaylandLayerSurface::setWindowSize(const QSize &size)
     if (m_interface->desiredSize().isNull()) {
         setDesiredSize(size);
     }
-}'''
+}
+#endif'''
 c = c.replace(target, replacement)
 with open(cpp, 'w') as f: f.write(c)
 "

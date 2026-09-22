@@ -58,6 +58,7 @@ fi
 export EXTRA_PLATFORM_PLUGINS="$(IFS=';'; echo "${wayland[*]}");libqoffscreen.so"
 export EXTRA_QT_MODULES="waylandclient"
 output="$out/BetterNotes-$version-$arch.AppImage"
+rm -f "$output"
 export LDAI_OUTPUT="$output" OUTPUT="$output"
 
 # linuxdeploy follows ldd, so resolve Qt from the same installation as QMAKE;
