@@ -51,6 +51,24 @@ if ! pkg-config --exists wayland-protocols; then
     export PKG_CONFIG_PATH="$work/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 fi
 
+# Qt's private Wayland headers include its own wayland-client-protocol.h, which
+# shares libwayland's include guard. When the system libwayland is older than
+# Qt's (Ubuntu 22.04 has 1.20), its header wins and Qt's code misses newer
+# interfaces such as wl_fixes. Put Qt's copy first, next to a wayland-client.h
+# whose quoted include then finds it.
+rm -rf include
+flags=""
+qt_protocol="$(echo "$("$QMAKE" -query QT_INSTALL_HEADERS)"/QtWaylandClient/*/QtWaylandClient/private/wayland-wayland-client-protocol.h)"
+system_include="$(pkg-config --variable=includedir wayland-client)"
+interfaces() { grep -o '^struct wl_[a-z_]*;' "$1" | sort -u; }
+if [ -f "$qt_protocol" ] &&
+    [ -n "$(comm -23 <(interfaces "$qt_protocol") <(interfaces "$system_include/wayland-client-protocol.h"))" ]; then
+    mkdir include
+    cp "$system_include/wayland-client.h" include/
+    cp "$qt_protocol" include/wayland-client-protocol.h
+    flags="-I$work/include"
+fi
+
 # Build trees from another version would fail to configure.
 rm -rf build-ecm build-lsq
 cmake -S extra-cmake-modules-6.26.0 -B build-ecm -DCMAKE_INSTALL_PREFIX="$work/ecm" \
@@ -59,6 +77,6 @@ cmake --install build-ecm
 
 cmake -S layer-shell-qt-6.7.5 -B build-lsq -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH="$qt;$work/ecm" -DCMAKE_INSTALL_PREFIX="$prefix" \
-    -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_TESTING=OFF
+    -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_TESTING=OFF -DCMAKE_CXX_FLAGS="$flags"
 cmake --build build-lsq --parallel
 cmake --install build-lsq
