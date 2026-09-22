@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-22
+
 ### Added
 - Sticky notes stay on screen when you **show the desktop** or minimize all windows, like desktop widgets (Settings, on by default). On Wayland they are layer-shell surfaces (KDE Plasma, Hyprland, Sway and other wlroots compositors) that BetterNotes moves and resizes itself; on X11 they use the desktop window type, or dock while pinned. GNOME on Wayland has no way to allow this, so notes stay ordinary windows there. Packages now depend on LayerShellQt; the AppImage and Flatpak bundle it.
 - Reminder notifications have **Open note** and **Snooze 10 min** buttons (snooze is offered for one-time reminders), where the desktop's notification service supports buttons.

@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.4" date="2026-09-22">
+      <description>
+        <p>Notes stay on screen when showing the desktop, like desktop widgets; a Turkish interface; notes locked with a master password; a trash; checklists with sub-items, code blocks, find and replace, text alignment and pasted or copied images; reminder buttons in notifications; automatic backups; new themes, accent colours and configurable shortcuts; and search that matches note text instead of its markup.</p>
+      </description>
+    </release>
     <release version="0.1.3" date="2026-09-21">
       <description>
         <p>Reminders for each note, editable from the note or the library; bulleted and numbered list buttons; the app icon in the applications menu and in notifications; images drawn in their colours; and the desktop font as the default note font.</p>
