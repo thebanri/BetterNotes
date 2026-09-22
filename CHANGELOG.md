@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Resizing desktop notes on Wayland no longer stutters or freezes in the AppImage built by CI. The AppImage now bundles Qt 6.11.2 with unpatched LayerShellQt 6.7.5, the pair that locally built AppImages already used, instead of Qt 6.9.3 with a patched LayerShellQt 6.4.5.
+
 ## [0.1.7] - 2026-09-22
 
 ### Fixed

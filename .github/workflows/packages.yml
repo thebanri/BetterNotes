@@ -195,7 +195,9 @@ jobs:
         with:
           # 6.9 is the first Qt to send the window icon to Wayland compositors
           # (xdg-toplevel-icon), which the taskbar shows before installation.
-          version: '6.9.3'
+          # The bundled LayerShellQt 6.7 needs 6.10; older pairs make resizing
+          # desktop notes stutter.
+          version: '6.11.2'
           cache: true
       # Notes become desktop widgets on Wayland through LayerShellQt, which
       # has to be built for the bundled Qt.

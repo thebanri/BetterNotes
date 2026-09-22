@@ -5,7 +5,7 @@
 #
 #   packaging/linux/build-layer-shell-qt.sh [prefix]
 #
-# QMAKE selects the Qt (default: qmake6 on the PATH), which must be 6.8 or
+# QMAKE selects the Qt (default: qmake6 on the PATH), which must be 6.10 or
 # newer and include Qt Wayland. LayerShellQt uses Qt's private Wayland API, so
 # it has to be built against exactly the Qt the app ships with. The prefix
 # defaults to that Qt's own, where the app's build finds it without help;
@@ -31,97 +31,14 @@ fetch() { # url sha256
     tar -xf "$file"
 }
 
-fetch https://download.kde.org/stable/frameworks/6.14/extra-cmake-modules-6.14.0.tar.xz \
-    d02cbbb3269b39680884abf6f14ba68f448570c554173f5249da3b8761784c13
-fetch https://download.kde.org/stable/plasma/6.4.5/layer-shell-qt-6.4.5.tar.xz \
-    ef6baae22114f038af89029f3f0075ee29c3b91fd49100828c4c3a32e1496e95
-
-# In Qt 6.9, QWaylandWindow::setGeometry calls setWindowGeometry when the window
-# has an explicit position (positionAutomatic is false, which sticky notes always
-# have). LayerShellQt 6.4.5 conditionally dropped setWindowGeometry for Qt >= 6.9,
-# leaving only setWindowSize; this prevented resizing layer surfaces on Qt 6.9.
-# Furthermore, applyConfigure() dropped m_configuring for Qt >= 6.9, which causes
-# configure roundtrips to re-enter geometry setters and fight interactive drag.
-# Ensure setWindowGeometry and setWindowSize are both implemented, update
-# desiredSize, and respect m_configuring to break configure feedback loops.
-python3 -c "
-p_h = 'layer-shell-qt-6.4.5/src/qwaylandlayersurface_p.h'
-with open(p_h, 'r') as f: c = f.read()
-c = c.replace('#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)\n    void setWindowGeometry(const QRect &geometry) override;\n#else\n    void setWindowSize(const QSize &size) override;\n#endif', '''#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
-    void setWindowGeometry(const QRect &geometry) override;
-#else
-    void setWindowGeometry(const QRect &geometry) override;
-    void setWindowSize(const QSize &size) override;
-#endif''')
-c = c.replace('#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)\n    bool m_configuring = false;\n#endif', '    bool m_configuring = false;')
-with open(p_h, 'w') as f: f.write(c)
-
-cpp = 'layer-shell-qt-6.4.5/src/qwaylandlayersurface.cpp'
-with open(cpp, 'r') as f: c = f.read()
-
-apply_target = '''void QWaylandLayerSurface::applyConfigure()
-{
-#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
-    m_configuring = true;
-#endif
-    window()->resizeFromApplyConfigure(m_pendingSize);
-#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
-    m_configuring = false;
-#endif
-}'''
-apply_replacement = '''void QWaylandLayerSurface::applyConfigure()
-{
-    m_configuring = true;
-    window()->resizeFromApplyConfigure(m_pendingSize);
-    m_configuring = false;
-}'''
-c = c.replace(apply_target, apply_replacement)
-
-target = '''#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
-void QWaylandLayerSurface::setWindowGeometry(const QRect &geometry)
-{
-    if (m_configuring) {
-        return;
-    }
-
-    if (m_interface->desiredSize().isNull()) {
-        setDesiredSize(geometry.size());
-    }
-}
-#else
-void QWaylandLayerSurface::setWindowSize(const QSize &size)
-{
-    if (m_interface->desiredSize().isNull()) {
-        setDesiredSize(size);
-    }
-}
-#endif'''
-replacement = '''void QWaylandLayerSurface::setWindowGeometry(const QRect &geometry)
-{
-    if (m_configuring) {
-        return;
-    }
-
-    if (m_interface->desiredSize().isNull()) {
-        setDesiredSize(geometry.size());
-    }
-}
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
-void QWaylandLayerSurface::setWindowSize(const QSize &size)
-{
-    if (m_configuring) {
-        return;
-    }
-
-    if (m_interface->desiredSize().isNull()) {
-        setDesiredSize(size);
-    }
-}
-#endif'''
-c = c.replace(target, replacement)
-with open(cpp, 'w') as f: f.write(c)
-"
+# The same LayerShellQt that Plasma 6.7 ships, unpatched. It needs Qt 6.10 or
+# newer: with older Qt or older LayerShellQt, interactive resizing of desktop
+# notes stutters and freezes, because configure events and resizes feed back
+# into each other.
+fetch https://download.kde.org/stable/frameworks/6.26/extra-cmake-modules-6.26.0.tar.xz \
+    f4e10d9d45aafb5273e996196040f4e420f0bc4071c208282aae94d9ad8e1743
+fetch https://download.kde.org/stable/plasma/6.7.5/layer-shell-qt-6.7.5.tar.xz \
+    ccdcfec7081ca956f7a52c9113a4df3a226575bfbe98b56a2a9a4d7d7e19e8f0
 
 if ! pkg-config --exists wayland-protocols; then
     fetch https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/1.45/downloads/wayland-protocols-1.45.tar.xz \
@@ -134,11 +51,13 @@ if ! pkg-config --exists wayland-protocols; then
     export PKG_CONFIG_PATH="$work/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 fi
 
-cmake -S extra-cmake-modules-6.14.0 -B build-ecm -DCMAKE_INSTALL_PREFIX="$work/ecm" \
+# Build trees from another version would fail to configure.
+rm -rf build-ecm build-lsq
+cmake -S extra-cmake-modules-6.26.0 -B build-ecm -DCMAKE_INSTALL_PREFIX="$work/ecm" \
     -DBUILD_TESTING=OFF -DBUILD_HTML_DOCS=OFF -DBUILD_MAN_DOCS=OFF -DBUILD_QTHELP_DOCS=OFF
 cmake --install build-ecm
 
-cmake -S layer-shell-qt-6.4.5 -B build-lsq -DCMAKE_BUILD_TYPE=Release \
+cmake -S layer-shell-qt-6.7.5 -B build-lsq -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH="$qt;$work/ecm" -DCMAKE_INSTALL_PREFIX="$prefix" \
     -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_TESTING=OFF
 cmake --build build-lsq --parallel
