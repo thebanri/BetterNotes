@@ -919,6 +919,29 @@ ApplicationWindow {
         return true
     }
 
+    // Enter on an empty last line of a code block ends the block.
+    function leaveCodeBlock() {
+        if (!isRichText || hasTextSelection) return false
+        if (!formatter.endEmptyCodeLine(contentEditor.textDocument, contentEditor.cursorPosition)) return false
+        typingFont(false)
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+        return true
+    }
+
+    // Down on the last line, or a click below the text, opens a plain line
+    // after a code block that ends the note; otherwise there is none to reach.
+    function openLineAfterCode() {
+        if (!isRichText) return false
+        const caret = formatter.lineAfterCode(contentEditor.textDocument)
+        if (caret < 0) return false
+        contentEditor.cursorPosition = caret
+        typingFont(false)
+        backend.editContent(contentEditor.text)
+        autosave.restart()
+        return true
+    }
+
     // The editor keeps the format for the next typed character with its own
     // caret, so a change to the paragraph alone would not reach new text.
     function typingFont(code) {
@@ -2221,13 +2244,19 @@ ApplicationWindow {
                 onSelectionStartChanged: if (noteWindow.selectedImage >= 0 && selectionStart !== noteWindow.selectedImage) noteWindow.selectedImage = -1
                 onSelectionEndChanged: if (noteWindow.selectedImage >= 0 && selectionEnd !== noteWindow.selectedImage + 1) noteWindow.selectedImage = -1
 
-                // Enter on an empty list item ends the list.
-                // Enter on a ``` line opens or closes a code block, and on an
-                // empty list item ends the list.
+                // Enter on a ``` line opens or closes a code block, on an empty
+                // last code line ends the block, and on an empty list item
+                // ends the list.
                 Keys.onReturnPressed: function(event) {
                     event.accepted = event.modifiers === Qt.NoModifier
-                        && (noteWindow.codeFence() || noteWindow.leaveEmptySubItem() || (noteWindow.isRichText
-                            && formatter.endEmptyListItem(contentEditor.textDocument, contentEditor.cursorPosition)))
+                        && (noteWindow.codeFence() || noteWindow.leaveCodeBlock() || noteWindow.leaveEmptySubItem()
+                            || (noteWindow.isRichText
+                                && formatter.endEmptyListItem(contentEditor.textDocument, contentEditor.cursorPosition)))
+                }
+                Keys.onDownPressed: function(event) {
+                    const caret = positionToRectangle(cursorPosition)
+                    event.accepted = event.modifiers === Qt.NoModifier && !noteWindow.hasTextSelection
+                        && caret.y >= positionToRectangle(length).y && noteWindow.openLineAfterCode()
                 }
                 Keys.onEscapePressed: function(event) {
                     if (noteWindow.findOpen) {
@@ -2259,7 +2288,9 @@ ApplicationWindow {
                         const x = eventPoint.position.x
                         const y = eventPoint.position.y
                         const link = noteWindow.linkAt(x, y)
+                        const end = contentEditor.positionToRectangle(contentEditor.length)
                         if (link.length > 0) noteWindow.openLink(link)
+                        else if (y > end.y + end.height && noteWindow.openLineAfterCode()) return
                         else noteWindow.selectImageAt(x, y)
                     }
                     // Double-clicking an image keeps it selected for resizing;

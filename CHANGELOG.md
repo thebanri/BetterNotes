@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The code block button makes only the selected lines code. A selection starting at the end of a line, or ending at the start of one, no longer takes that line in, and lines that share a paragraph with an image or other lines (split by Shift+Enter or pasted line breaks) become a paragraph of their own instead of turning the whole paragraph into code. The same selection rule applies to the list and checklist buttons.
+- A note that ends in a code block can be continued below it: Enter on an empty last code line ends the block, and Down on the last line or a click below the text opens a plain line after it.
+
 ## [0.1.9] - 2026-09-22
 
 ### Changed

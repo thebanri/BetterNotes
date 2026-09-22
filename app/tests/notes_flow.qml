@@ -816,6 +816,40 @@ Window {
         check(!codeLine(0) && codeLine(1), "The code button did not turn the caret's line back into text")
         body.text = ""
 
+        // A selection from the end of one line to the start of another takes
+        // in neither of them, only the lines between.
+        body.insert(0, "<p>above</p><p>middle</p><p>below</p>")
+        body.select("above".length, "above\nmiddle\n".length)
+        window.toggleCode()
+        check(!codeLine(0) && codeLine(1) && !codeLine(2), "The code button took in the lines around the selection")
+        body.text = ""
+
+        // Lines inside one paragraph, split by line breaks or an image, are
+        // made code on their own.
+        body.insert(0, "<p>one<br>two<br>three</p>")
+        body.select("one\n".length, "one\ntwo".length)
+        window.toggleCode()
+        check(!codeLine(0) && codeLine(1) && !codeLine(2), "The code button took in lines sharing the paragraph: " + JSON.stringify(window.plainContent))
+        check(window.plainContent === "one\ntwo\nthree", "Splitting the paragraph changed the text: " + JSON.stringify(window.plainContent))
+        body.text = ""
+
+        // Enter on an empty last code line ends the block.
+        body.forceActiveFocus()
+        typeText("```\ncode\n\nplain")
+        check(window.plainContent === "code\nplain", "Enter on an empty code line kept it: " + JSON.stringify(window.plainContent))
+        check(codeLine(0) && !codeLine(1), "Enter on an empty code line did not end the block")
+        body.select(body.length - 1, body.length)
+        check(body.cursorSelection.font.family !== "monospace", "Text typed after leaving the block is still monospace")
+        body.text = ""
+
+        // Down on a code block that ends the note opens a plain line under it.
+        body.forceActiveFocus()
+        typeText("```\nlast")
+        input.keyClick(Qt.Key_Down)
+        typeText("tail")
+        check(window.plainContent === "last\ntail" && codeLine(0) && !codeLine(1), "Down did not leave the code block: " + JSON.stringify(window.plainContent))
+        body.text = ""
+
         // The toolbar buttons turn existing lines into a list and back.
         // The note is rich text by now, so each line is its own paragraph,
         // as pressing Enter makes them.

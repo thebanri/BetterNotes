@@ -60,6 +60,13 @@ class TextFormatter : public QObject {
     // Makes the paragraphs from start to end code, or plain text again.
     Q_INVOKABLE void toggleCode(QQuickTextDocument *document, int start,
                                 int end);
+    // Enter on an empty last line of a code block ends the block: the line
+    // becomes plain text. Returns whether it did.
+    Q_INVOKABLE bool endEmptyCodeLine(QQuickTextDocument *document, int position);
+    // A note ending in code gets a plain paragraph after it, so there is
+    // somewhere to write below the block. Returns that paragraph's position,
+    // or -1 when the note does not end in code.
+    Q_INVOKABLE int lineAfterCode(QQuickTextDocument *document);
     // Restores the font of empty code lines, which HTML does not keep, so text
     // typed there after reopening a note is code too.
     Q_INVOKABLE void restoreCodeFont(QQuickTextDocument *document);

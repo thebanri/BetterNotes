@@ -596,10 +596,21 @@ QList<QTextBlock> blocksIn(QTextDocument *document, int start, int end) {
     if (!document || start < 0 || end < start ||
         end >= document->characterCount())
         return blocks;
-    for (auto block = document->findBlock(start); block.isValid();
-         block = block.next()) {
+    auto first = document->findBlock(start);
+    auto last = document->findBlock(end);
+    // A selection starting after the last character of a paragraph, or
+    // ending before the first one of the next, only touches the line break
+    // between them: dragging from the end of a line takes in no text of it.
+    if (end > start) {
+        if (first != last && first.length() > 1 &&
+            start == first.position() + first.length() - 1)
+            first = first.next();
+        if (first != last && end == last.position())
+            last = last.previous();
+    }
+    for (auto block = first; block.isValid(); block = block.next()) {
         blocks.append(block);
-        if (block.position() + block.length() > end)
+        if (block == last)
             break;
     }
     return blocks;
@@ -709,15 +720,71 @@ bool TextFormatter::codeActive(QQuickTextDocument *quickDocument, int start,
     return any;
 }
 
+namespace {
+// Code formatting is per paragraph, but one paragraph can hold several lines:
+// line breaks (Shift+Enter, or <br> in pasted HTML) and images, each on a line
+// of its own. Splits the paragraphs around start and end there, so the lines
+// from start to end become paragraphs of their own and formatting them
+// leaves the other lines as they are. Returns how far start and end moved.
+int isolateLines(QTextCursor &cursor, int start, int end) {
+    QTextDocument *document = cursor.document();
+    // After the last selected line first, so start stays where it is.
+    // A selection ending just after a line break, or starting just before
+    // one, takes in no text of the line beyond it (as in blocksIn()).
+    auto block = document->findBlock(end);
+    QString text = block.text();
+    int from = end - block.position();
+    if (end > start && from > 0 && text.at(from - 1) == QChar::LineSeparator)
+        --from;
+    for (int i = from; i < text.size(); ++i) {
+        if (i == 0)
+            continue;
+        if (text.at(i) == QChar::LineSeparator) {
+            cursor.setPosition(block.position() + i);
+            cursor.deleteChar();
+            cursor.insertBlock();
+            break;
+        }
+        if (text.at(i) == QChar::ObjectReplacementCharacter) {
+            cursor.setPosition(block.position() + i);
+            cursor.insertBlock();
+            break;
+        }
+    }
+    block = document->findBlock(start);
+    text = block.text();
+    from = start - block.position();
+    if (end > start && from < text.size() && text.at(from) == QChar::LineSeparator)
+        ++from;
+    for (int i = std::min(from, int(text.size())) - 1; i >= 0; --i) {
+        if (text.at(i) == QChar::LineSeparator) {
+            cursor.setPosition(block.position() + i);
+            cursor.deleteChar();
+            cursor.insertBlock();
+            return 0;
+        }
+        if (text.at(i) == QChar::ObjectReplacementCharacter) {
+            if (i + 1 >= text.size())
+                return 0;
+            cursor.setPosition(block.position() + i + 1);
+            cursor.insertBlock();
+            return 1;
+        }
+    }
+    return 0;
+}
+} // namespace
+
 void TextFormatter::toggleCode(QQuickTextDocument *quickDocument, int start,
                                int end) {
     auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
-    const auto blocks = blocksIn(document, start, end);
-    if (blocks.isEmpty())
+    if (blocksIn(document, start, end).isEmpty())
         return;
     const bool code = !codeActive(quickDocument, start, end);
     QTextCursor cursor(document);
     cursor.beginEditBlock();
+    const int moved = isolateLines(cursor, start, end);
+    const auto blocks = blocksIn(document, start + moved, end + moved);
     for (const auto &block : blocks) {
         if (isImageOnly(block))
             continue;
@@ -735,6 +802,37 @@ void TextFormatter::toggleCode(QQuickTextDocument *quickDocument, int start,
         setCode(block, code);
     }
     cursor.endEditBlock();
+}
+
+bool TextFormatter::endEmptyCodeLine(QQuickTextDocument *quickDocument,
+                                     int position) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || position < 0 || position >= document->characterCount())
+        return false;
+    const auto block = document->findBlock(position);
+    if (!isCodeBlock(block) || !block.text().isEmpty() ||
+        (block.next().isValid() && isCodeBlock(block.next())))
+        return false;
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    setCode(block, false);
+    cursor.endEditBlock();
+    return true;
+}
+
+int TextFormatter::lineAfterCode(QQuickTextDocument *quickDocument) {
+    auto *document = quickDocument ? quickDocument->textDocument() : nullptr;
+    if (!document || !isCodeBlock(document->lastBlock()))
+        return -1;
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    cursor.movePosition(QTextCursor::End);
+    // The new paragraph starts as a copy of the code line; setCode() takes
+    // the code formatting off again.
+    cursor.insertBlock();
+    setCode(cursor.block(), false);
+    cursor.endEditBlock();
+    return cursor.block().position();
 }
 
 void TextFormatter::restoreCodeFont(QQuickTextDocument *quickDocument) {
