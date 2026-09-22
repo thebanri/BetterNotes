@@ -2252,9 +2252,10 @@ ApplicationWindow {
                         if (link.length > 0) noteWindow.openLink(link)
                         else noteWindow.selectImageAt(x, y)
                     }
-                    // Double-clicking an image shows it at full size.
+                    // Double-clicking an image keeps it selected for resizing;
+                    // its menu has View Full Size.
                     onDoubleTapped: function(eventPoint) {
-                        if (noteWindow.selectImageAt(eventPoint.position.x, eventPoint.position.y)) noteWindow.previewSelectedImage()
+                        noteWindow.selectImageAt(eventPoint.position.x, eventPoint.position.y)
                     }
                 }
 
