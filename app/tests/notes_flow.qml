@@ -55,6 +55,27 @@ Window {
         check(!platformInfo.canPositionWindows("wayland") && !platformInfo.canPositionWindows("wayland-egl"), "Wayland must not restore absolute positions")
         check(!platformInfo.canPositionWindows("unknown"), "Unknown platforms must degrade safely")
         check(platformInfo.canPositionWindows("xcb"), "X11 placement unavailable")
+        check(Placement.screenAt([primary, left], -10, 10) === left, "Point on the left monitor not found")
+        check(Placement.screenAt([primary, left], 1280, 10) === null, "Point past every monitor matched one")
+    }
+
+    // Desktop widgets need a compositor; offscreen, notes must stay ordinary
+    // windows whatever the setting, and changing it reopens the open notes.
+    function assertDesktopWidgetSetting(library, ids) {
+        const backend = library.libraryBackend
+        check(backend.desktopWidgets, "Desktop widgets must be on by default")
+        check(library.widgetSupport === "", "Offscreen reported desktop widget support")
+        for (const id of ids) check(!library.noteWindows[id].widget, "A note became a widget offscreen")
+        const before = ids.map(function(id) { return library.noteWindows[id] })
+        check(backend.setDesktopWidgets(false) && !backend.desktopWidgets, "Turning desktop widgets off failed")
+        library.reopenNotes()
+        for (let i = 0; i < ids.length; ++i) {
+            const sticky = library.noteWindows[ids[i]]
+            check(sticky && sticky !== before[i] && sticky.visible, "A note was not reopened")
+            check(!sticky.widgetMode, "A reopened note kept the old setting")
+        }
+        check(backend.setDesktopWidgets(true), "Turning desktop widgets on failed")
+        library.reopenNotes()
     }
 
     // "Show all" reveals notes that are not on screen and must leave the ones
@@ -901,6 +922,9 @@ Window {
                 harness.check(harness.first.transientParent === null && harness.second.transientParent === null, "Notes are transient windows")
                 harness.check(harness.library.openNote(harness.firstId) === harness.first, "Duplicate editor created")
                 harness.assertShowAllNotes(harness.library, [harness.firstId, harness.secondId])
+                harness.assertDesktopWidgetSetting(harness.library, [harness.firstId, harness.secondId])
+                harness.first = harness.library.noteWindows[harness.firstId]
+                harness.second = harness.library.noteWindows[harness.secondId]
                 harness.edit(harness.first, "Autosaved title", "Plain <b>text</b>\nİstanbul 🦀")
                 harness.edit(harness.second, "Second", "Independent draft")
                 harness.first.width = 420

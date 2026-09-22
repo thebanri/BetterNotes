@@ -134,6 +134,19 @@ vary between desktops; headless CI tests verify startup, not compositor behavior
 - **Wayland:** the compositor generally controls placement and activation.
   KDE Plasma has optional KWin integration for note placement and layering;
   this requires host tools that are unavailable in the Flatpak sandbox.
+- **Show desktop / minimize all:** sticky notes stay on screen like desktop
+  widgets (Settings → *Keep notes visible when showing the desktop*, on by
+  default). On Wayland this uses the wlr-layer-shell protocol through
+  LayerShellQt: KDE Plasma, Hyprland, Sway and other wlroots compositors.
+  There notes are moved and resized by BetterNotes itself, stay out of the
+  taskbar and window switcher, and a note keeps to one monitor while being
+  dragged, jumping to the monitor under it when released. On X11 notes get the
+  desktop window type (dock while pinned); this is untested on XFCE,
+  Cinnamon and MATE, where desktop icons may cover unpinned notes. **GNOME on
+  Wayland** offers no way for an app to keep windows on screen through
+  "show desktop", so there notes stay ordinary windows. Builds without
+  LayerShellQt (see *Build from source*) leave notes as ordinary windows on
+  Wayland too.
 - **System tray:** requires a tray host. The library window remains available
   when the session has none.
 - **Global Quick Capture:** bind `betternotes --quick-capture` in your desktop's
@@ -206,8 +219,16 @@ needed.
 On Arch Linux / CachyOS:
 
 ```bash
-sudo pacman -S --needed base-devel rust pkgconf sqlite qt6-base qt6-declarative qt6-wayland
+sudo pacman -S --needed base-devel rust pkgconf sqlite qt6-base qt6-declarative qt6-wayland layer-shell-qt
 ```
+
+Desktop widgets (notes that stay through "show desktop") are optional at
+build time: they need LayerShellQt built for the same Qt (Wayland) and Qt's
+private QtGui headers (X11). The build uses whichever it finds next to Qt, and
+`BETTERNOTES_LAYER_SHELL_PREFIX` points it at LayerShellQt elsewhere;
+[packaging/linux/build-layer-shell-qt.sh](packaging/linux/build-layer-shell-qt.sh)
+builds one for a Qt that lacks it. `BETTERNOTES_NO_DESKTOP_WIDGETS=1` leaves
+both out.
 
 For Debian 13, use the complete development and QML dependency list in
 [CI](.github/workflows/ci.yml). Fedora dependencies are listed in the

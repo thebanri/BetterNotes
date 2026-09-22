@@ -65,6 +65,9 @@ ApplicationWindow {
         }
     }
     ApplicationInfo { id: applicationInfo }
+    // "layer-shell", "x11", or "" where notes cannot be desktop widgets.
+    DesktopWidgets { id: desktopWidgets }
+    readonly property string widgetSupport: desktopWidgets.mode()
     NotesBackend { id: backend; objectName: "notesBackend" }
     // Saves and restores note positions on KDE Plasma under Wayland, where the
     // app cannot see or set window positions itself.
@@ -79,6 +82,7 @@ ApplicationWindow {
         id: stickyComponent
         StickyNote {
             stayBelow: backend.notesStayBelow
+            widgetMode: backend.desktopWidgets
             appearanceMode: backend.themeMode
             appearanceAccent: backend.accentColor
             keys: window.keys
@@ -217,7 +221,8 @@ ApplicationWindow {
         if (ids.length === 0) return "none"
         const direct = applicationInfo.canPositionWindows(Qt.platform.pluginName)
         const viaDesktop = !direct && placementService.available && applicationInfo.supportsNoteLayers()
-        if (!direct && !viaDesktop) return "unsupported"
+        const allWidgets = ids.every(function(id) { return noteWindows[id].widget })
+        if (!direct && !viaDesktop && !allWidgets) return "unsupported"
         const area = window.screen
         const margin = 24
         const left = area.virtualX + margin
@@ -234,10 +239,13 @@ ApplicationWindow {
                 y += rowHeight + margin
                 rowHeight = 0
             }
-            if (direct) {
+            if (sticky.widget) {
+                sticky.moveWidgetTo(x, y)
+                desktopWidgets.settle(sticky, sticky.normalX, sticky.normalY)
+            } else if (direct) {
                 sticky.x = x
                 sticky.y = y
-            } else {
+            } else if (viaDesktop) {
                 placementService.track(id, true, x, y)
                 sticky.moveReported(x, y)
                 sticky.arrangeMarker = !sticky.arrangeMarker
@@ -258,7 +266,24 @@ ApplicationWindow {
     function hideAllNotes() {
         const ids = Object.keys(noteWindows)
         for (let i = 0; i < ids.length; ++i) {
-            noteWindows[ids[i]].showMinimized()
+            const sticky = noteWindows[ids[i]]
+            // Widgets cannot be minimized.
+            if (sticky.widget) sticky.hide()
+            else sticky.showMinimized()
+        }
+    }
+
+    // Closes and reopens the open notes, so a changed widget setting takes
+    // effect: a window becomes a widget, or stops being one, only when it is
+    // first shown.
+    function reopenNotes() {
+        const ids = Object.keys(noteWindows)
+        for (const id of ids) {
+            const sticky = noteWindows[id]
+            const visible = sticky.visible
+            sticky.close()
+            if (noteWindows[id]) continue // could not save; left open
+            if (visible) openNote(id, false, false)
         }
     }
 
@@ -1570,7 +1595,10 @@ ApplicationWindow {
             border.color: theme.border
         }
 
+        // Widgets have layers wherever they are available (layer-shell's
+        // bottom and top, or X11's window types).
         readonly property bool layersSupported: applicationInfo.supportsNoteLayers()
+            || (window.widgetSupport !== "" && backend.desktopWidgets)
         onOpened: backupSection.refresh()
 
         // Scrolls once the settings are taller than the window.
@@ -1707,6 +1735,23 @@ ApplicationWindow {
                 checked: backend.notesStayBelow
                 onToggled: function(checked) {
                     if (!backend.setNotesStayBelow(checked)) stayBelowRow.checked = backend.notesStayBelow
+                }
+            }
+
+            SettingRow {
+                id: widgetsRow
+                objectName: "desktopWidgetsRow"
+                title: qsTr("Keep notes visible when showing the desktop")
+                detail: window.widgetSupport === "layer-shell"
+                    ? qsTr("Notes stay on screen like desktop widgets when you show the desktop or minimize all windows, and stay out of the taskbar.")
+                    : window.widgetSupport === "x11"
+                    ? qsTr("Notes stay on screen like desktop widgets when you show the desktop. Some X11 window managers may place them behind desktop icons.")
+                    : qsTr("Not available here: GNOME on Wayland lets no app keep windows on screen when showing the desktop, and this build may lack LayerShellQt.")
+                enabled: window.widgetSupport !== "" && backend.ready
+                checked: backend.desktopWidgets
+                onToggled: function(checked) {
+                    if (!backend.setDesktopWidgets(checked)) widgetsRow.checked = backend.desktopWidgets
+                    else window.reopenNotes()
                 }
             }
 

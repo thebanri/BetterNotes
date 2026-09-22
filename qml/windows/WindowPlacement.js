@@ -28,3 +28,13 @@ function fit(saved, screens, fallback, recover) {
         y: Math.round(Math.max(minY, Math.min(y, target.virtualY + target.height - height - 40)))
     }
 }
+
+// The screen containing a global point, or null when none does.
+function screenAt(screens, x, y) {
+    for (let i = 0; i < screens.length; ++i) {
+        const s = screens[i]
+        if (x >= s.virtualX && x < s.virtualX + s.width && y >= s.virtualY && y < s.virtualY + s.height)
+            return s
+    }
+    return null
+}

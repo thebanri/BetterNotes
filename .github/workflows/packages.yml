@@ -65,8 +65,9 @@ jobs:
           apt-get install -y --no-install-recommends \
             build-essential pkg-config curl ca-certificates git dpkg-dev \
             libsqlite3-dev \
-            qt6-base-dev qt6-base-dev-tools \
-            qt6-declarative-dev qt6-declarative-dev-tools
+            qt6-base-dev qt6-base-dev-tools qt6-base-private-dev \
+            qt6-declarative-dev qt6-declarative-dev-tools \
+            liblayershellqtinterface-dev libwayland-dev
       - uses: actions/checkout@v4
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: dtolnay/rust-toolchain@stable
@@ -107,7 +108,8 @@ jobs:
       - name: Install build dependencies
         run: |
           dnf install -y git rpm-build cargo rust gcc-c++ \
-            qt6-qtbase-devel qt6-qtdeclarative-devel sqlite-devel \
+            qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel \
+            layer-shell-qt-devel wayland-devel sqlite-devel \
             desktop-file-utils libappstream-glib
       - uses: actions/checkout@v4
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -141,7 +143,7 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -Syu --noconfirm --needed base-devel git rust \
-            qt6-base qt6-declarative qt6-wayland sqlite hicolor-icon-theme
+            qt6-base qt6-declarative qt6-wayland layer-shell-qt sqlite hicolor-icon-theme
           # makepkg refuses to run as root.
           useradd --create-home builder
       - uses: actions/checkout@v4
@@ -186,7 +188,8 @@ jobs:
             libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
             libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
             libxcb-xinerama0 libxcb-xkb1 libwayland-cursor0 libwayland-egl1 \
-            libfontconfig1 libdbus-1-3
+            libfontconfig1 libdbus-1-3 \
+            cmake libwayland-dev libwayland-bin libxkbcommon-dev
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -194,6 +197,11 @@ jobs:
           # (xdg-toplevel-icon), which the taskbar shows before installation.
           version: '6.9.3'
           cache: true
+      # Notes become desktop widgets on Wayland through LayerShellQt, which
+      # has to be built for the bundled Qt.
+      - run: packaging/linux/build-layer-shell-qt.sh
+        env:
+          QMAKE: ${{ env.QT_ROOT_DIR }}/bin/qmake
       - uses: dtolnay/rust-toolchain@stable
       - run: packaging/linux/appimage/build-appimage.sh dist
         env:

@@ -56,6 +56,12 @@ ApplicationWindow {
     signal linkClicked(string link)
 
     property bool alwaysOnTop: false
+    // Asked for by the library: show the note as a desktop widget where this
+    // session can (see DesktopWidgets), so "show desktop" leaves it in place.
+    property bool widgetMode: false
+    // The note really is a widget. Widgets are moved and resized by the app,
+    // never by the window manager, and cannot be minimized.
+    property bool widget: false
     // Library-wide preference: unpinned notes stay beneath ordinary windows.
     property bool stayBelow: true
     // Invisible caption suffix naming this note's layer. Wayland gives a client
@@ -210,6 +216,7 @@ ApplicationWindow {
         function onDraftContentChanged() { noteWindow.loadContent() }
     }
     ApplicationInfo { id: platformInfo }
+    DesktopWidgets { id: desktopWidgets }
     TextFormatter { id: formatter }
     // GIFs play only while someone can see them.
     ImageAnimator {
@@ -229,13 +236,17 @@ ApplicationWindow {
         const savedSize = backend.noteFontSize()
         if (savedSize > 0) noteFontSize = savedSize
         loadContent()
+        widget = widgetMode && desktopWidgets.mode() !== ""
         place({x: backend.savedX(), y: backend.savedY(), width: backend.savedWidth(),
             height: backend.savedHeight(), screen: backend.savedScreen(),
             positioned: backend.savedPositioned()}, fallbackScreen, false)
         initialized = true
         // Register before the window appears: the window manager asks for the
         // saved position as soon as it maps the window.
-        if (placement) placement.track(noteId, backend.savedPositioned(), backend.savedX(), backend.savedY())
+        if (widget)
+            widget = desktopWidgets.attach(noteWindow, widgetAbove, normalX, normalY)
+        else if (placement)
+            placement.track(noteId, backend.savedPositioned(), backend.savedX(), backend.savedY())
         show()
         if (!collapsed) titleEditor.forceActiveFocus()
         persist(true)
@@ -253,11 +264,16 @@ ApplicationWindow {
         expandedHeight = fitted.height
         width = expandedWidth
         height = collapsed ? collapsedHeight : expandedHeight
-        if (state.positioned || recover || canPosition) {
+        if (state.positioned || recover || canPosition || widget) {
             x = fitted.x
             y = fitted.y
         }
-        if (canPosition) {
+        if (widget) {
+            // Widgets go exactly where the app puts them.
+            normalX = fitted.x
+            normalY = fitted.y
+            desktopWidgets.settle(noteWindow, normalX, normalY)
+        } else if (canPosition) {
             normalX = (x !== 0 || y !== 0) ? x : (state.x || fitted.x)
             normalY = (x !== 0 || y !== 0) ? y : (state.y || fitted.y)
         } else {
@@ -279,12 +295,14 @@ ApplicationWindow {
     // this to "tidy up" a window that is already where the user left it -- on
     // Wayland the raise() half is the only part that takes effect.
     function restoreStacking() {
-        if (alwaysOnTop) raise()
+        if (widget) desktopWidgets.setAbove(noteWindow, widgetAbove)
+        else if (alwaysOnTop) raise()
         else if (stayBelow) lower()
     }
 
     function recover(fallbackScreen) {
-        showNormal()
+        if (widget) show()
+        else showNormal()
         place({width: expandedWidth, height: expandedHeight, positioned: false}, fallbackScreen, true)
         persist(true)
         requestActivate()
@@ -302,6 +320,71 @@ ApplicationWindow {
         }
         normalScreen = screen ? screen.name : ""
         geometrySave.restart()
+    }
+
+    // Widgets sit above other windows while pinned, or when the library does
+    // not keep notes beneath them; otherwise below.
+    readonly property bool widgetAbove: alwaysOnTop || !stayBelow
+
+    // Where a layer-shell widget is on screen. A move takes effect with the
+    // next frame, and pointer positions until then are relative to the old
+    // place; measuring from here keeps a drag from overshooting. X11 reports
+    // the real position in x and y.
+    property int shownX: 0
+    property int shownY: 0
+    readonly property bool layerWidget: widget && desktopWidgets.mode() === "layer-shell"
+    onFrameSwapped: if (layerWidget) {
+        shownX = normalX
+        shownY = normalY
+    }
+
+    // A pointer position in an item, in global coordinates, for widgets.
+    function widgetPointer(item, mouse) {
+        const inWindow = item.mapToItem(null, mouse.x, mouse.y)
+        return layerWidget ? Qt.point(shownX + inWindow.x, shownY + inWindow.y)
+            : Qt.point(x + inWindow.x, y + inWindow.y)
+    }
+
+    // Moves a widget to a global position, as long as the middle of its
+    // header stays on some screen.
+    function moveWidgetTo(nextX, nextY) {
+        const screens = Application.screens
+        if (!Placement.screenAt(screens, nextX + width / 2, nextY + 20)) {
+            if (Placement.screenAt(screens, nextX + width / 2, normalY + 20)) nextY = normalY
+            else if (Placement.screenAt(screens, normalX + width / 2, nextY + 20)) nextX = normalX
+            else return
+        }
+        if (nextX === normalX && nextY === normalY) return
+        normalX = nextX
+        normalY = nextY
+        normalScreen = Placement.screenAt(screens, nextX + width / 2, nextY + 20).name
+        desktopWidgets.move(noteWindow, normalX, normalY)
+        geometrySave.restart()
+    }
+
+    // Resizing a widget: the edges being dragged, and the pointer and the
+    // note's rectangle at the press, globally.
+    property int resizeEdges: 0
+    property point resizePointer: Qt.point(0, 0)
+    property rect resizeStart: Qt.rect(0, 0, 0, 0)
+
+    function beginWidgetResize(edges, item, mouse) {
+        resizeEdges = edges
+        resizePointer = widgetPointer(item, mouse)
+        resizeStart = Qt.rect(normalX, normalY, width, height)
+    }
+
+    function updateWidgetResize(item, mouse) {
+        const pointer = widgetPointer(item, mouse)
+        const dx = Math.round(pointer.x - resizePointer.x)
+        const dy = Math.round(pointer.y - resizePointer.y)
+        if (resizeEdges & Qt.RightEdge) width = Math.max(minimumWidth, resizeStart.width + dx)
+        if (resizeEdges & Qt.LeftEdge) {
+            width = Math.max(minimumWidth, resizeStart.width - dx)
+            moveWidgetTo(resizeStart.x + resizeStart.width - width, normalY)
+        }
+        if ((resizeEdges & Qt.BottomEdge) && !collapsed)
+            height = Math.max(minimumHeight, resizeStart.height + dy)
     }
 
     // The window manager reports where the note is (see WindowPlacement).
@@ -361,6 +444,7 @@ ApplicationWindow {
     // window on its own; nudge it so pinning takes effect immediately. This is
     // an explicit user action, so raising on Wayland is what they asked for.
     onAlwaysOnTopChanged: if (initialized && !retiring) restoreStacking()
+    onStayBelowChanged: if (initialized && !retiring && widget) restoreStacking()
     onXChanged: captureGeometry()
     onYChanged: captureGeometry()
     onWidthChanged: captureGeometry()
@@ -383,7 +467,7 @@ ApplicationWindow {
             if (noteWindow.initialized && !noteWindow.retiring) {
                 noteWindow.place({x: noteWindow.normalX, y: noteWindow.normalY,
                     width: noteWindow.expandedWidth, height: noteWindow.expandedHeight,
-                    screen: noteWindow.normalScreen, positioned: noteWindow.canPosition},
+                    screen: noteWindow.normalScreen, positioned: noteWindow.canPosition || noteWindow.widget},
                     noteWindow.screen, false)
                 noteWindow.persist(true)
             }
@@ -422,21 +506,39 @@ ApplicationWindow {
         }
 
         MouseArea {
+            id: headerDrag
             anchors.fill: parent
             z: 0
             acceptedButtons: Qt.LeftButton
             property point clickPos: Qt.point(0, 0)
+            // For widgets: the pointer and the note at the press, globally.
+            property point pressPointer: Qt.point(0, 0)
+            property point pressNote: Qt.point(0, 0)
+            property bool dragging: false
             onPressed: function(mouse) {
                 clickPos = Qt.point(mouse.x, mouse.y)
+                if (noteWindow.widget) pressPointer = noteWindow.widgetPointer(headerDrag, mouse)
+                pressNote = Qt.point(noteWindow.normalX, noteWindow.normalY)
+                dragging = false
             }
             onPositionChanged: function(mouse) {
                 if (pressed) {
                     var dx = Math.abs(mouse.x - clickPos.x)
                     var dy = Math.abs(mouse.y - clickPos.y)
-                    if (dx > 3 || dy > 3) {
+                    if (!dragging && dx <= 3 && dy <= 3) return
+                    if (noteWindow.widget) {
+                        dragging = true
+                        const pointer = noteWindow.widgetPointer(headerDrag, mouse)
+                        noteWindow.moveWidgetTo(Math.round(pressNote.x + pointer.x - pressPointer.x),
+                            Math.round(pressNote.y + pointer.y - pressPointer.y))
+                    } else {
                         noteWindow.startSystemMove()
                     }
                 }
+            }
+            onReleased: {
+                if (dragging) desktopWidgets.settle(noteWindow, noteWindow.normalX, noteWindow.normalY)
+                dragging = false
             }
             onDoubleClicked: noteWindow.toggleCollapsed()
         }
@@ -2542,9 +2644,12 @@ ApplicationWindow {
         cursorShape: Qt.SizeHorCursor
         z: 20
         onPressed: function(mouse) {
-            if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.RightEdge)
-            }
+            if (mouse.button !== Qt.LeftButton) return
+            if (noteWindow.widget) noteWindow.beginWidgetResize(Qt.RightEdge, rightResize, mouse)
+            else noteWindow.startSystemResize(Qt.RightEdge)
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed && noteWindow.widget) noteWindow.updateWidgetResize(rightResize, mouse)
         }
     }
 
@@ -2559,9 +2664,12 @@ ApplicationWindow {
         cursorShape: Qt.SizeHorCursor
         z: 20
         onPressed: function(mouse) {
-            if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.LeftEdge)
-            }
+            if (mouse.button !== Qt.LeftButton) return
+            if (noteWindow.widget) noteWindow.beginWidgetResize(Qt.LeftEdge, leftResize, mouse)
+            else noteWindow.startSystemResize(Qt.LeftEdge)
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed && noteWindow.widget) noteWindow.updateWidgetResize(leftResize, mouse)
         }
     }
 
@@ -2577,9 +2685,12 @@ ApplicationWindow {
         z: 20
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
-            if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.BottomEdge)
-            }
+            if (mouse.button !== Qt.LeftButton) return
+            if (noteWindow.widget) noteWindow.beginWidgetResize(Qt.BottomEdge, bottomResize, mouse)
+            else noteWindow.startSystemResize(Qt.BottomEdge)
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed && noteWindow.widget) noteWindow.updateWidgetResize(bottomResize, mouse)
         }
     }
 
@@ -2593,9 +2704,12 @@ ApplicationWindow {
         z: 21
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
-            if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
-            }
+            if (mouse.button !== Qt.LeftButton) return
+            if (noteWindow.widget) noteWindow.beginWidgetResize(Qt.BottomEdge | Qt.RightEdge, bottomRightResize, mouse)
+            else noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed && noteWindow.widget) noteWindow.updateWidgetResize(bottomRightResize, mouse)
         }
 
         Rectangle {
@@ -2622,9 +2736,12 @@ ApplicationWindow {
         z: 21
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
-            if (mouse.button === Qt.LeftButton) {
-                noteWindow.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
-            }
+            if (mouse.button !== Qt.LeftButton) return
+            if (noteWindow.widget) noteWindow.beginWidgetResize(Qt.BottomEdge | Qt.LeftEdge, bottomLeftResize, mouse)
+            else noteWindow.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed && noteWindow.widget) noteWindow.updateWidgetResize(bottomLeftResize, mouse)
         }
     }
 

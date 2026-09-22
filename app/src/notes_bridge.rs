@@ -63,6 +63,8 @@ pub mod ffi {
         #[qproperty(QString, theme_mode, READ, NOTIFY = theme_changed, cxx_name = "themeMode")]
         #[qproperty(bool, autostart_enabled, READ, NOTIFY = autostart_changed, cxx_name = "autostartEnabled")]
         #[qproperty(bool, notes_stay_below, READ, NOTIFY = layer_changed, cxx_name = "notesStayBelow")]
+        /// Sticky notes are shown as desktop widgets where the session can.
+        #[qproperty(bool, desktop_widgets, READ, NOTIFY = layer_changed, cxx_name = "desktopWidgets")]
         #[qproperty(QString, accent_color, READ, NOTIFY = theme_changed, cxx_name = "accentColor")]
         /// "system", "en" or "tr".
         #[qproperty(QString, language, READ, NOTIFY = theme_changed)]
@@ -185,6 +187,10 @@ pub mod ffi {
         #[qinvokable]
         #[cxx_name = "setNotesStayBelow"]
         fn set_notes_stay_below(self: Pin<&mut Self>, enabled: bool) -> bool;
+
+        #[qinvokable]
+        #[cxx_name = "setDesktopWidgets"]
+        fn set_desktop_widgets(self: Pin<&mut Self>, enabled: bool) -> bool;
         #[qinvokable]
         fn search(self: Pin<&mut Self>, query: QString);
         #[qinvokable]
@@ -491,6 +497,7 @@ pub struct NotesBackendRust {
     theme_mode: QString,
     autostart_enabled: bool,
     notes_stay_below: bool,
+    desktop_widgets: bool,
 }
 
 impl Default for NotesBackendRust {
@@ -544,6 +551,7 @@ impl Default for NotesBackendRust {
             theme_mode: QString::from("system"),
             autostart_enabled: false,
             notes_stay_below: true,
+            desktop_widgets: true,
         }
     }
 }
@@ -809,6 +817,7 @@ impl ffi::NotesBackend {
                 let theme = session.theme().unwrap_or_default();
                 let autostart_enabled = session.is_autostart_enabled().unwrap_or(false);
                 let notes_stay_below = session.notes_stay_below().unwrap_or(true);
+                let desktop_widgets = session.desktop_widgets().unwrap_or(true);
                 let accent_color = session
                     .store()
                     .accent_color()
@@ -856,6 +865,7 @@ impl ffi::NotesBackend {
                 state.theme_mode = QString::from(theme.as_str());
                 state.autostart_enabled = autostart_enabled;
                 state.notes_stay_below = notes_stay_below;
+                state.desktop_widgets = desktop_widgets;
                 state.accent_color = QString::from(&accent_color);
                 state.language = QString::from(&language);
                 state.locked_states = locked_states;
@@ -935,6 +945,23 @@ impl ffi::NotesBackend {
         if result.is_ok() {
             self.as_mut().rust_mut().theme_mode = mode;
             self.as_mut().theme_changed();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn set_desktop_widgets(mut self: Pin<&mut Self>, enabled: bool) -> bool {
+        let result = self
+            .as_mut()
+            .rust_mut()
+            .session
+            .as_mut()
+            .ok_or(Error::NoSelection)
+            .and_then(|session| session.set_desktop_widgets(enabled));
+        if result.is_ok() {
+            self.as_mut().rust_mut().desktop_widgets = enabled;
+            self.as_mut().layer_changed();
             true
         } else {
             false

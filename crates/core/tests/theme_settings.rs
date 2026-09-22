@@ -81,6 +81,23 @@ fn session_manages_notes_stay_below_preference() {
 }
 
 #[test]
+fn session_manages_desktop_widgets_preference() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("notes.sqlite3");
+    let mut session = NotesSession::open(&path).unwrap();
+
+    // Notes stay on screen through "show desktop" unless the user opts out.
+    assert!(session.desktop_widgets().unwrap());
+    session.set_desktop_widgets(false).unwrap();
+
+    drop(session);
+    let mut session = NotesSession::open(&path).unwrap();
+    assert!(!session.desktop_widgets().unwrap());
+    session.set_desktop_widgets(true).unwrap();
+    assert!(session.desktop_widgets().unwrap());
+}
+
+#[test]
 fn theme_preference_parsing_and_formatting() {
     assert_eq!(
         "light".parse::<ThemePreference>().unwrap(),

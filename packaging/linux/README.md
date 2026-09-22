@@ -43,11 +43,19 @@ build or run the app from system Qt; use the AppImage or Flatpak there.
 
 On KDE Plasma the app keeps notes off the taskbar, below other windows, and
 where they were left, through a KWin script it loads over D-Bus with `busctl`.
+Notes shown as desktop widgets (layer-shell surfaces, see the main README)
+need no script: the app places and stacks them itself.
+
+Desktop widgets need LayerShellQt built for the Qt in use. Native packages
+depend on the distribution's; the AppImage and Flatpak build it
+([build-layer-shell-qt.sh](build-layer-shell-qt.sh) and the Flatpak manifest).
 
 - `.deb`, `.rpm`, Arch, AppImage: full integration.
-- **Flatpak: not yet.** The sandbox has no `busctl`, so the KWin script is not
-  loaded: notes appear in the taskbar, stay ordinary windows and are placed by
-  KWin. "Start at login" also writes inside the sandbox, where the desktop
+- **Flatpak: partly.** The sandbox has no `busctl`, so the KWin script is not
+  loaded. With desktop widgets on (the default) that does not matter on
+  Wayland: notes are layer-shell surfaces, off the taskbar and placed by the
+  app. With them off, notes appear in the taskbar, stay ordinary windows and
+  are placed by KWin. "Start at login" also writes inside the sandbox, where the desktop
   never reads it; it needs the Background portal instead. The tray icon
   registers without owning a well-known bus name there, which is untested.
 

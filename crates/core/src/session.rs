@@ -105,6 +105,14 @@ impl NotesSession {
         self.store.set_notes_stay_below(enabled)
     }
 
+    pub fn desktop_widgets(&self) -> Result<bool> {
+        self.store.desktop_widgets()
+    }
+
+    pub fn set_desktop_widgets(&mut self, enabled: bool) -> Result<()> {
+        self.store.set_desktop_widgets(enabled)
+    }
+
     pub fn is_autostart_enabled(&self) -> Result<bool> {
         crate::autostart::is_autostart_enabled()
     }

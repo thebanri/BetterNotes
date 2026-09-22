@@ -21,6 +21,7 @@ pub const TRASH_RETENTION_MS: i64 = 30 * 24 * 60 * 60 * 1000;
 /// Preview length for list rows and search results, in characters.
 const PREVIEW_CHARS: usize = 140;
 const NOTES_STAY_BELOW_KEY: &str = "notes_stay_below";
+const DESKTOP_WIDGETS_KEY: &str = "desktop_widgets";
 const RECENT_SEARCHES_KEY: &str = "recent_searches";
 /// How many recent library searches are remembered.
 pub const RECENT_SEARCH_LIMIT: usize = 8;
@@ -464,6 +465,18 @@ impl NoteStore {
 
     pub fn set_notes_stay_below(&self, enabled: bool) -> Result<()> {
         self.set_setting(NOTES_STAY_BELOW_KEY, if enabled { "true" } else { "false" })
+    }
+
+    /// Whether sticky notes are shown as desktop widgets where the session
+    /// supports it, so "show desktop" leaves them on screen. On by default.
+    pub fn desktop_widgets(&self) -> Result<bool> {
+        Ok(self
+            .get_setting(DESKTOP_WIDGETS_KEY)?
+            .is_none_or(|value| value != "false"))
+    }
+
+    pub fn set_desktop_widgets(&self, enabled: bool) -> Result<()> {
+        self.set_setting(DESKTOP_WIDGETS_KEY, if enabled { "true" } else { "false" })
     }
 
     /// The interface language: "system", "en" or "tr".

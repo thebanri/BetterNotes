@@ -17,6 +17,9 @@ BuildRequires:  cargo
 BuildRequires:  rust
 BuildRequires:  gcc-c++
 BuildRequires:  qt6-qtbase-devel
+BuildRequires:  qt6-qtbase-private-devel
+BuildRequires:  layer-shell-qt-devel
+BuildRequires:  wayland-devel
 BuildRequires:  qt6-qtdeclarative-devel
 BuildRequires:  sqlite-devel
 BuildRequires:  desktop-file-utils

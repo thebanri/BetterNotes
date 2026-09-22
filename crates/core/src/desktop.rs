@@ -179,7 +179,9 @@ function isBetterNotes(win) {
 }
 
 function isNote(win) {
-    if (!win || !isBetterNotes(win)) return false;
+    // Notes shown as desktop widgets are layer-shell surfaces; the app
+    // places and stacks those itself.
+    if (!win || !win.normalWindow || !isBetterNotes(win)) return false;
     var cap = win.caption || "";
     return cap.indexOf("All notes") === -1 && cap.indexOf("Quick Capture") === -1;
 }
