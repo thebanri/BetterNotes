@@ -222,9 +222,11 @@ mod tests {
         );
         assert_eq!(open_with(&key, &sealed).unwrap(), "gizli not".as_bytes());
         assert!(matches!(open_with(&other, &sealed), Err(Error::Locked)));
+        // Change the last hex digit to another one; the random nonce may
+        // already have made it '0'.
         let mut tampered = sealed.clone();
-        tampered.pop();
-        tampered.push('0');
+        let last = tampered.pop().unwrap();
+        tampered.push(if last == '0' { '1' } else { '0' });
         assert!(open_with(&key, &tampered).is_err());
         assert!(open_with(&key, "bnenc1:zz").is_err());
         assert_eq!(from_hex(&to_hex(&[0, 255, 16])).unwrap(), [0, 255, 16]);
