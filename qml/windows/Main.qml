@@ -65,6 +65,20 @@ ApplicationWindow {
         }
     }
     ApplicationInfo { id: applicationInfo }
+    // True once the window has been active for a moment. A desktop note
+    // dragged onto another monitor is replaced, and meanwhile the compositor
+    // may activate this window; focus visuals wait, so that flash shows nothing.
+    property bool settledActive: false
+    onActiveChanged: {
+        if (active) {
+            activeSettle.restart()
+        } else {
+            activeSettle.stop()
+            settledActive = false
+        }
+    }
+    onSettledActiveChanged: if (settledActive && searchField.activeFocus && searchField.text.length === 0) recentSearches.refresh()
+    Timer { id: activeSettle; interval: 150; onTriggered: window.settledActive = true }
     // "layer-shell", "x11", or "" where notes cannot be desktop widgets.
     DesktopWidgets { id: desktopWidgets }
     readonly property string widgetSupport: desktopWidgets.mode()
@@ -975,11 +989,36 @@ ApplicationWindow {
                         Accessible.name: qsTr("Search notes")
                         theme: window.theme
                         enabled: backend.ready
+                        // Blinks like the built-in cursor, but, like the focus
+                        // border, only once the window has settled as active.
+                        cursorDelegate: Rectangle {
+                            id: searchCursor
+                            property bool blinkOn: true
+                            readonly property bool shown: searchField.cursorVisible && window.settledActive
+                            width: 1
+                            color: searchField.color
+                            visible: shown && blinkOn
+                            onShownChanged: blinkOn = true
+                            Timer {
+                                id: searchBlink
+                                interval: Qt.styleHints.cursorFlashTime / 2
+                                running: searchCursor.shown && Qt.styleHints.cursorFlashTime > 0
+                                repeat: true
+                                onTriggered: searchCursor.blinkOn = !searchCursor.blinkOn
+                            }
+                            Connections {
+                                target: searchField
+                                function onCursorPositionChanged() {
+                                    searchCursor.blinkOn = true
+                                    if (searchBlink.running) searchBlink.restart()
+                                }
+                            }
+                        }
                         background: Rectangle {
                             radius: 18
                             color: theme.surface
-                            border.width: searchField.activeFocus ? 2 : 1
-                            border.color: searchField.activeFocus ? theme.accent : theme.border
+                            border.width: searchField.activeFocus && window.settledActive ? 2 : 1
+                            border.color: searchField.activeFocus && window.settledActive ? theme.accent : theme.border
                         }
                         onTextChanged: {
                             window.searchFilter = text.trim()
@@ -988,7 +1027,7 @@ ApplicationWindow {
                         Keys.onEscapePressed: clear()
                         Keys.onDownPressed: noteGrid.forceActiveFocus()
                         onAccepted: if (window.searchFilter.length > 0) backend.rememberSearch(window.searchFilter)
-                        onActiveFocusChanged: if (activeFocus && text.length === 0) recentSearches.refresh()
+                        onActiveFocusChanged: if (activeFocus && window.settledActive && text.length === 0) recentSearches.refresh()
 
                         // Recent searches, offered while the field is empty.
                         Popup {

@@ -278,9 +278,22 @@ void DesktopWidgets::stopTracking() {
 // Watches the whole app, as the release may come to a surface other than the
 // one pressed: settle() replaces a surface mid-drag.
 bool DesktopWidgets::eventFilter(QObject *watched, QEvent *event) {
-    if (event->type() == QEvent::MouseButtonRelease &&
-        !(static_cast<QMouseEvent *>(event)->buttons() & Qt::LeftButton))
-        Q_EMIT pointerReleased();
+    switch (event->type()) {
+    case QEvent::MouseButtonRelease:
+        if (!(static_cast<QMouseEvent *>(event)->buttons() & Qt::LeftButton))
+            Q_EMIT pointerReleased();
+        break;
+    // The drag follows relative motion, not pointer positions. Without the
+    // pressed surface, those would hover whatever the pointer crosses: the
+    // note's own buttons or another window of the app.
+    case QEvent::MouseMove:
+    case QEvent::Enter:
+        if (watched->isWindowType())
+            return true;
+        break;
+    default:
+        break;
+    }
     return QObject::eventFilter(watched, event);
 }
 

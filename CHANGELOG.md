@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - A desktop note dragged onto another monitor on Wayland moves there as soon as the middle of its header crosses, instead of vanishing past the old monitor's edge until the drag ends. It flickers once at the crossing: a layer-shell surface belongs to one monitor, so moving it takes a new surface.
+- While a note crosses to another monitor, buttons under the pointer and the All Notes search field no longer flash hover or focus highlights, and the search field's cursor no longer blinks on. The drag ignores pointer positions, and All Notes shows focus only once it has been active for a moment, so the compositor briefly activating it shows nothing.
 - On a collapsed note, header button tooltips no longer cover the buttons and swallow their clicks, so Expand Note can be clicked again. The collapsed note has no room for a tooltip, so the header shows tooltips only while the note is expanded.
 
 ## [0.1.8] - 2026-09-22
