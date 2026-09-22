@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.6" date="2026-09-22">
+      <description>
+        <p>Fix Wayland desktop note resizing and LayerShellQt geometry synchronization under Qt 6.9.</p>
+      </description>
+    </release>
     <release version="0.1.5" date="2026-09-22">
       <description>
         <p>Fix shaking and smearing when dragging or resizing desktop notes on Wayland using relative pointer motion.</p>

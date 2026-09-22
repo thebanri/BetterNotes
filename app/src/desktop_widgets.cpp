@@ -168,6 +168,18 @@ bool DesktopWidgets::attach(QWindow *window, bool above, int x, int y) {
         layer->setExclusiveZone(-1);
         layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityOnDemand);
         placeLayer(layer, window, x, y);
+        layer->setDesiredSize(window->size());
+        if (!window->property("_betternotes_layer_connected").toBool()) {
+            window->setProperty("_betternotes_layer_connected", true);
+            QObject::connect(window, &QWindow::widthChanged, layer, [layer, window](int) {
+                layer->setDesiredSize(window->size());
+                commit(window);
+            });
+            QObject::connect(window, &QWindow::heightChanged, layer, [layer, window](int) {
+                layer->setDesiredSize(window->size());
+                commit(window);
+            });
+        }
         return true;
     }
 #endif
@@ -244,6 +256,21 @@ void DesktopWidgets::setAbove(QWindow *window, bool above) {
     }
 #endif
     Q_UNUSED(above)
+}
+
+void DesktopWidgets::resize(QWindow *window, int width, int height) {
+    if (!window)
+        return;
+#ifdef BETTERNOTES_LAYER_SHELL
+    if (mode() == QLatin1String("layer-shell")) {
+        if (auto *layer = LayerShellQt::Window::get(window)) {
+            layer->setDesiredSize(QSize(width, height));
+            commit(window);
+        }
+        return;
+    }
+#endif
+    window->resize(width, height);
 }
 
 bool DesktopWidgets::trackPointer() {

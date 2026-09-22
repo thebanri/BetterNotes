@@ -1282,3 +1282,173 @@ Always follow these rules:
 18. Document significant architectural decisions.
 19. Run appropriate validation after changes.
 20. Stop after completing the requested task.
+
+# 47. Git and GitHub Workflow
+
+Git is part of the development workflow.
+
+For every development phase, follow this process.
+
+## Before Starting a Phase
+
+Before making changes:
+
+1. Inspect the current Git status.
+2. Identify the current branch.
+3. Verify that the working tree does not contain unexpected changes.
+4. Inspect the configured Git remote.
+5. Do NOT discard, overwrite, reset, or modify unrelated user changes.
+6. Pull/rebase only when it is safe and necessary.
+7. Never use destructive Git commands such as `git reset --hard` unless explicitly instructed.
+
+## During Development
+
+Make changes only for the requested phase.
+
+Do not commit temporary files, build artifacts, secrets, credentials, API keys, IDE caches, or machine-specific files.
+
+Maintain an appropriate `.gitignore`.
+
+Before committing, inspect:
+
+```bash
+git status
+git diff
+```
+
+Make sure the commit contains only intentional project changes.
+
+## Phase Completion
+
+A phase is considered complete only after:
+
+1. The requested implementation is finished.
+2. Formatting has been checked.
+3. Relevant tests have been executed.
+4. The project has been built successfully where the environment permits.
+5. Known failures or limitations have been documented.
+6. `git status` and the final diff have been reviewed.
+
+If validation fails because of a code problem introduced during the phase, fix it before committing.
+
+If validation cannot run because of an external environment/dependency problem, document the exact problem before deciding whether the phase can reasonably be committed.
+
+Do not falsely report successful tests or builds.
+
+## Commit
+
+After successfully completing a phase, create a Git commit.
+
+Use Conventional Commit-style messages.
+
+Preferred phase commit format:
+
+```text
+feat: complete phase <N> <short description>
+```
+
+Examples:
+
+```text
+feat: complete phase 1 foundation
+feat: complete phase 2 basic notes
+feat: complete phase 3 sticky windows
+feat: complete phase 4 modern ui
+feat: complete phase 5 search and organization
+feat: complete phase 6 linux integration
+feat: complete phase 7 wayland and x11 support
+feat: complete phase 8 productivity features
+feat: complete phase 9 cli and ipc
+feat: complete phase 10 linux release
+```
+
+Before committing, review staged files:
+
+```bash
+git status
+git diff --staged
+```
+
+Do not include unrelated user changes in the commit.
+
+## GitHub Push
+
+After the phase commit is successfully created, push it to the configured GitHub remote.
+
+Use the existing remote and current development branch.
+
+For example:
+
+```bash
+git push
+```
+
+If upstream tracking has not yet been configured, inspect the current branch and remote first, then configure the appropriate upstream safely.
+
+Do NOT:
+
+* force push
+* rewrite published history
+* delete remote branches
+* modify repository visibility
+* modify GitHub repository settings
+* create or expose credentials
+* print authentication tokens
+* bypass authentication failures
+
+unless explicitly instructed.
+
+Never use:
+
+```bash
+git push --force
+```
+
+or:
+
+```bash
+git push --force-with-lease
+```
+
+as part of the normal phase workflow.
+
+## Push Failure
+
+If the push fails:
+
+1. Read the Git error.
+2. Determine whether the cause is authentication, network access, remote configuration, upstream configuration, or a remote conflict.
+3. Fix only issues that can be resolved safely.
+4. Never overwrite remote history to solve a conflict.
+5. If user authentication or intervention is required, stop and report the exact command/error.
+
+Do not claim the phase was pushed unless `git push` actually succeeded.
+
+## Important Rule
+
+Every successfully completed development phase should end with:
+
+```text
+implement
+→ format
+→ test
+→ build
+→ inspect diff
+→ commit
+→ push
+→ report
+```
+
+After pushing, report:
+
+* phase completed
+* tests executed
+* build result
+* commit hash
+* commit message
+* branch
+* remote push result
+
+Then STOP.
+
+Do not automatically begin the next phase.

@@ -36,6 +36,55 @@ fetch https://download.kde.org/stable/frameworks/6.14/extra-cmake-modules-6.14.0
 fetch https://download.kde.org/stable/plasma/6.4.5/layer-shell-qt-6.4.5.tar.xz \
     ef6baae22114f038af89029f3f0075ee29c3b91fd49100828c4c3a32e1496e95
 
+# In Qt 6.9, QWaylandWindow::setGeometry calls setWindowGeometry when the window
+# has an explicit position (positionAutomatic is false, which sticky notes always
+# have). LayerShellQt 6.4.5 conditionally dropped setWindowGeometry for Qt >= 6.9,
+# leaving only setWindowSize; this prevented resizing layer surfaces on Qt 6.9.
+# Ensure setWindowGeometry is always implemented and updates desiredSize.
+python3 -c "
+p_h = 'layer-shell-qt-6.4.5/src/qwaylandlayersurface_p.h'
+with open(p_h, 'r') as f: c = f.read()
+c = c.replace('#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)\n    void setWindowGeometry(const QRect &geometry) override;\n#else\n    void setWindowSize(const QSize &size) override;\n#endif', '    void setWindowGeometry(const QRect &geometry) override;\n    void setWindowSize(const QSize &size) override;')
+with open(p_h, 'w') as f: f.write(c)
+
+cpp = 'layer-shell-qt-6.4.5/src/qwaylandlayersurface.cpp'
+with open(cpp, 'r') as f: c = f.read()
+target = '''#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
+void QWaylandLayerSurface::setWindowGeometry(const QRect &geometry)
+{
+    if (m_configuring) {
+        return;
+    }
+
+    if (m_interface->desiredSize().isNull()) {
+        setDesiredSize(geometry.size());
+    }
+}
+#else
+void QWaylandLayerSurface::setWindowSize(const QSize &size)
+{
+    if (m_interface->desiredSize().isNull()) {
+        setDesiredSize(size);
+    }
+}
+#endif'''
+replacement = '''void QWaylandLayerSurface::setWindowGeometry(const QRect &geometry)
+{
+    if (m_interface->desiredSize().isNull()) {
+        setDesiredSize(geometry.size());
+    }
+}
+
+void QWaylandLayerSurface::setWindowSize(const QSize &size)
+{
+    if (m_interface->desiredSize().isNull()) {
+        setDesiredSize(size);
+    }
+}'''
+c = c.replace(target, replacement)
+with open(cpp, 'w') as f: f.write(c)
+"
+
 if ! pkg-config --exists wayland-protocols; then
     fetch https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/1.45/downloads/wayland-protocols-1.45.tar.xz \
         4d2b2a9e3e099d017dc8107bf1c334d27bb87d9e4aff19a0c8d856d17cd41ef0

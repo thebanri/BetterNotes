@@ -63,6 +63,9 @@ export LDAI_OUTPUT="$output" OUTPUT="$output"
 # linuxdeploy follows ldd, so resolve Qt from the same installation as QMAKE;
 # otherwise a system Qt could be bundled next to another Qt's plugins.
 export LD_LIBRARY_PATH="$("$QMAKE" -query QT_INSTALL_LIBS)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+if [ -d "$tools/jxrlib/usr/lib" ]; then
+    export LD_LIBRARY_PATH="$tools/jxrlib/usr/lib:$LD_LIBRARY_PATH"
+fi
 
 cd "$work"
 "$tools/linuxdeploy-$arch.AppImage" \

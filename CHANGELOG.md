@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-09-22
+
+### Fixed
+- Resizing sticky notes running as desktop widgets on Wayland in the AppImage no longer jitters or snaps back to the old size: the AppImage build now ensures LayerShellQt synchronizes surface geometry under Qt 6.9, and note resizing commits explicit desired sizes to KWin.
+- Prevent Qt UniqueConnection assertion failure when connecting widget resize listeners.
+
 ## [0.1.5] - 2026-09-22
 
 ### Fixed

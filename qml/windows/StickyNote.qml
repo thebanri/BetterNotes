@@ -394,6 +394,7 @@ ApplicationWindow {
             }
             if ((gestureEdges & Qt.BottomEdge) && !collapsed)
                 height = Math.max(minimumHeight, gestureStart.height + dy)
+            desktopWidgets.resize(noteWindow, width, height)
         }
     }
 
@@ -401,6 +402,8 @@ ApplicationWindow {
         desktopWidgets.stopTracking()
         if (widgetGesture === "move" && gestureActive)
             desktopWidgets.settle(noteWindow, normalX, normalY)
+        if (widgetGesture === "resize" && gestureActive)
+            desktopWidgets.resize(noteWindow, width, height)
         widgetGesture = ""
         gestureActive = false
     }
@@ -452,6 +455,7 @@ ApplicationWindow {
         placing = true
         collapsed = !collapsed
         height = collapsed ? collapsedHeight : expandedHeight
+        if (widget) desktopWidgets.resize(noteWindow, width, height)
         placing = false
         persist(true)
     }
