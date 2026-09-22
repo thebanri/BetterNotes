@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-09-22
+
+### Fixed
+- Wayland desktop note interactive resizing in the AppImage no longer suffers from shaking, jittering, or snapping back on Qt 6.9: LayerShellQt now properly suppresses configure event echoes during `applyConfigure()`, both `setWindowGeometry` and `setWindowSize` respect `m_configuring`, and sticky note windows let LayerShellQt synchronize geometry natively without fighting manual desired size overrides.
+
 ## [0.1.6] - 2026-09-22
 
 ### Fixed

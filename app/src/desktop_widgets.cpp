@@ -127,16 +127,6 @@ void commit(QWindow *window) {
     else
         window->requestUpdate();
 }
-
-// LayerShellQt gained setDesiredSize() in Plasma 6.4. Older releases (such
-// as Debian 13's) lack the method, relying on QWindow geometry directly.
-template <typename T>
-auto setLayerDesiredSize(T *layer, const QSize &size)
-    -> decltype(layer->setDesiredSize(size), void()) {
-    layer->setDesiredSize(size);
-}
-
-inline void setLayerDesiredSize(...) {}
 #endif
 
 #ifdef BETTERNOTES_XCB_WINDOW_TYPE
@@ -178,18 +168,6 @@ bool DesktopWidgets::attach(QWindow *window, bool above, int x, int y) {
         layer->setExclusiveZone(-1);
         layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityOnDemand);
         placeLayer(layer, window, x, y);
-        setLayerDesiredSize(layer, window->size());
-        if (!window->property("_betternotes_layer_connected").toBool()) {
-            window->setProperty("_betternotes_layer_connected", true);
-            QObject::connect(window, &QWindow::widthChanged, layer, [layer, window](int) {
-                setLayerDesiredSize(layer, window->size());
-                commit(window);
-            });
-            QObject::connect(window, &QWindow::heightChanged, layer, [layer, window](int) {
-                setLayerDesiredSize(layer, window->size());
-                commit(window);
-            });
-        }
         return true;
     }
 #endif
@@ -266,22 +244,6 @@ void DesktopWidgets::setAbove(QWindow *window, bool above) {
     }
 #endif
     Q_UNUSED(above)
-}
-
-void DesktopWidgets::resize(QWindow *window, int width, int height) {
-    if (!window)
-        return;
-#ifdef BETTERNOTES_LAYER_SHELL
-    if (mode() == QLatin1String("layer-shell")) {
-        if (auto *layer = LayerShellQt::Window::get(window)) {
-            setLayerDesiredSize(layer, QSize(width, height));
-            commit(window);
-        }
-        window->resize(width, height);
-        return;
-    }
-#endif
-    window->resize(width, height);
 }
 
 bool DesktopWidgets::trackPointer() {

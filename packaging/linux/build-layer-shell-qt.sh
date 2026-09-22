@@ -40,7 +40,10 @@ fetch https://download.kde.org/stable/plasma/6.4.5/layer-shell-qt-6.4.5.tar.xz \
 # has an explicit position (positionAutomatic is false, which sticky notes always
 # have). LayerShellQt 6.4.5 conditionally dropped setWindowGeometry for Qt >= 6.9,
 # leaving only setWindowSize; this prevented resizing layer surfaces on Qt 6.9.
-# Ensure setWindowGeometry is always implemented and updates desiredSize.
+# Furthermore, applyConfigure() dropped m_configuring for Qt >= 6.9, which causes
+# configure roundtrips to re-enter geometry setters and fight interactive drag.
+# Ensure setWindowGeometry and setWindowSize are both implemented, update
+# desiredSize, and respect m_configuring to break configure feedback loops.
 python3 -c "
 p_h = 'layer-shell-qt-6.4.5/src/qwaylandlayersurface_p.h'
 with open(p_h, 'r') as f: c = f.read()
@@ -49,6 +52,25 @@ with open(p_h, 'w') as f: f.write(c)
 
 cpp = 'layer-shell-qt-6.4.5/src/qwaylandlayersurface.cpp'
 with open(cpp, 'r') as f: c = f.read()
+
+apply_target = '''void QWaylandLayerSurface::applyConfigure()
+{
+#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
+    m_configuring = true;
+#endif
+    window()->resizeFromApplyConfigure(m_pendingSize);
+#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
+    m_configuring = false;
+#endif
+}'''
+apply_replacement = '''void QWaylandLayerSurface::applyConfigure()
+{
+    m_configuring = true;
+    window()->resizeFromApplyConfigure(m_pendingSize);
+    m_configuring = false;
+}'''
+c = c.replace(apply_target, apply_replacement)
+
 target = '''#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
 void QWaylandLayerSurface::setWindowGeometry(const QRect &geometry)
 {
@@ -70,6 +92,10 @@ void QWaylandLayerSurface::setWindowSize(const QSize &size)
 #endif'''
 replacement = '''void QWaylandLayerSurface::setWindowGeometry(const QRect &geometry)
 {
+    if (m_configuring) {
+        return;
+    }
+
     if (m_interface->desiredSize().isNull()) {
         setDesiredSize(geometry.size());
     }
@@ -77,6 +103,10 @@ replacement = '''void QWaylandLayerSurface::setWindowGeometry(const QRect &geome
 
 void QWaylandLayerSurface::setWindowSize(const QSize &size)
 {
+    if (m_configuring) {
+        return;
+    }
+
     if (m_interface->desiredSize().isNull()) {
         setDesiredSize(size);
     }

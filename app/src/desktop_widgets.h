@@ -37,8 +37,6 @@ class DesktopWidgets : public QObject {
     Q_INVOKABLE void settle(QWindow *window, int x, int y);
     // Puts a widget above other windows (pinned) or below them.
     Q_INVOKABLE void setAbove(QWindow *window, bool above);
-    // Sets the size of a widget.
-    Q_INVOKABLE void resize(QWindow *window, int width, int height);
 
     // Reports how far the pointer moves from now on (pointerMoved) until
     // stopTracking(), for dragging a layer-shell widget. Pointer positions
