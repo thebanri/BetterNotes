@@ -31,9 +31,12 @@ class DesktopWidgets : public QObject {
     // window is first shown. Returns false when it stays a normal window.
     Q_INVOKABLE bool attach(QWindow *window, bool above, int x, int y);
     // Moves a widget to a global position. On Wayland a shown widget stays
-    // on its screen while it moves; call settle() when a drag ends.
+    // on its screen while it moves, so part of it may disappear past the
+    // screen's edge; settle() moves it onto another screen.
     Q_INVOKABLE void move(QWindow *window, int x, int y);
-    // Moves a widget, onto the screen holding (x, y) if that is another one.
+    // Moves a widget, onto the screen under the middle of its header if that
+    // is another one. On Wayland that takes a new surface, which cancels a
+    // press on the old one; pointerReleased() still ends a tracked drag.
     Q_INVOKABLE void settle(QWindow *window, int x, int y);
     // Puts a widget above other windows (pinned) or below them.
     Q_INVOKABLE void setAbove(QWindow *window, bool above);
@@ -42,14 +45,18 @@ class DesktopWidgets : public QObject {
     // stopTracking(), for dragging a layer-shell widget. Pointer positions
     // within a surface that is itself moving lag behind its moves, so they
     // make a dragged widget shake; relative motion does not. False when the
-    // compositor has no relative pointer motion.
+    // compositor has no relative pointer motion. While tracking,
+    // pointerReleased reports the left button's release.
     Q_INVOKABLE bool trackPointer();
     Q_INVOKABLE void stopTracking();
     void addPointerMotion(double dx, double dy);
 
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
   Q_SIGNALS:
     // Total pointer motion since trackPointer().
     void pointerMoved(double dx, double dy);
+    void pointerReleased();
 
   private:
     QPointF m_pointer;

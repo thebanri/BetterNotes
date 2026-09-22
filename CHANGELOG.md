@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Double-clicking an image in a note selects it for resizing instead of opening it full size, which covered the note until closed. Right-click the image and choose View Full Size to open it.
 
 ### Fixed
+- A desktop note dragged onto another monitor on Wayland moves there as soon as the middle of its header crosses, instead of vanishing past the old monitor's edge until the drag ends. It flickers once at the crossing: a layer-shell surface belongs to one monitor, so moving it takes a new surface.
 - On a collapsed note, header button tooltips no longer cover the buttons and swallow their clicks, so Expand Note can be clicked again. The collapsed note has no room for a tooltip, so the header shows tooltips only while the note is expanded.
 
 ## [0.1.8] - 2026-09-22

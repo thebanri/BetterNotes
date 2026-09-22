@@ -339,7 +339,12 @@ ApplicationWindow {
         normalX = nextX
         normalY = nextY
         normalScreen = Placement.screenAt(screens, nextX + width / 2, nextY + 20).name
-        desktopWidgets.move(noteWindow, normalX, normalY)
+        // A note dragged onto another screen moves there at once; otherwise it
+        // would vanish past the edge of its old screen until the drag ended.
+        if (widgetGesture === "move" && gestureRelative)
+            desktopWidgets.settle(noteWindow, normalX, normalY)
+        else
+            desktopWidgets.move(noteWindow, normalX, normalY)
         geometrySave.restart()
     }
 
@@ -409,6 +414,9 @@ ApplicationWindow {
         target: desktopWidgets
         function onPointerMoved(dx, dy) {
             if (noteWindow.gestureRelative) noteWindow.applyWidgetGesture(dx, dy)
+        }
+        function onPointerReleased() {
+            if (noteWindow.widgetGesture !== "" && noteWindow.gestureRelative) noteWindow.endWidgetGesture()
         }
     }
 
@@ -553,7 +561,9 @@ ApplicationWindow {
                 }
             }
             onReleased: if (noteWindow.widget) noteWindow.endWidgetGesture()
-            onCanceled: if (noteWindow.widget) noteWindow.endWidgetGesture()
+            // Moving onto another screen replaces the surface, which cancels
+            // the press; a tracked drag ends on pointerReleased instead.
+            onCanceled: if (noteWindow.widget && !noteWindow.gestureRelative) noteWindow.endWidgetGesture()
             onDoubleClicked: noteWindow.toggleCollapsed()
         }
 

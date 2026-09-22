@@ -2,6 +2,7 @@
 
 #include <QGuiApplication>
 #include <QMargins>
+#include <QMouseEvent>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QWindow>
@@ -34,6 +35,12 @@ namespace {
     if (auto *screen = QGuiApplication::screenAt(QPoint(x, y)))
         return screen;
     return QGuiApplication::primaryScreen();
+}
+
+// The screen for a widget at (x, y): the one under the middle of its header,
+// as StickyNote.moveWidgetTo() decides it.
+[[maybe_unused]] QScreen *widgetScreen(QWindow *window, int x, int y) {
+    return screenAt(x + window->width() / 2, y + 20);
 }
 
 #ifdef BETTERNOTES_LAYER_SHELL
@@ -111,7 +118,8 @@ void watchRelativeMotion() {
 // (LayerShellQt's default); moving a shown one to another output takes a new
 // surface, which settle() makes.
 void placeLayer(LayerShellQt::Window *layer, QWindow *window, int x, int y) {
-    QScreen *screen = window->isVisible() && window->screen() ? window->screen() : screenAt(x, y);
+    QScreen *screen =
+        window->isVisible() && window->screen() ? window->screen() : widgetScreen(window, x, y);
     window->setScreen(screen);
     const QRect area = screen->geometry();
     // Margins from the output's top-left corner. An exclusive zone of -1 puts
@@ -205,7 +213,7 @@ void DesktopWidgets::settle(QWindow *window, int x, int y) {
         return;
 #ifdef BETTERNOTES_LAYER_SHELL
     if (mode() == QLatin1String("layer-shell") && window->isVisible() &&
-        screenAt(x, y) != window->screen()) {
+        widgetScreen(window, x, y) != window->screen()) {
         window->hide();
         if (auto *layer = LayerShellQt::Window::get(window))
             placeLayer(layer, window, x, y);
@@ -252,6 +260,7 @@ bool DesktopWidgets::trackPointer() {
     if (mode() == QLatin1String("layer-shell") && globals().relativePointers) {
         watchRelativeMotion();
         tracker = this;
+        qApp->installEventFilter(this);
         return true;
     }
 #endif
@@ -263,6 +272,16 @@ void DesktopWidgets::stopTracking() {
     if (tracker == this)
         tracker = nullptr;
 #endif
+    qApp->removeEventFilter(this);
+}
+
+// Watches the whole app, as the release may come to a surface other than the
+// one pressed: settle() replaces a surface mid-drag.
+bool DesktopWidgets::eventFilter(QObject *watched, QEvent *event) {
+    if (event->type() == QEvent::MouseButtonRelease &&
+        !(static_cast<QMouseEvent *>(event)->buttons() & Qt::LeftButton))
+        Q_EMIT pointerReleased();
+    return QObject::eventFilter(watched, event);
 }
 
 DesktopWidgets::~DesktopWidgets() { stopTracking(); }
