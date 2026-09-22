@@ -11,7 +11,7 @@ an account or a cloud service. Notes stay on your machine.
 **[Download releases](https://github.com/thebanri/BetterNotes/releases)** ·
 [Build from source](#build-from-source) · [Contribute](CONTRIBUTING.md)
 
-> BetterNotes is a working project name. The current version is **0.1.4**, a
+> BetterNotes is a working project name. The current version is **0.1.5**, a
 > Linux preview; desktop compatibility still needs testing across environments.
 > Windows and macOS are not current release targets.
 
@@ -69,14 +69,14 @@ on Ubuntu 24.04. These checks do not certify every distribution or desktop sessi
 For the current preview:
 
 ```bash
-chmod +x BetterNotes-0.1.4-x86_64.AppImage
-./BetterNotes-0.1.4-x86_64.AppImage
+chmod +x BetterNotes-0.1.5-x86_64.AppImage
+./BetterNotes-0.1.5-x86_64.AppImage
 ```
 
 If FUSE is unavailable, run with extraction enabled:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./BetterNotes-0.1.4-x86_64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./BetterNotes-0.1.5-x86_64.AppImage
 ```
 
 ### Flatpak
@@ -85,7 +85,7 @@ Add Flathub as a source for the KDE runtime, then install the downloaded bundle:
 
 ```bash
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./BetterNotes-0.1.4-x86_64.flatpak
+flatpak install --user ./BetterNotes-0.1.5-x86_64.flatpak
 flatpak run org.betternotes.BetterNotes
 ```
 
@@ -100,7 +100,7 @@ for your user, with its icon; no root is needed:
 
 ```bash
 ./target/release/betternotes install      # copies the binary to ~/.local/bin
-./BetterNotes-0.1.4-x86_64.AppImage install   # launches the AppImage where it is
+./BetterNotes-0.1.5-x86_64.AppImage install   # launches the AppImage where it is
 betternotes uninstall                     # removes the entry, icons and copied binary; notes stay
 ```
 
@@ -147,6 +147,8 @@ vary between desktops; headless CI tests verify startup, not compositor behavior
   "show desktop", so there notes stay ordinary windows. Builds without
   LayerShellQt (see *Build from source*) leave notes as ordinary windows on
   Wayland too.
+  Smooth dragging and resizing on Wayland use the compositor's relative-pointer
+  protocol; without it, the position-based fallback can still jitter.
 - **System tray:** requires a tray host. The library window remains available
   when the session has none.
 - **Global Quick Capture:** bind `betternotes --quick-capture` in your desktop's

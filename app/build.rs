@@ -68,6 +68,7 @@ fn desktop_widget_support() -> DesktopWidgetSupport {
 }
 
 fn main() {
+    println!("cargo:rerun-if-changed=src/protocols");
     let widgets = desktop_widget_support();
     let builder = CxxQtBuilder::new_qml_module(QmlModule::new("BetterNotes.App"))
         .file("src/bridge.rs")

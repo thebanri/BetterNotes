@@ -326,25 +326,6 @@ ApplicationWindow {
     // not keep notes beneath them; otherwise below.
     readonly property bool widgetAbove: alwaysOnTop || !stayBelow
 
-    // Where a layer-shell widget is on screen. A move takes effect with the
-    // next frame, and pointer positions until then are relative to the old
-    // place; measuring from here keeps a drag from overshooting. X11 reports
-    // the real position in x and y.
-    property int shownX: 0
-    property int shownY: 0
-    readonly property bool layerWidget: widget && desktopWidgets.mode() === "layer-shell"
-    onFrameSwapped: if (layerWidget) {
-        shownX = normalX
-        shownY = normalY
-    }
-
-    // A pointer position in an item, in global coordinates, for widgets.
-    function widgetPointer(item, mouse) {
-        const inWindow = item.mapToItem(null, mouse.x, mouse.y)
-        return layerWidget ? Qt.point(shownX + inWindow.x, shownY + inWindow.y)
-            : Qt.point(x + inWindow.x, y + inWindow.y)
-    }
-
     // Moves a widget to a global position, as long as the middle of its
     // header stays on some screen.
     function moveWidgetTo(nextX, nextY) {
@@ -362,29 +343,73 @@ ApplicationWindow {
         geometrySave.restart()
     }
 
-    // Resizing a widget: the edges being dragged, and the pointer and the
-    // note's rectangle at the press, globally.
-    property int resizeEdges: 0
-    property point resizePointer: Qt.point(0, 0)
-    property rect resizeStart: Qt.rect(0, 0, 0, 0)
+    // Moving or resizing a widget with the mouse: "move" or "resize", the
+    // edges being dragged, and the note's rectangle at the press.
+    property string widgetGesture: ""
+    property int gestureEdges: 0
+    property bool gestureActive: false
+    property rect gestureStart: Qt.rect(0, 0, 0, 0)
+    // Pointer motion comes from the compositor as relative motion where it
+    // can (layer-shell surfaces); otherwise from positions within the
+    // window, globally, measured from gesturePointer.
+    property bool gestureRelative: false
+    property point gesturePointer: Qt.point(0, 0)
 
-    function beginWidgetResize(edges, item, mouse) {
-        resizeEdges = edges
-        resizePointer = widgetPointer(item, mouse)
-        resizeStart = Qt.rect(normalX, normalY, width, height)
+    // X11 reports where the window is in x and y; a layer-shell surface is
+    // where the app last put it, which a drag measured this way lags behind.
+    function pointerInWindow(item, mouse) {
+        const inWindow = item.mapToItem(null, mouse.x, mouse.y)
+        return canPosition ? Qt.point(x + inWindow.x, y + inWindow.y)
+            : Qt.point(normalX + inWindow.x, normalY + inWindow.y)
     }
 
-    function updateWidgetResize(item, mouse) {
-        const pointer = widgetPointer(item, mouse)
-        const dx = Math.round(pointer.x - resizePointer.x)
-        const dy = Math.round(pointer.y - resizePointer.y)
-        if (resizeEdges & Qt.RightEdge) width = Math.max(minimumWidth, resizeStart.width + dx)
-        if (resizeEdges & Qt.LeftEdge) {
-            width = Math.max(minimumWidth, resizeStart.width - dx)
-            moveWidgetTo(resizeStart.x + resizeStart.width - width, normalY)
+    function beginWidgetGesture(kind, edges, item, mouse) {
+        widgetGesture = kind
+        gestureEdges = edges
+        gestureActive = false
+        gestureStart = Qt.rect(normalX, normalY, width, height)
+        gestureRelative = desktopWidgets.trackPointer()
+        if (!gestureRelative) gesturePointer = pointerInWindow(item, mouse)
+    }
+
+    function continueWidgetGesture(item, mouse) {
+        if (widgetGesture === "" || gestureRelative) return
+        const pointer = pointerInWindow(item, mouse)
+        applyWidgetGesture(pointer.x - gesturePointer.x, pointer.y - gesturePointer.y)
+    }
+
+    function applyWidgetGesture(dx, dy) {
+        dx = Math.round(dx)
+        dy = Math.round(dy)
+        if (widgetGesture === "move") {
+            if (!gestureActive && Math.abs(dx) <= 3 && Math.abs(dy) <= 3) return
+            gestureActive = true
+            moveWidgetTo(gestureStart.x + dx, gestureStart.y + dy)
+        } else if (widgetGesture === "resize") {
+            gestureActive = true
+            if (gestureEdges & Qt.RightEdge) width = Math.max(minimumWidth, gestureStart.width + dx)
+            if (gestureEdges & Qt.LeftEdge) {
+                width = Math.max(minimumWidth, gestureStart.width - dx)
+                moveWidgetTo(gestureStart.x + gestureStart.width - width, normalY)
+            }
+            if ((gestureEdges & Qt.BottomEdge) && !collapsed)
+                height = Math.max(minimumHeight, gestureStart.height + dy)
         }
-        if ((resizeEdges & Qt.BottomEdge) && !collapsed)
-            height = Math.max(minimumHeight, resizeStart.height + dy)
+    }
+
+    function endWidgetGesture() {
+        desktopWidgets.stopTracking()
+        if (widgetGesture === "move" && gestureActive)
+            desktopWidgets.settle(noteWindow, normalX, normalY)
+        widgetGesture = ""
+        gestureActive = false
+    }
+
+    Connections {
+        target: desktopWidgets
+        function onPointerMoved(dx, dy) {
+            if (noteWindow.gestureRelative) noteWindow.applyWidgetGesture(dx, dy)
+        }
     }
 
     // The window manager reports where the note is (see WindowPlacement).
@@ -511,35 +536,24 @@ ApplicationWindow {
             z: 0
             acceptedButtons: Qt.LeftButton
             property point clickPos: Qt.point(0, 0)
-            // For widgets: the pointer and the note at the press, globally.
-            property point pressPointer: Qt.point(0, 0)
-            property point pressNote: Qt.point(0, 0)
-            property bool dragging: false
             onPressed: function(mouse) {
                 clickPos = Qt.point(mouse.x, mouse.y)
-                if (noteWindow.widget) pressPointer = noteWindow.widgetPointer(headerDrag, mouse)
-                pressNote = Qt.point(noteWindow.normalX, noteWindow.normalY)
-                dragging = false
+                if (noteWindow.widget) noteWindow.beginWidgetGesture("move", 0, headerDrag, mouse)
             }
             onPositionChanged: function(mouse) {
-                if (pressed) {
-                    var dx = Math.abs(mouse.x - clickPos.x)
-                    var dy = Math.abs(mouse.y - clickPos.y)
-                    if (!dragging && dx <= 3 && dy <= 3) return
-                    if (noteWindow.widget) {
-                        dragging = true
-                        const pointer = noteWindow.widgetPointer(headerDrag, mouse)
-                        noteWindow.moveWidgetTo(Math.round(pressNote.x + pointer.x - pressPointer.x),
-                            Math.round(pressNote.y + pointer.y - pressPointer.y))
-                    } else {
-                        noteWindow.startSystemMove()
-                    }
+                if (!pressed) return
+                if (noteWindow.widget) {
+                    noteWindow.continueWidgetGesture(headerDrag, mouse)
+                    return
+                }
+                var dx = Math.abs(mouse.x - clickPos.x)
+                var dy = Math.abs(mouse.y - clickPos.y)
+                if (dx > 3 || dy > 3) {
+                    noteWindow.startSystemMove()
                 }
             }
-            onReleased: {
-                if (dragging) desktopWidgets.settle(noteWindow, noteWindow.normalX, noteWindow.normalY)
-                dragging = false
-            }
+            onReleased: if (noteWindow.widget) noteWindow.endWidgetGesture()
+            onCanceled: if (noteWindow.widget) noteWindow.endWidgetGesture()
             onDoubleClicked: noteWindow.toggleCollapsed()
         }
 
@@ -2645,12 +2659,14 @@ ApplicationWindow {
         z: 20
         onPressed: function(mouse) {
             if (mouse.button !== Qt.LeftButton) return
-            if (noteWindow.widget) noteWindow.beginWidgetResize(Qt.RightEdge, rightResize, mouse)
+            if (noteWindow.widget) noteWindow.beginWidgetGesture("resize", Qt.RightEdge, rightResize, mouse)
             else noteWindow.startSystemResize(Qt.RightEdge)
         }
         onPositionChanged: function(mouse) {
-            if (pressed && noteWindow.widget) noteWindow.updateWidgetResize(rightResize, mouse)
+            if (pressed && noteWindow.widget) noteWindow.continueWidgetGesture(rightResize, mouse)
         }
+        onReleased: if (noteWindow.widget) noteWindow.endWidgetGesture()
+        onCanceled: if (noteWindow.widget) noteWindow.endWidgetGesture()
     }
 
     MouseArea {
@@ -2665,12 +2681,14 @@ ApplicationWindow {
         z: 20
         onPressed: function(mouse) {
             if (mouse.button !== Qt.LeftButton) return
-            if (noteWindow.widget) noteWindow.beginWidgetResize(Qt.LeftEdge, leftResize, mouse)
+            if (noteWindow.widget) noteWindow.beginWidgetGesture("resize", Qt.LeftEdge, leftResize, mouse)
             else noteWindow.startSystemResize(Qt.LeftEdge)
         }
         onPositionChanged: function(mouse) {
-            if (pressed && noteWindow.widget) noteWindow.updateWidgetResize(leftResize, mouse)
+            if (pressed && noteWindow.widget) noteWindow.continueWidgetGesture(leftResize, mouse)
         }
+        onReleased: if (noteWindow.widget) noteWindow.endWidgetGesture()
+        onCanceled: if (noteWindow.widget) noteWindow.endWidgetGesture()
     }
 
     MouseArea {
@@ -2686,12 +2704,14 @@ ApplicationWindow {
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
             if (mouse.button !== Qt.LeftButton) return
-            if (noteWindow.widget) noteWindow.beginWidgetResize(Qt.BottomEdge, bottomResize, mouse)
+            if (noteWindow.widget) noteWindow.beginWidgetGesture("resize", Qt.BottomEdge, bottomResize, mouse)
             else noteWindow.startSystemResize(Qt.BottomEdge)
         }
         onPositionChanged: function(mouse) {
-            if (pressed && noteWindow.widget) noteWindow.updateWidgetResize(bottomResize, mouse)
+            if (pressed && noteWindow.widget) noteWindow.continueWidgetGesture(bottomResize, mouse)
         }
+        onReleased: if (noteWindow.widget) noteWindow.endWidgetGesture()
+        onCanceled: if (noteWindow.widget) noteWindow.endWidgetGesture()
     }
 
     MouseArea {
@@ -2705,12 +2725,14 @@ ApplicationWindow {
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
             if (mouse.button !== Qt.LeftButton) return
-            if (noteWindow.widget) noteWindow.beginWidgetResize(Qt.BottomEdge | Qt.RightEdge, bottomRightResize, mouse)
+            if (noteWindow.widget) noteWindow.beginWidgetGesture("resize", Qt.BottomEdge | Qt.RightEdge, bottomRightResize, mouse)
             else noteWindow.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
         }
         onPositionChanged: function(mouse) {
-            if (pressed && noteWindow.widget) noteWindow.updateWidgetResize(bottomRightResize, mouse)
+            if (pressed && noteWindow.widget) noteWindow.continueWidgetGesture(bottomRightResize, mouse)
         }
+        onReleased: if (noteWindow.widget) noteWindow.endWidgetGesture()
+        onCanceled: if (noteWindow.widget) noteWindow.endWidgetGesture()
 
         Rectangle {
             anchors.right: parent.right
@@ -2737,12 +2759,14 @@ ApplicationWindow {
         enabled: !noteWindow.collapsed
         onPressed: function(mouse) {
             if (mouse.button !== Qt.LeftButton) return
-            if (noteWindow.widget) noteWindow.beginWidgetResize(Qt.BottomEdge | Qt.LeftEdge, bottomLeftResize, mouse)
+            if (noteWindow.widget) noteWindow.beginWidgetGesture("resize", Qt.BottomEdge | Qt.LeftEdge, bottomLeftResize, mouse)
             else noteWindow.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
         }
         onPositionChanged: function(mouse) {
-            if (pressed && noteWindow.widget) noteWindow.updateWidgetResize(bottomLeftResize, mouse)
+            if (pressed && noteWindow.widget) noteWindow.continueWidgetGesture(bottomLeftResize, mouse)
         }
+        onReleased: if (noteWindow.widget) noteWindow.endWidgetGesture()
+        onCanceled: if (noteWindow.widget) noteWindow.endWidgetGesture()
     }
 
     Shortcut { sequences: [StandardKey.Save]; context: Qt.WindowShortcut; onActivated: noteWindow.flush() && noteWindow.persist(true) }

@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.5" date="2026-09-22">
+      <description>
+        <p>Fix shaking and smearing when dragging or resizing desktop notes on Wayland using relative pointer motion.</p>
+      </description>
+    </release>
     <release version="0.1.4" date="2026-09-22">
       <description>
         <p>Notes stay on screen when showing the desktop, like desktop widgets; a Turkish interface; notes locked with a master password; a trash; checklists with sub-items, code blocks, find and replace, text alignment and pasted or copied images; reminder buttons in notifications; automatic backups; new themes, accent colours and configurable shortcuts; and search that matches note text instead of its markup.</p>

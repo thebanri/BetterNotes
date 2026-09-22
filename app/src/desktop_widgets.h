@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPointF>
 #include <QString>
 #include <QWindow>
 #include <QtQml/qqmlregistration.h>
@@ -22,6 +23,7 @@ class DesktopWidgets : public QObject {
     QML_ELEMENT
   public:
     explicit DesktopWidgets(QObject *parent = nullptr) : QObject(parent) {}
+    ~DesktopWidgets() override;
 
     // "layer-shell", "x11", or "" when this session cannot host widgets.
     Q_INVOKABLE QString mode() const;
@@ -35,4 +37,20 @@ class DesktopWidgets : public QObject {
     Q_INVOKABLE void settle(QWindow *window, int x, int y);
     // Puts a widget above other windows (pinned) or below them.
     Q_INVOKABLE void setAbove(QWindow *window, bool above);
+
+    // Reports how far the pointer moves from now on (pointerMoved) until
+    // stopTracking(), for dragging a layer-shell widget. Pointer positions
+    // within a surface that is itself moving lag behind its moves, so they
+    // make a dragged widget shake; relative motion does not. False when the
+    // compositor has no relative pointer motion.
+    Q_INVOKABLE bool trackPointer();
+    Q_INVOKABLE void stopTracking();
+    void addPointerMotion(double dx, double dy);
+
+  Q_SIGNALS:
+    // Total pointer motion since trackPointer().
+    void pointerMoved(double dx, double dy);
+
+  private:
+    QPointF m_pointer;
 };

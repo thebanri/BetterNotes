@@ -10,6 +10,13 @@
 #include <LayerShellQt/window.h>
 #include <cstring>
 #include <wayland-client.h>
+
+#include "protocols/relative-pointer-unstable-v1-client.h"
+extern "C" {
+// Generated from protocols/relative-pointer-unstable-v1.xml by
+// wayland-scanner private-code.
+#include "protocols/relative-pointer-unstable-v1-protocol.c"
+}
 #endif
 
 #ifdef BETTERNOTES_XCB_WINDOW_TYPE
@@ -30,31 +37,74 @@ namespace {
 }
 
 #ifdef BETTERNOTES_LAYER_SHELL
-// Whether the compositor offers wlr-layer-shell. Asked on a private event
-// queue, so Qt's own Wayland event handling is not disturbed.
-bool compositorHasLayerShell() {
-    auto *wayland = qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>();
-    wl_display *display = wayland ? wayland->display() : nullptr;
-    if (!display)
-        return false;
-    bool found = false;
-    wl_event_queue *queue = wl_display_create_queue(display);
-    auto *wrapped = static_cast<wl_display *>(wl_proxy_create_wrapper(display));
-    wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(wrapped), queue);
-    wl_registry *registry = wl_display_get_registry(wrapped);
-    static const wl_registry_listener listener = {
-        [](void *data, wl_registry *, uint32_t, const char *interface, uint32_t) {
-            if (std::strcmp(interface, "zwlr_layer_shell_v1") == 0)
-                *static_cast<bool *>(data) = true;
-        },
-        [](void *, wl_registry *, uint32_t) {},
-    };
-    wl_registry_add_listener(registry, &listener, &found);
-    wl_display_roundtrip_queue(display, queue);
-    wl_registry_destroy(registry);
-    wl_proxy_wrapper_destroy(wrapped);
-    wl_event_queue_destroy(queue);
+struct Globals {
+    bool layerShell = false;
+    // Relative pointer motion, on Qt's default event queue so its events
+    // arrive on the GUI thread; null when the compositor lacks it.
+    zwp_relative_pointer_manager_v1 *relativePointers = nullptr;
+};
+
+// What the compositor offers. Asked on a private event queue, so Qt's own
+// Wayland event handling is not disturbed.
+const Globals &globals() {
+    static const Globals found = [] {
+        Globals result;
+        auto *wayland = qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>();
+        wl_display *display = wayland ? wayland->display() : nullptr;
+        if (!display)
+            return result;
+        wl_event_queue *queue = wl_display_create_queue(display);
+        auto *wrapped = static_cast<wl_display *>(wl_proxy_create_wrapper(display));
+        wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(wrapped), queue);
+        wl_registry *registry = wl_display_get_registry(wrapped);
+        static const wl_registry_listener listener = {
+            [](void *data, wl_registry *registry, uint32_t name, const char *interface,
+               uint32_t) {
+                auto *result = static_cast<Globals *>(data);
+                if (std::strcmp(interface, "zwlr_layer_shell_v1") == 0)
+                    result->layerShell = true;
+                else if (std::strcmp(interface, zwp_relative_pointer_manager_v1_interface.name) == 0)
+                    result->relativePointers = static_cast<zwp_relative_pointer_manager_v1 *>(
+                        wl_registry_bind(registry, name, &zwp_relative_pointer_manager_v1_interface, 1));
+            },
+            [](void *, wl_registry *, uint32_t) {},
+        };
+        wl_registry_add_listener(registry, &listener, &result);
+        wl_display_roundtrip_queue(display, queue);
+        if (result.relativePointers)
+            wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(result.relativePointers), nullptr);
+        wl_registry_destroy(registry);
+        wl_proxy_wrapper_destroy(wrapped);
+        wl_event_queue_destroy(queue);
+        return result;
+    }();
     return found;
+}
+
+// The one widget being dragged or resized, which relative motion goes to.
+DesktopWidgets *tracker = nullptr;
+
+// Relative motion of Qt's pointer: how far the pointer moved, whatever the
+// surface under it did in the meantime.
+void watchRelativeMotion() {
+    static zwp_relative_pointer_v1 *relative = nullptr;
+    static wl_pointer *watched = nullptr;
+    auto *wayland = qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>();
+    wl_pointer *pointer = wayland ? wayland->pointer() : nullptr;
+    if (!globals().relativePointers || !pointer || pointer == watched)
+        return;
+    if (relative)
+        zwp_relative_pointer_v1_destroy(relative);
+    watched = pointer;
+    relative = zwp_relative_pointer_manager_v1_get_relative_pointer(globals().relativePointers, pointer);
+    static const zwp_relative_pointer_v1_listener listener = {
+        [](void *, zwp_relative_pointer_v1 *, uint32_t, uint32_t, wl_fixed_t dx, wl_fixed_t dy,
+           wl_fixed_t, wl_fixed_t) {
+            if (tracker)
+                tracker->addPointerMotion(wl_fixed_to_double(dx), wl_fixed_to_double(dy));
+        },
+    };
+    zwp_relative_pointer_v1_add_listener(relative, &listener, nullptr);
 }
 
 // A layer surface lives on one output, the QWindow's screen when it is shown
@@ -91,7 +141,7 @@ void setXcbType(QWindow *window, bool above) {
 
 QString DesktopWidgets::mode() const {
 #ifdef BETTERNOTES_LAYER_SHELL
-    static const bool layerShell = isPlatform("wayland") && compositorHasLayerShell();
+    static const bool layerShell = isPlatform("wayland") && globals().layerShell;
     if (layerShell)
         return QStringLiteral("layer-shell");
 #endif
@@ -194,4 +244,30 @@ void DesktopWidgets::setAbove(QWindow *window, bool above) {
     }
 #endif
     Q_UNUSED(above)
+}
+
+bool DesktopWidgets::trackPointer() {
+    m_pointer = QPointF();
+#ifdef BETTERNOTES_LAYER_SHELL
+    if (mode() == QLatin1String("layer-shell") && globals().relativePointers) {
+        watchRelativeMotion();
+        tracker = this;
+        return true;
+    }
+#endif
+    return false;
+}
+
+void DesktopWidgets::stopTracking() {
+#ifdef BETTERNOTES_LAYER_SHELL
+    if (tracker == this)
+        tracker = nullptr;
+#endif
+}
+
+DesktopWidgets::~DesktopWidgets() { stopTracking(); }
+
+void DesktopWidgets::addPointerMotion(double dx, double dy) {
+    m_pointer += QPointF(dx, dy);
+    Q_EMIT pointerMoved(m_pointer.x(), m_pointer.y());
 }

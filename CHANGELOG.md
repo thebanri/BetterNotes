@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-22
+
+### Fixed
+- Dragging or resizing a note shown as a desktop widget on Wayland no longer makes it shake and smear, especially with high-rate mice: the note now follows the compositor's relative pointer motion instead of pointer positions within itself, which lag behind its own moves.
+
 ## [0.1.4] - 2026-09-22
 
 ### Added
