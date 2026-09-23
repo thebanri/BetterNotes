@@ -567,9 +567,11 @@ ApplicationWindow {
             onDoubleClicked: noteWindow.toggleCollapsed()
         }
 
-        // A collapsed note is only as tall as this header, so a tooltip has
-        // no room above or below and would cover the buttons, taking their
-        // clicks. The header buttons show tooltips only when expanded.
+        // The header has no tooltips. A collapsed note is only as
+        // tall as this header, so a tooltip lands on top of the buttons; the
+        // button under it then loses hover, the tooltip closes, the button is
+        // hovered again and it reopens, over and over, swallowing the click
+        // that should expand the note. Their names stay for screen readers.
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 10
@@ -585,8 +587,7 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered && !noteWindow.collapsed
-                ToolTip.text: qsTr("New Note")
+                Accessible.name: qsTr("New Note")
                 onClicked: noteWindow.newNoteRequested()
             }
 
@@ -598,8 +599,7 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered && !noteWindow.collapsed
-                ToolTip.text: noteWindow.collapsed ? qsTr("Expand Note") : qsTr("Collapse Note")
+                Accessible.name: noteWindow.collapsed ? qsTr("Expand Note") : qsTr("Collapse Note")
                 onClicked: noteWindow.toggleCollapsed()
             }
 
@@ -639,9 +639,8 @@ ApplicationWindow {
                 size: 13
                 color: theme.noteTextSecondary
                 Layout.alignment: Qt.AlignVCenter
-                HoverHandler { id: lockHover }
-                ToolTip.visible: lockHover.hovered
-                ToolTip.text: qsTr("Locked: the text is encrypted with your password")
+                Accessible.role: Accessible.StaticText
+                Accessible.name: qsTr("Locked: the text is encrypted with your password")
             }
 
             UI.StatusBadge {
@@ -676,9 +675,7 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered && !noteWindow.collapsed
-                ToolTip.text: noteWindow.alwaysOnTop ? qsTr("Always on Top (Active) — Click to stay on Desktop") : qsTr("On Desktop (Always on Bottom) — Click to Pin on Top")
-                ToolTip.delay: 300
+                Accessible.name: noteWindow.alwaysOnTop ? qsTr("Always on Top (Active) — Click to stay on Desktop") : qsTr("On Desktop (Always on Bottom) — Click to Pin on Top")
                 onClicked: {
                     noteWindow.alwaysOnTop = !noteWindow.alwaysOnTop
                 }
@@ -694,11 +691,9 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered && !noteWindow.collapsed
-                ToolTip.text: noteWindow.reminder.length > 0
+                Accessible.name: noteWindow.reminder.length > 0
                     ? qsTr("Reminder: %1").arg(Reminders.describe(noteWindow.reminder))
                     : qsTr("Add a reminder")
-                ToolTip.delay: 300
                 onClicked: noteWindow.editReminder()
             }
 
@@ -711,9 +706,7 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered && !settingsModal.visible && !noteWindow.collapsed
-                ToolTip.text: qsTr("Note Settings & Color")
-                ToolTip.delay: 300
+                Accessible.name: qsTr("Note Settings & Color")
                 onClicked: {
                     settingsModal.openCentered(noteWindow)
                 }
@@ -727,8 +720,7 @@ ApplicationWindow {
                 implicitHeight: 28
                 implicitWidth: 28
                 padding: 0
-                ToolTip.visible: hovered && !noteWindow.collapsed
-                ToolTip.text: qsTr("Close Note")
+                Accessible.name: qsTr("Close Note")
                 onClicked: noteWindow.close()
             }
         }
