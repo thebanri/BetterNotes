@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.11" date="2026-09-23">
+      <description>
+        <p>Expanding a collapsed note no longer freezes, and the note header no longer shows tooltips over its buttons.</p>
+      </description>
+    </release>
     <release version="0.1.10" date="2026-09-22">
       <description>
         <p>The code block button makes only the selected lines code, and a note ending in code can be continued below it.</p>

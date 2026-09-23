@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-09-23
+
 ### Fixed
 - Expanding a collapsed note no longer freezes. With the pointer over the header, a header tooltip could stay open in the 46px-tall collapsed note and sit on top of the buttons; the button under it lost hover, the tooltip closed and reopened in a loop, the note redrew nonstop and the Expand click went to the tooltip. The note header no longer shows tooltips (Collapse Note, New Note, pin, reminder, settings, close, locked); the names remain available to screen readers.
 
