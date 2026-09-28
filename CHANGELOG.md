@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-09-28
+
+### Fixed
+- Pinning and unpinning a sticky note now applies the current always-on-top state instead of lagging one click behind. Window layering waits for the pin state and window hints to update, including rapid toggles and changes to the keep-below preference.
+
 ## [0.1.11] - 2026-09-23
 
 ### Fixed

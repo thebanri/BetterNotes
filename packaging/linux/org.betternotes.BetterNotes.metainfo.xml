@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.12" date="2026-09-28">
+      <description>
+        <p>Pinning and unpinning sticky notes applies the current always-on-top state immediately instead of lagging one click behind.</p>
+      </description>
+    </release>
     <release version="0.1.11" date="2026-09-23">
       <description>
         <p>Expanding a collapsed note no longer freezes, and the note header no longer shows tooltips over its buttons.</p>
