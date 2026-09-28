@@ -295,6 +295,7 @@ ApplicationWindow {
     // this to "tidy up" a window that is already where the user left it -- on
     // Wayland the raise() half is the only part that takes effect.
     function restoreStacking() {
+        if (!initialized || retiring) return
         if (widget) desktopWidgets.setAbove(noteWindow, widgetAbove)
         else if (alwaysOnTop) raise()
         else if (stayBelow) lower()
@@ -473,11 +474,11 @@ ApplicationWindow {
         return true
     }
 
-    // Changing the stays-on-top/bottom hint does not restack an already mapped
-    // window on its own; nudge it so pinning takes effect immediately. This is
-    // an explicit user action, so raising on Wayland is what they asked for.
-    onAlwaysOnTopChanged: if (initialized && !retiring) restoreStacking()
-    onStayBelowChanged: if (initialized && !retiring && widget) restoreStacking()
+    // Let widgetAbove and flags settle before restacking. Change handlers can
+    // run before those bindings update, otherwise the layer lags one click
+    // behind the pin. callLater also coalesces rapid changes to the final state.
+    onAlwaysOnTopChanged: if (initialized && !retiring) Qt.callLater(restoreStacking)
+    onStayBelowChanged: if (initialized && !retiring) Qt.callLater(restoreStacking)
     onXChanged: captureGeometry()
     onYChanged: captureGeometry()
     onWidthChanged: captureGeometry()
@@ -668,6 +669,7 @@ ApplicationWindow {
 
             UI.StyledButton {
                 id: pinBtn
+                objectName: "pinButton"
                 iconName: "pin"
                 iconSize: 15
                 theme: noteWindow.theme

@@ -17,6 +17,19 @@ Window {
     property string secondId
 
     Component { id: mainWindow; UI.Main {} }
+    // Observe the state passed to stacking at the moment it runs. Offscreen
+    // cannot test compositor stacking, but can catch stale QML bindings.
+    Component {
+        id: stackingProbe
+        UI.StickyNote {
+            noteId: "0"
+            widget: true
+            property var appliedLayers: []
+            function restoreStacking() {
+                appliedLayers.push({above: widgetAbove, flags: flags})
+            }
+        }
+    }
     NotesBackend { id: competingEditor }
     ApplicationInfo { id: platformInfo }
     TestCase { id: input; name: "EditorInteraction"; when: false }
@@ -57,6 +70,42 @@ Window {
         check(platformInfo.canPositionWindows("xcb"), "X11 placement unavailable")
         check(Placement.screenAt([primary, left], -10, 10) === left, "Point on the left monitor not found")
         check(Placement.screenAt([primary, left], 1280, 10) === null, "Point past every monitor matched one")
+    }
+
+    function assertPinStacking() {
+        const sticky = stackingProbe.createObject(null)
+        sticky.initialized = true
+        const button = findItem(sticky.header, "pinButton")
+        check(button, "Missing pin button")
+        function applied(above, top, bottom) {
+            input.wait(1)
+            check(sticky.appliedLayers.length > 0, "Stacking was not updated")
+            const layer = sticky.appliedLayers[sticky.appliedLayers.length - 1]
+            check(layer.above === above, "Stacking received the previous pin state")
+            check(!!(layer.flags & Qt.WindowStaysOnTopHint) === top, "Stale stays-on-top hint")
+            check(!!(layer.flags & Qt.WindowStaysOnBottomHint) === bottom, "Stale stays-on-bottom hint")
+            sticky.appliedLayers = []
+        }
+        try {
+            for (let i = 0; i < 3; ++i) {
+                button.clicked()
+                check(sticky.alwaysOnTop, "Pin button did not turn on")
+                applied(true, true, false)
+                button.clicked()
+                check(!sticky.alwaysOnTop, "Pin button did not turn off")
+                applied(false, false, true)
+            }
+            sticky.stayBelow = false
+            applied(true, false, false)
+            sticky.stayBelow = true
+            applied(false, false, true)
+            button.clicked()
+            button.clicked()
+            applied(false, false, true)
+        } finally {
+            sticky.retiring = true
+            sticky.destroy()
+        }
     }
 
     // Desktop widgets need a compositor; offscreen, notes must stay ordinary
@@ -929,6 +978,7 @@ Window {
         onTriggered: {
             try {
                 harness.assertPlacementFallbacks()
+                harness.assertPinStacking()
                 harness.library = mainWindow.createObject(null)
                 harness.check(harness.library && harness.library.libraryBackend.ready, "Library initialization failed")
                 harness.check(harness.library.libraryBackend.themeMode === "system", "Default theme must be system")
