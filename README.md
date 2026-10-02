@@ -219,6 +219,15 @@ printf 'milk\neggs\n' | betternotes update "$id" --body -   # content from stdin
 betternotes update "$id" --title "Groceries"               # title only
 ```
 
+Commands take a note's numeric ID, which the app window does not show. Find it
+from the command line:
+
+```bash
+betternotes list              # ID column for every note; --archived includes archived ones
+betternotes search groceries  # matches as "#4: Groceries"
+betternotes show 4            # title, metadata and content of note 4
+```
+
 `--body -` reads the content from standard input, dropping one trailing newline.
 `update` changes only the fields it is given and exits non-zero with a message on
 standard error when the note does not exist or is locked.
