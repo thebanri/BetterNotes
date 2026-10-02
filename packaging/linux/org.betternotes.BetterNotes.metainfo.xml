@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.13" date="2026-10-02">
+      <description>
+        <p>The command line can update a note's title and content without opening a window, and Start at login in the tray menu works again.</p>
+      </description>
+    </release>
     <release version="0.1.12" date="2026-09-28">
       <description>
         <p>Pinning and unpinning sticky notes applies the current always-on-top state immediately instead of lagging one click behind.</p>

@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-10-02
+
 ### Added
 - `betternotes update <ID> [--title <TITLE>] [--body <TEXT|->]` changes a note's title and/or content from the command line without opening a window. `--body -` reads the content from standard input. A running app reloads the note's open window unless it has unsaved typing.
 - `betternotes new` takes `--id-only` to print just the new note's ID, `--no-open` to store the note without opening its sticky window, and `--body <TEXT|->` like `update`.
