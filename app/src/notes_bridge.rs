@@ -1371,13 +1371,20 @@ impl ffi::NotesBackend {
     }
 
     pub fn set_autostart(mut self: Pin<&mut Self>, enabled: bool) -> bool {
-        let result = betternotes_core::set_autostart(enabled, None);
-        let success = result.is_ok();
-        if success {
-            self.as_mut().rust_mut().autostart_enabled = enabled;
-            self.as_mut().autostart_changed();
+        match betternotes_core::set_autostart(enabled, None) {
+            Ok(()) => {
+                self.as_mut().rust_mut().autostart_enabled = enabled;
+                self.as_mut().autostart_changed();
+                true
+            }
+            Err(error) => {
+                eprintln!("BetterNotes: could not change start at login: {error}");
+                self.as_mut().rust_mut().error_message =
+                    QString::from(&format!("Could not change start at login: {error}"));
+                self.as_mut().status_changed();
+                false
+            }
         }
-        success
     }
 
     pub fn copy_to_clipboard(self: Pin<&mut Self>, text: QString) -> bool {
@@ -1827,6 +1834,10 @@ impl ffi::NotesBackend {
             Some(betternotes_core::IpcAction::Reload) => {
                 self.as_mut().reload();
                 QString::from("reload")
+            }
+            Some(betternotes_core::IpcAction::NoteChanged(id)) => {
+                self.as_mut().reload();
+                QString::from(&format!("changed:{id}"))
             }
             Some(betternotes_core::IpcAction::OpenFiles(paths)) => {
                 let ids = self.as_mut().open_file_paths(&paths);

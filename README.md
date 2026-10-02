@@ -194,6 +194,8 @@ betternotes search nginx
 betternotes show 1
 betternotes archive 1
 betternotes archive 1 --unarchive
+betternotes update 1 --title "Configure nginx and TLS"
+betternotes update 1 --body "New content"
 betternotes --quick-capture
 betternotes export notes.json
 betternotes export ./markdown-notes/
@@ -204,6 +206,22 @@ betternotes install
 betternotes uninstall
 betternotes --help
 ```
+
+### Scripting
+
+Other tools can use BetterNotes as a local notes backend through the CLI alone.
+None of these commands opens a window; when the app is running they go through
+it, so open notes show the change.
+
+```bash
+id=$(betternotes new "Shopping list" --id-only --no-open)  # prints only the ID
+printf 'milk\neggs\n' | betternotes update "$id" --body -   # content from stdin
+betternotes update "$id" --title "Groceries"               # title only
+```
+
+`--body -` reads the content from standard input, dropping one trailing newline.
+`update` changes only the fields it is given and exits non-zero with a message on
+standard error when the note does not exist or is locked.
 
 Notes are stored in `$XDG_DATA_HOME/betternotes/notes.sqlite3`, falling back to
 `~/.local/share/betternotes/notes.sqlite3`. Attachments live alongside the database.

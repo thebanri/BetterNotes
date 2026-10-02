@@ -81,6 +81,7 @@ fn ipc_crud_and_query_dispatch() {
         &IpcRequest::NewNote {
             title: "Configure nginx".to_string(),
             content: "server { listen 80; }".to_string(),
+            open: true,
         },
     )
     .unwrap();
@@ -184,6 +185,7 @@ fn ipc_untrusted_input_and_size_limits() {
         &IpcRequest::NewNote {
             title: "Headless Note".to_string(),
             content: "Created without running GUI".to_string(),
+            open: true,
         },
     );
     assert!(direct_res.success);

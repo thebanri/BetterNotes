@@ -30,6 +30,10 @@ pub enum IpcRequest {
     NewNote {
         title: String,
         content: String,
+        /// Opens the note's sticky window. Scripts that only store a note pass
+        /// false; requests from older clients omit it and get the window.
+        #[serde(default = "default_true")]
+        open: bool,
     },
     ListNotes {
         include_archived: bool,
@@ -44,10 +48,28 @@ pub enum IpcRequest {
         id: i64,
         archived: bool,
     },
+    /// Replaces a note's title and/or content; a field left `None` is kept.
+    UpdateNote {
+        id: i64,
+        title: Option<String>,
+        content: Option<String>,
+    },
     /// Files to open as new notes in the running app ("Open with").
     OpenFiles {
         paths: Vec<String>,
     },
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// A blank title becomes the same placeholder the GUI uses.
+fn effective_title(title: &str) -> String {
+    match title.trim() {
+        "" => "Untitled Note".to_string(),
+        title => title.to_string(),
+    }
 }
 
 /// Standardized IPC response payload.
@@ -93,6 +115,8 @@ pub enum IpcAction {
     QuickCapture,
     OpenNote(i64),
     Reload,
+    /// A note was changed outside the GUI; its open window should reload it.
+    NoteChanged(i64),
     /// A reminder notification's Snooze button: remind again in 10 minutes.
     SnoozeReminder(i64),
     /// Open these files as new notes.
@@ -160,19 +184,17 @@ pub fn handle_domain_request(store: &mut NoteStore, request: &IpcRequest) -> Ipc
         IpcRequest::Activate | IpcRequest::QuickCapture => {
             IpcResponse::ok_msg("Action queued for display", None)
         }
-        IpcRequest::NewNote { title, content } => {
-            let title = title.trim();
-            let effective_title = if title.is_empty() {
-                "Untitled Note"
-            } else {
-                title
-            };
-            match store.create() {
-                Ok(mut note) => {
-                    note.title = effective_title.to_string();
-                    note.content = content.clone();
-                    match store.update(&note) {
-                        Ok(saved) => {
+        IpcRequest::NewNote {
+            title,
+            content,
+            open,
+        } => match store.create() {
+            Ok(mut note) => {
+                note.title = effective_title(title);
+                note.content = content.clone();
+                match store.update(&note) {
+                    Ok(saved) => {
+                        if *open {
                             let _ = store.save_window_state(
                                 saved.id,
                                 &crate::WindowState {
@@ -180,17 +202,17 @@ pub fn handle_domain_request(store: &mut NoteStore, request: &IpcRequest) -> Ipc
                                     ..crate::WindowState::default()
                                 },
                             );
-                            IpcResponse::ok_msg(
-                                format!("Created note #{} \"{}\"", saved.id, saved.title),
-                                Some(serde_json::json!({ "id": saved.id, "title": saved.title })),
-                            )
                         }
-                        Err(e) => IpcResponse::err(format!("Failed to save note content: {e}")),
+                        IpcResponse::ok_msg(
+                            format!("Created note #{} \"{}\"", saved.id, saved.title),
+                            Some(serde_json::json!({ "id": saved.id, "title": saved.title })),
+                        )
                     }
+                    Err(e) => IpcResponse::err(format!("Failed to save note content: {e}")),
                 }
-                Err(e) => IpcResponse::err(format!("Failed to create note: {e}")),
             }
-        }
+            Err(e) => IpcResponse::err(format!("Failed to create note: {e}")),
+        },
         IpcRequest::ListNotes { include_archived } => match store.list() {
             Ok(notes) => {
                 let filtered: Vec<_> = notes
@@ -260,6 +282,30 @@ pub fn handle_domain_request(store: &mut NoteStore, request: &IpcRequest) -> Ipc
             Err(Error::NotFound(id)) => IpcResponse::err(format!("Note #{id} does not exist")),
             Err(e) => IpcResponse::err(format!("Failed to read note: {e}")),
         },
+        IpcRequest::UpdateNote { id, title, content } => {
+            if title.is_none() && content.is_none() {
+                return IpcResponse::err("Nothing to update: give a new title or content");
+            }
+            match store.get(*id) {
+                Ok(mut note) => {
+                    if let Some(title) = title {
+                        note.title = effective_title(title);
+                    }
+                    if let Some(content) = content {
+                        note.content = content.clone();
+                    }
+                    match store.update(&note) {
+                        Ok(saved) => IpcResponse::ok_msg(
+                            format!("Updated note #{id}"),
+                            Some(serde_json::json!({ "id": saved.id, "title": saved.title })),
+                        ),
+                        Err(e) => IpcResponse::err(format!("Failed to update note: {e}")),
+                    }
+                }
+                Err(Error::NotFound(id)) => IpcResponse::err(format!("Note #{id} does not exist")),
+                Err(e) => IpcResponse::err(format!("Failed to read note: {e}")),
+            }
+        }
     }
 }
 
@@ -398,6 +444,7 @@ mod tests {
             &IpcRequest::NewNote {
                 title: "Test Note".to_string(),
                 content: "Hello".to_string(),
+                open: true,
             },
         )
         .unwrap();
@@ -406,5 +453,65 @@ mod tests {
 
         drop(server);
         assert!(!is_server_running(&socket_path));
+    }
+
+    #[test]
+    fn update_note_changes_only_the_given_fields() {
+        let dir = tempdir().unwrap();
+        let mut store = NoteStore::open(&dir.path().join("notes.sqlite3")).unwrap();
+        let created = handle_domain_request(
+            &mut store,
+            &IpcRequest::NewNote {
+                title: "Widget".to_string(),
+                content: String::new(),
+                open: false,
+            },
+        );
+        assert!(created.success);
+        let id = created.data.unwrap()["id"].as_i64().unwrap();
+        assert!(!store.window_state(id).unwrap().open);
+
+        let update = |store: &mut NoteStore, title: Option<&str>, content: Option<&str>| {
+            handle_domain_request(
+                store,
+                &IpcRequest::UpdateNote {
+                    id,
+                    title: title.map(str::to_string),
+                    content: content.map(str::to_string),
+                },
+            )
+        };
+
+        assert!(update(&mut store, None, Some("line one\nline two")).success);
+        let note = store.get(id).unwrap();
+        assert_eq!(note.title, "Widget");
+        assert_eq!(note.content, "line one\nline two");
+
+        assert!(update(&mut store, Some("Renamed"), None).success);
+        let note = store.get(id).unwrap();
+        assert_eq!(note.title, "Renamed");
+        assert_eq!(note.content, "line one\nline two");
+
+        assert!(update(&mut store, Some("  "), None).success);
+        assert_eq!(store.get(id).unwrap().title, "Untitled Note");
+
+        assert!(!update(&mut store, None, None).success);
+        let missing = handle_domain_request(
+            &mut store,
+            &IpcRequest::UpdateNote {
+                id: id + 100,
+                title: Some("x".to_string()),
+                content: None,
+            },
+        );
+        assert!(!missing.success);
+    }
+
+    #[test]
+    fn new_note_requests_from_older_clients_still_open_a_window() {
+        let request: IpcRequest =
+            serde_json::from_str(r#"{"action":"NewNote","payload":{"title":"Old","content":""}}"#)
+                .unwrap();
+        assert!(matches!(request, IpcRequest::NewNote { open: true, .. }));
     }
 }

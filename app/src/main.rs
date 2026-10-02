@@ -9,7 +9,25 @@ use betternotes_core::{
 };
 use cxx_qt_lib::QGuiApplication;
 use engine::{load_engine, MAIN_QML};
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
+/// Subcommands whose arguments may be arbitrary text, such as a note body of
+/// "-v". Global flags are only looked for outside of them.
+const SUBCOMMANDS: &[&str] = &[
+    "new",
+    "list",
+    "search",
+    "show",
+    "archive",
+    "update",
+    "backup",
+    "restore",
+    "export",
+    "import",
+    "install",
+    "uninstall",
+];
 
 fn run() -> Result<i32, &'static str> {
     // Qt picks the native platform: Wayland on a Wayland session, X11 on an X11
@@ -54,10 +72,16 @@ fn print_help() {
     println!("Usage: betternotes [COMMAND] [OPTIONS]\n");
     println!("Commands:");
     println!("  new <TITLE> [CONTENT]   Create a new note (opens in GUI if running)");
+    println!("      --body <TEXT|->     Content; \"-\" reads it from standard input");
+    println!("      --id-only           Print only the new note's numeric ID");
+    println!("      --no-open           Do not open the note's sticky window");
     println!("  list [-a, --archived]   List notes with tags, priority, and summary");
     println!("  search <QUERY>          Search note titles and contents using FTS5");
     println!("  show <ID>               Display full content and metadata of a note");
     println!("  archive <ID> [--unarchive] Archive or unarchive a note");
+    println!("  update <ID> [--title <TITLE>] [--body <TEXT|->]");
+    println!("                          Change a note's title and/or content without the GUI;");
+    println!("                          \"-\" reads the content from standard input");
     println!(
         "  backup [TARGET_DIR]     Create crash-safe atomic backup of database and attachments"
     );
@@ -100,6 +124,98 @@ fn dispatch_domain_command(
             NoteStore::open(db_path).map_err(|e| format!("Failed to open database: {e}"))?;
         Ok(handle_domain_request(&mut store, request))
     }
+}
+
+/// Takes the value that follows `flag`.
+fn flag_value(args: &mut std::slice::Iter<'_, String>, flag: &str) -> Result<String, String> {
+    args.next()
+        .cloned()
+        .ok_or_else(|| format!("{flag} needs a value"))
+}
+
+/// A note body given on the command line. "-" means standard input, so
+/// callers can pass multi-line text without a temporary file.
+fn read_body(value: String) -> Result<String, String> {
+    if value != "-" {
+        return Ok(value);
+    }
+    let mut text = String::new();
+    std::io::stdin()
+        .read_to_string(&mut text)
+        .map_err(|e| format!("Could not read the note body from standard input: {e}"))?;
+    // The newline that ends echo output or a heredoc is not part of the note.
+    if text.ends_with('\n') {
+        text.pop();
+        if text.ends_with('\r') {
+            text.pop();
+        }
+    }
+    Ok(text)
+}
+
+struct NewCommand {
+    title: String,
+    content: String,
+    id_only: bool,
+    open: bool,
+}
+
+/// `new <TITLE> [CONTENT...] [--body <TEXT|->] [--id-only] [--no-open]`
+fn parse_new_command(args: &[String]) -> Result<NewCommand, String> {
+    let mut positional = Vec::new();
+    let mut body = None;
+    let mut id_only = false;
+    let mut open = true;
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--body" => body = Some(flag_value(&mut args, "--body")?),
+            "--id-only" => id_only = true,
+            "--no-open" => open = false,
+            "--" => positional.extend(args.by_ref().cloned()),
+            _ => positional.push(arg.clone()),
+        }
+    }
+    if positional.is_empty() {
+        return Err("a title is required".to_string());
+    }
+    let title = positional.remove(0);
+    let content = match body {
+        Some(_) if !positional.is_empty() => {
+            return Err("give the content either as CONTENT or with --body, not both".to_string())
+        }
+        Some(body) => read_body(body)?,
+        None => positional.join(" "),
+    };
+    Ok(NewCommand {
+        title,
+        content,
+        id_only,
+        open,
+    })
+}
+
+/// `update <ID> [--title <TITLE>] [--body <TEXT|->]`
+fn parse_update_command(args: &[String]) -> Result<IpcRequest, String> {
+    let mut args = args.iter();
+    let id_arg = args.next().ok_or("a note ID is required")?;
+    let id = id_arg
+        .parse::<i64>()
+        .map_err(|_| format!("Invalid note ID: {id_arg}"))?;
+    let mut title = None;
+    let mut body = None;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--title" => title = Some(flag_value(&mut args, "--title")?),
+            "--body" | "--content" => body = Some(flag_value(&mut args, arg)?),
+            other => return Err(format!("unknown argument: {other}")),
+        }
+    }
+    if title.is_none() && body.is_none() {
+        return Err("give --title, --body or both".to_string());
+    }
+    let content = body.map(read_body).transpose()?;
+    Ok(IpcRequest::UpdateNote { id, title, content })
 }
 
 fn print_notes_table(data: Option<&serde_json::Value>) {
@@ -228,11 +344,15 @@ fn print_note_detail(data: Option<&serde_json::Value>) {
 
 fn main() -> std::process::ExitCode {
     let args: Vec<String> = std::env::args().collect();
-    if args.iter().any(|a| a == "-h" || a == "--help") {
+    let global_flags: &[String] = match args.get(1) {
+        Some(command) if SUBCOMMANDS.contains(&command.as_str()) => &[],
+        _ => &args,
+    };
+    if global_flags.iter().any(|a| a == "-h" || a == "--help") {
         print_help();
         return std::process::ExitCode::SUCCESS;
     }
-    if args.iter().any(|a| a == "-v" || a == "--version") {
+    if global_flags.iter().any(|a| a == "-v" || a == "--version") {
         println!(
             "{} {}",
             betternotes_core::APPLICATION_NAME,
@@ -240,7 +360,10 @@ fn main() -> std::process::ExitCode {
         );
         return std::process::ExitCode::SUCCESS;
     }
-    if args.iter().any(|a| a == "-d" || a == "--diagnostics") {
+    if global_flags
+        .iter()
+        .any(|a| a == "-d" || a == "--diagnostics")
+    {
         let report = betternotes_core::DesktopReport::current();
         println!("{}", report.format_report());
         return std::process::ExitCode::SUCCESS;
@@ -274,22 +397,33 @@ fn main() -> std::process::ExitCode {
 
     // CLI Command: new
     if args.len() >= 2 && args[1] == "new" {
-        if args.len() < 3 {
-            eprintln!("Usage: betternotes new <TITLE> [CONTENT]");
-            return std::process::ExitCode::FAILURE;
-        }
-        let title = args[2].clone();
-        let content = if args.len() >= 4 {
-            args[3..].join(" ")
-        } else {
-            String::new()
+        let command = match parse_new_command(&args[2..]) {
+            Ok(command) => command,
+            Err(e) => {
+                eprintln!("BetterNotes: {e}");
+                eprintln!(
+                    "Usage: betternotes new <TITLE> [CONTENT] [--body <TEXT|->] [--id-only] [--no-open]"
+                );
+                return std::process::ExitCode::FAILURE;
+            }
         };
-        let req = IpcRequest::NewNote { title, content };
+        let req = IpcRequest::NewNote {
+            title: command.title,
+            content: command.content,
+            open: command.open,
+        };
         return match dispatch_domain_command(&socket_path, &db_path, &req) {
             Ok(res) => {
                 if res.success {
-                    if let Some(msg) = res.message {
-                        println!("{msg}");
+                    let id = res
+                        .data
+                        .as_ref()
+                        .and_then(|data| data.get("id"))
+                        .and_then(|id| id.as_i64());
+                    match (command.id_only, id, res.message) {
+                        (true, Some(id), _) => println!("{id}"),
+                        (false, _, Some(msg)) => println!("{msg}"),
+                        _ => {}
                     }
                     std::process::ExitCode::SUCCESS
                 } else {
@@ -424,6 +558,38 @@ fn main() -> std::process::ExitCode {
                     eprintln!(
                         "Error: {}",
                         res.message.as_deref().unwrap_or("Archive operation failed")
+                    );
+                    std::process::ExitCode::FAILURE
+                }
+            }
+            Err(e) => {
+                eprintln!("BetterNotes: {e}");
+                std::process::ExitCode::FAILURE
+            }
+        };
+    }
+
+    // CLI Command: update
+    if args.len() >= 2 && args[1] == "update" {
+        let req = match parse_update_command(&args[2..]) {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("BetterNotes: {e}");
+                eprintln!("Usage: betternotes update <ID> [--title <TITLE>] [--body <TEXT|->]");
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        return match dispatch_domain_command(&socket_path, &db_path, &req) {
+            Ok(res) => {
+                if res.success {
+                    if let Some(msg) = res.message {
+                        println!("{msg}");
+                    }
+                    std::process::ExitCode::SUCCESS
+                } else {
+                    eprintln!(
+                        "Error: {}",
+                        res.message.as_deref().unwrap_or("Failed to update note")
                     );
                     std::process::ExitCode::FAILURE
                 }
@@ -599,17 +765,33 @@ fn main() -> std::process::ExitCode {
                     .push_back(IpcAction::QuickCapture);
                 IpcResponse::ok_msg("Quick capture activated", None)
             }
-            IpcRequest::NewNote { .. } => {
+            IpcRequest::NewNote { open, .. } => {
                 let res = betternotes_core::handle_domain_request(&mut store, &req);
                 if res.success {
                     if let Some(data) = &res.data {
                         if let Some(id) = data.get("id").and_then(|v| v.as_i64()) {
+                            // A note created without its window still shows in the library.
+                            let action = if *open {
+                                IpcAction::OpenNote(id)
+                            } else {
+                                IpcAction::Reload
+                            };
                             betternotes_core::global_ipc_queue()
                                 .lock()
                                 .unwrap()
-                                .push_back(IpcAction::OpenNote(id));
+                                .push_back(action);
                         }
                     }
+                }
+                res
+            }
+            IpcRequest::UpdateNote { id, .. } => {
+                let res = betternotes_core::handle_domain_request(&mut store, &req);
+                if res.success {
+                    betternotes_core::global_ipc_queue()
+                        .lock()
+                        .unwrap()
+                        .push_back(IpcAction::NoteChanged(*id));
                 }
                 res
             }

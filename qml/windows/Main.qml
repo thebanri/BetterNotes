@@ -2288,7 +2288,13 @@ ApplicationWindow {
                 text: qsTr("Start at login")
                 checkable: true
                 checked: backend.autostartEnabled
-                onTriggered: backend.setAutostart(!checked)
+                // A checkable item flips `checked` itself before triggered fires,
+                // so negating it asked for the unchanged state. Toggle the real
+                // state instead, then rebind so the check mark follows it.
+                onTriggered: {
+                    backend.setAutostart(!backend.autostartEnabled)
+                    checked = Qt.binding(function() { return backend.autostartEnabled })
+                }
             }
             Platform.MenuItem {
                 text: qsTr("Open library")
@@ -2398,6 +2404,11 @@ ApplicationWindow {
                 } else if (action.startsWith("open:")) {
                     let id = action.substring(5)
                     window.openNote(id)
+                } else if (action.startsWith("changed:")) {
+                    // Changed by the CLI. A window with unsaved typing keeps it;
+                    // its next save reports the conflict instead of losing either.
+                    const sticky = window.noteWindows[action.substring(8)]
+                    if (sticky && !sticky.editorBackend.dirty) sticky.editorBackend.reloadNote()
                 } else if (action.startsWith("opened:")) {
                     window.openNotesFrom(action.substring(7).split(",").filter(function(id) { return id.length > 0 }))
                 } else if (action.startsWith("snoozed:")) {
