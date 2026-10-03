@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-10-03
+
 ### Added
 - `betternotes open <ID>` shows a note's sticky window, or brings it forward when it is already open. When BetterNotes is not running it starts in the background first and the command returns once the note is open. It exits non-zero for a note that does not exist or is in the trash. On Wayland, a caller's `XDG_ACTIVATION_TOKEN` is passed to the note window so the compositor lets it take focus.
 
