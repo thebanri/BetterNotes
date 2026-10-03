@@ -10,7 +10,10 @@ use betternotes_core::{
 use cxx_qt_lib::QGuiApplication;
 use engine::{load_engine, MAIN_QML};
 use std::io::Read;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 /// Subcommands whose arguments may be arbitrary text, such as a note body of
 /// "-v". Global flags are only looked for outside of them.
@@ -21,6 +24,7 @@ const SUBCOMMANDS: &[&str] = &[
     "show",
     "archive",
     "update",
+    "open",
     "backup",
     "restore",
     "export",
@@ -82,6 +86,8 @@ fn print_help() {
     println!("  update <ID> [--title <TITLE>] [--body <TEXT|->]");
     println!("                          Change a note's title and/or content without the GUI;");
     println!("                          \"-\" reads the content from standard input");
+    println!("  open <ID>               Show a note's sticky window, starting BetterNotes in the");
+    println!("                          background if it is not running");
     println!(
         "  backup [TARGET_DIR]     Create crash-safe atomic backup of database and attachments"
     );
@@ -216,6 +222,90 @@ fn parse_update_command(args: &[String]) -> Result<IpcRequest, String> {
     }
     let content = body.map(read_body).transpose()?;
     Ok(IpcRequest::UpdateNote { id, title, content })
+}
+
+/// How long `open` waits for an app it started to take requests.
+const START_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// The command that starts this installation again as a separate process.
+fn relaunch_command() -> Result<Command, String> {
+    // An AppImage's files go away once the process that mounted them exits,
+    // so the new process starts from the image file itself.
+    if let Some(appimage) = std::env::var_os("APPIMAGE").filter(|path| !path.is_empty()) {
+        return Ok(Command::new(appimage));
+    }
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("Could not find the BetterNotes executable: {e}"))?;
+    // A Flatpak sandbox ends with the process it was started for. The Flatpak
+    // portal starts the app in a sandbox of its own instead.
+    if std::env::var_os("FLATPAK_ID").is_some() {
+        let mut command = Command::new("flatpak-spawn");
+        command.arg(exe);
+        return Ok(command);
+    }
+    Ok(Command::new(exe))
+}
+
+/// Starts the app in the background as its own process and waits until it
+/// takes requests, so the command that started it can return.
+fn start_background_instance(socket_path: &Path) -> Result<(), String> {
+    let mut command = relaunch_command()?;
+    // Its own process group keeps it alive when the caller's group is
+    // signalled. Its output goes nowhere: a caller reading this command's
+    // output would otherwise wait until the app quits. The caller's
+    // activation token is for the note window and goes with the request; a
+    // token is used up by the first window that takes it.
+    command
+        .arg("--background")
+        .env_remove("XDG_ACTIVATION_TOKEN")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0);
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("Could not start BetterNotes: {e}"))?;
+    let deadline = Instant::now() + START_TIMEOUT;
+    while Instant::now() < deadline {
+        if is_server_running(socket_path) {
+            return Ok(());
+        }
+        if let Ok(Some(status)) = child.try_wait() {
+            return Err(format!("BetterNotes exited while starting ({status})"));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    // The socket comes up before the database or Qt is touched, so a copy
+    // that never answered will not. Left running, every later `open` would
+    // start another one. (Under Flatpak this stops flatpak-spawn; the app it
+    // started in another sandbox is not reached by this signal.)
+    let _ = child.kill();
+    let _ = child.wait();
+    Err("BetterNotes did not start in time".to_string())
+}
+
+/// `open <ID>`: the note's window in the running app, which is started first
+/// when needed. The note is checked before anything is started.
+fn open_note(socket_path: &Path, db_path: &Path, id: i64) -> Result<IpcResponse, String> {
+    if !is_server_running(socket_path) {
+        let store =
+            NoteStore::open(db_path).map_err(|e| format!("Failed to open database: {e}"))?;
+        if let Err(response) = betternotes_core::require_openable_note(&store, id) {
+            return Ok(response);
+        }
+        drop(store);
+        start_background_instance(socket_path)?;
+    }
+    // A launcher or widget that runs this command for a click passes its
+    // xdg-activation token in the environment.
+    let activation_token = std::env::var("XDG_ACTIVATION_TOKEN")
+        .ok()
+        .and_then(|token| betternotes_core::valid_activation_token(&token));
+    let request = IpcRequest::OpenNote {
+        id,
+        activation_token,
+    };
+    send_request(socket_path, &request).map_err(|e| format!("IPC error: {e}"))
 }
 
 fn print_notes_table(data: Option<&serde_json::Value>) {
@@ -601,6 +691,41 @@ fn main() -> std::process::ExitCode {
         };
     }
 
+    // CLI Command: open
+    if args.len() >= 2 && args[1] == "open" {
+        if args.len() != 3 {
+            eprintln!("Usage: betternotes open <ID>");
+            return std::process::ExitCode::FAILURE;
+        }
+        let id = match args[2].parse::<i64>() {
+            Ok(n) => n,
+            Err(_) => {
+                eprintln!("Invalid note ID: {}", args[2]);
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        return match open_note(&socket_path, &db_path, id) {
+            Ok(res) => {
+                if res.success {
+                    if let Some(msg) = res.message {
+                        println!("{msg}");
+                    }
+                    std::process::ExitCode::SUCCESS
+                } else {
+                    eprintln!(
+                        "Error: {}",
+                        res.message.as_deref().unwrap_or("Failed to open note")
+                    );
+                    std::process::ExitCode::FAILURE
+                }
+            }
+            Err(e) => {
+                eprintln!("BetterNotes: {e}");
+                std::process::ExitCode::FAILURE
+            }
+        };
+    }
+
     // CLI Command: backup
     if args.len() >= 2 && args[1] == "backup" {
         let target = if args.len() >= 3 {
@@ -772,7 +897,10 @@ fn main() -> std::process::ExitCode {
                         if let Some(id) = data.get("id").and_then(|v| v.as_i64()) {
                             // A note created without its window still shows in the library.
                             let action = if *open {
-                                IpcAction::OpenNote(id)
+                                IpcAction::OpenNote {
+                                    id,
+                                    activation_token: None,
+                                }
                             } else {
                                 IpcAction::Reload
                             };
@@ -795,6 +923,29 @@ fn main() -> std::process::ExitCode {
                 }
                 res
             }
+            // The GUI opens it, asking for the password first when it is locked.
+            IpcRequest::OpenNote {
+                id,
+                activation_token,
+            } => match betternotes_core::require_openable_note(&store, *id) {
+                Ok(()) => {
+                    let activation_token = activation_token
+                        .as_deref()
+                        .and_then(betternotes_core::valid_activation_token);
+                    betternotes_core::global_ipc_queue()
+                        .lock()
+                        .unwrap()
+                        .push_back(IpcAction::OpenNote {
+                            id: *id,
+                            activation_token,
+                        });
+                    IpcResponse::ok_msg(
+                        format!("Opened note #{id}"),
+                        Some(serde_json::json!({ "id": id })),
+                    )
+                }
+                Err(response) => response,
+            },
             // Paths from another process: absolute, and not too many. The GUI
             // checks each file before reading it.
             IpcRequest::OpenFiles { paths } => {

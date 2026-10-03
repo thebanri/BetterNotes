@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `betternotes open <ID>` shows a note's sticky window, or brings it forward when it is already open. When BetterNotes is not running it starts in the background first and the command returns once the note is open. It exits non-zero for a note that does not exist or is in the trash. On Wayland, a caller's `XDG_ACTIVATION_TOKEN` is passed to the note window so the compositor lets it take focus.
+
+### Fixed
+- The master password prompt did not appear when BetterNotes was running in the background: it opened inside the hidden library window. Opening a locked note from a reminder, or locking a note from its own window, now brings the library up for the prompt and hides it again afterwards.
+
 ## [0.1.13] - 2026-10-02
 
 ### Added

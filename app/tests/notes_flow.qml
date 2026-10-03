@@ -691,7 +691,12 @@ Window {
 
         library.lockNow()
         check(!backend.vaultUnlocked && !library.noteWindows[id], "Lock Now left the locked note open")
+        // Opened while the library is hidden, as from the command line in the
+        // background: the prompt brings the library up, and it hides again.
+        const wasVisible = library.visible
+        library.hide()
         check(library.openNote(id) === null && dialog.visible && dialog.mode === "unlock", "Opening a locked note did not ask for the password")
+        check(library.visible, "The password prompt stayed in the hidden library")
         field("passwordFirst").text = "wrong password"
         dialog.submit()
         check(dialog.visible && dialog.error.length > 0 && !backend.vaultUnlocked, "A wrong password unlocked")
@@ -699,6 +704,8 @@ Window {
         dialog.submit()
         sticky = library.noteWindows[id]
         check(sticky && sticky.plainContent === "secret words", "Unlocking did not open the note with its text")
+        check(!library.visible, "The library stayed up after the password prompt")
+        if (wasVisible) library.show()
 
         library.noteAction(id, "unlock-note")
         check(!sticky.editorBackend.isLocked && !library.isLockedNote(id), "Removing the lock failed")

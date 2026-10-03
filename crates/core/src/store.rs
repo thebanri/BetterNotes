@@ -314,6 +314,19 @@ impl NoteStore {
         Ok(())
     }
 
+    /// Whether the note is in the trash, or None when it does not exist.
+    /// Reads no content, so it also answers for a locked note.
+    pub fn trash_state(&self, id: i64) -> Result<Option<bool>> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT deleted_at IS NOT NULL FROM notes WHERE id = ?1",
+                [id],
+                |row| row.get::<_, bool>(0),
+            )
+            .optional()?)
+    }
+
     /// Notes in the trash with when each was deleted, newest first.
     pub fn trash(&self) -> Result<Vec<(NoteSummary, i64)>> {
         let mut statement = self.connection.prepare(

@@ -540,6 +540,16 @@ ApplicationWindow {
         passwordDialog.pendingAction = action || ""
         const i = backend.noteIds.indexOf(id)
         const title = i >= 0 ? (backend.titles[i] || qsTr("Untitled note")) : ""
+        // The prompt lives in this window. A request from a sticky note, a
+        // reminder or the command line can come while it is hidden; it shows
+        // for the prompt and hides again after.
+        if (!window.visible) {
+            passwordDialog.hideWindowAfter = true
+            window.showNormal()
+        } else if (window.visibility === Window.Minimized) {
+            window.showNormal()
+        }
+        window.requestActivate()
         passwordDialog.openAs(mode, title)
     }
 
@@ -2183,8 +2193,15 @@ ApplicationWindow {
         objectName: "passwordDialog"
         property string pendingId: ""
         property string pendingAction: ""
+        property bool hideWindowAfter: false
         theme: window.theme
         onSubmitted: function(password, replacement) { window.passwordSubmitted(password, replacement) }
+        onClosed: {
+            if (hideWindowAfter) {
+                hideWindowAfter = false
+                window.hide()
+            }
+        }
     }
 
     UI.ReminderEditor {

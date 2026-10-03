@@ -54,6 +54,15 @@ pub enum IpcRequest {
         title: Option<String>,
         content: Option<String>,
     },
+    /// Opens an existing note's sticky window in the running app, or brings it
+    /// forward when it is already open.
+    OpenNote {
+        id: i64,
+        /// The caller's xdg-activation token (`XDG_ACTIVATION_TOKEN`). Wayland
+        /// compositors only let a window take focus with one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        activation_token: Option<String>,
+    },
     /// Files to open as new notes in the running app ("Open with").
     OpenFiles {
         paths: Vec<String>,
@@ -113,7 +122,12 @@ impl IpcResponse {
 pub enum IpcAction {
     Activate,
     QuickCapture,
-    OpenNote(i64),
+    /// Open a note's window, with the xdg-activation token that lets it take
+    /// focus on Wayland when the request came with one.
+    OpenNote {
+        id: i64,
+        activation_token: Option<String>,
+    },
     Reload,
     /// A note was changed outside the GUI; its open window should reload it.
     NoteChanged(i64),
@@ -173,6 +187,36 @@ pub fn is_server_running(socket_path: &Path) -> bool {
     match send_request(socket_path, &IpcRequest::Ping) {
         Ok(res) => res.success,
         Err(_) => false,
+    }
+}
+
+/// Longest xdg-activation token accepted from another process. Compositors
+/// hand out short opaque strings: a UUID on KDE Plasma, a few dozen
+/// characters on GNOME and wlroots.
+pub const MAX_ACTIVATION_TOKEN_LEN: usize = 256;
+
+/// An xdg-activation token from another process, if it looks like one: an
+/// opaque string of printable ASCII without spaces. Anything else is dropped,
+/// as if no token had been given.
+pub fn valid_activation_token(token: &str) -> Option<String> {
+    let token = token.trim();
+    let plausible = !token.is_empty()
+        && token.len() <= MAX_ACTIVATION_TOKEN_LEN
+        && token.bytes().all(|byte| byte.is_ascii_graphic());
+    plausible.then(|| token.to_string())
+}
+
+/// Checks that a note can get a window: it exists and is not in the trash.
+/// A locked note can; the app asks for the password before showing it. An
+/// unknown id fails with the same message as the other note commands.
+pub fn require_openable_note(store: &NoteStore, id: i64) -> std::result::Result<(), IpcResponse> {
+    match store.trash_state(id) {
+        Ok(Some(false)) => Ok(()),
+        Ok(Some(true)) => Err(IpcResponse::err(format!(
+            "Note #{id} is in the trash; restore it first"
+        ))),
+        Ok(None) => Err(IpcResponse::err(format!("Note #{id} does not exist"))),
+        Err(e) => Err(IpcResponse::err(format!("Failed to read note: {e}"))),
     }
 }
 
@@ -268,6 +312,10 @@ pub fn handle_domain_request(store: &mut NoteStore, request: &IpcRequest) -> Ipc
         IpcRequest::OpenFiles { .. } => {
             IpcResponse::err("Opening files needs the running BetterNotes window")
         }
+        IpcRequest::OpenNote { id, .. } => match require_openable_note(store, *id) {
+            Ok(()) => IpcResponse::err("Opening a note window needs the running BetterNotes app"),
+            Err(response) => response,
+        },
         IpcRequest::ArchiveNote { id, archived } => match store.get(*id) {
             Ok(mut note) => {
                 note.is_archived = *archived;
@@ -453,6 +501,72 @@ mod tests {
 
         drop(server);
         assert!(!is_server_running(&socket_path));
+    }
+
+    #[test]
+    fn open_note_refuses_unknown_and_trashed_notes_without_the_app() {
+        let dir = tempdir().unwrap();
+        let mut store = NoteStore::open(&dir.path().join("notes.sqlite3")).unwrap();
+        let id = store.create().unwrap().id;
+
+        assert!(require_openable_note(&store, id).is_ok());
+        let unknown = id + 1000;
+        let missing = require_openable_note(&store, unknown).unwrap_err();
+        assert_eq!(
+            missing.message,
+            Some(format!("Note #{unknown} does not exist"))
+        );
+        let trashed = store.create().unwrap();
+        store.move_to_trash(&trashed).unwrap();
+        let in_trash = require_openable_note(&store, trashed.id).unwrap_err();
+        assert!(in_trash.message.unwrap().contains("in the trash"));
+
+        // Without the app there is no window to open, so this never succeeds.
+        let open = |store: &mut NoteStore, id| {
+            handle_domain_request(
+                store,
+                &IpcRequest::OpenNote {
+                    id,
+                    activation_token: None,
+                },
+            )
+        };
+        let headless = open(&mut store, id);
+        assert!(!headless.success);
+        assert!(headless
+            .message
+            .unwrap()
+            .contains("running BetterNotes app"));
+        assert_eq!(open(&mut store, unknown).message, missing.message);
+    }
+
+    #[test]
+    fn activation_tokens_are_checked_and_optional_on_the_wire() {
+        assert_eq!(
+            valid_activation_token(" 1c9d3a8e-kwin_token \n").as_deref(),
+            Some("1c9d3a8e-kwin_token")
+        );
+        assert_eq!(valid_activation_token(""), None);
+        assert_eq!(valid_activation_token("two words"), None);
+        assert_eq!(valid_activation_token("bad\u{7}bell"), None);
+        assert_eq!(valid_activation_token("tökén"), None);
+        assert_eq!(
+            valid_activation_token(&"a".repeat(MAX_ACTIVATION_TOKEN_LEN + 1)),
+            None
+        );
+
+        // Requests without a token keep the shape older clients send.
+        let plain: IpcRequest =
+            serde_json::from_str(r#"{"action":"OpenNote","payload":{"id":7}}"#).unwrap();
+        assert_eq!(
+            plain,
+            IpcRequest::OpenNote {
+                id: 7,
+                activation_token: None
+            }
+        );
+        let without = serde_json::to_string(&plain).unwrap();
+        assert!(!without.contains("activation_token"));
     }
 
     #[test]

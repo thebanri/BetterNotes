@@ -196,6 +196,7 @@ betternotes archive 1
 betternotes archive 1 --unarchive
 betternotes update 1 --title "Configure nginx and TLS"
 betternotes update 1 --body "New content"
+betternotes open 1
 betternotes --quick-capture
 betternotes export notes.json
 betternotes export ./markdown-notes/
@@ -231,6 +232,23 @@ betternotes show 4            # title, metadata and content of note 4
 `--body -` reads the content from standard input, dropping one trailing newline.
 `update` changes only the fields it is given and exits non-zero with a message on
 standard error when the note does not exist or is locked.
+
+`betternotes open <ID>` is the one that shows a window: the note's sticky window,
+brought forward if it is already open. When the app is not running, it starts in
+the background first, as with `--background`, and the command returns once the
+note is open. It exits non-zero for a note that does not exist or is in the
+trash; for a locked note the library window comes up to ask for the password.
+
+- **Focus on Wayland:** a window may only take focus with an xdg-activation
+  token from the compositor. A launcher or widget that runs `open` for a click
+  should pass its token in `XDG_ACTIVATION_TOKEN`; BetterNotes hands it to the
+  note window. Without one the compositor may show the note without focus or
+  only mark it as wanting attention. X11 needs no token.
+- **Desktop widgets:** notes shown as desktop widgets keep their layer, so
+  `open` does not bring an unpinned note above other windows.
+- **Flatpak:** the background app is started through `flatpak-spawn`, which
+  needs Flatpak 1.12 or newer (it shares one runtime directory, and so the app's
+  socket, between instances).
 
 Notes are stored in `$XDG_DATA_HOME/betternotes/notes.sqlite3`, falling back to
 `~/.local/share/betternotes/notes.sqlite3`. Attachments live alongside the database.

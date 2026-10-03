@@ -71,6 +71,16 @@ bool platformSetApplicationIcon() {
     return true;
 }
 
+// Hands another process's xdg-activation token to the next window that is
+// shown or activated. On Wayland only a request carrying a token from the
+// compositor may move focus to a window. Qt's xdg-shell integration and
+// LayerShellQt both take the token from XDG_ACTIVATION_TOKEN and clear it
+// once used; X11 has no such tokens.
+void platformSetActivationToken(const QString& token) {
+    if (QGuiApplication::platformName() == QLatin1String("wayland"))
+        qputenv("XDG_ACTIVATION_TOKEN", token.toUtf8());
+}
+
 // The user's Pictures folder as a file URL, from the XDG user directories.
 QString platformPicturesFolder() {
     return QUrl::fromLocalFile(

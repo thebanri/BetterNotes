@@ -1,6 +1,6 @@
 use betternotes_core::{
     export_import::{export_notes_json, import_notes_json},
-    vault, Error, NotesSession,
+    require_openable_note, vault, Error, NotesSession,
 };
 
 // One test: the unlocked key is process-wide, so the steps must not run in
@@ -51,6 +51,8 @@ fn locked_notes_are_sealed_hidden_and_need_the_password() {
     // Locked: nothing reads or overwrites it.
     vault::lock();
     assert!(matches!(session.store().get(id), Err(Error::Locked)));
+    // `open` still finds it; the app asks for the password.
+    assert!(require_openable_note(session.store(), id).is_ok());
     let mut draft = session.current().unwrap().clone();
     draft.content = String::new();
     assert!(matches!(session.store().update(&draft), Err(Error::Locked)));

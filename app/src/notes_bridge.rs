@@ -18,6 +18,7 @@ pub mod ffi {
         fn platformCursorGlobalX() -> i32;
         fn platformCursorGlobalY() -> i32;
         fn platformSetApplicationIcon() -> bool;
+        fn platformSetActivationToken(token: &QString);
         fn platformPicturesFolder() -> QString;
         fn platformDocumentsFolder() -> QString;
         fn platformClipboardImageToFile() -> QString;
@@ -1460,7 +1461,10 @@ impl ffi::NotesBackend {
                             &title, &body, &actions,
                         );
                         let action = match chosen.ok().flatten().as_deref() {
-                            Some("open") => betternotes_core::IpcAction::OpenNote(note_id),
+                            Some("open") => betternotes_core::IpcAction::OpenNote {
+                                id: note_id,
+                                activation_token: None,
+                            },
                             Some("snooze") => betternotes_core::IpcAction::SnoozeReminder(note_id),
                             _ => return,
                         };
@@ -1827,7 +1831,14 @@ impl ffi::NotesBackend {
         match action {
             Some(betternotes_core::IpcAction::Activate) => QString::from("activate"),
             Some(betternotes_core::IpcAction::QuickCapture) => QString::from("quick_capture"),
-            Some(betternotes_core::IpcAction::OpenNote(id)) => {
+            Some(betternotes_core::IpcAction::OpenNote {
+                id,
+                activation_token,
+            }) => {
+                // The window opens right after this returns, on this thread.
+                if let Some(token) = activation_token {
+                    ffi::platformSetActivationToken(&QString::from(&token));
+                }
                 self.as_mut().reload();
                 QString::from(&format!("open:{id}"))
             }
