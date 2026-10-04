@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-10-04
+
 ### Added
 - `betternotes show` and `betternotes update` take `--password-stdin` for locked notes: the master password is read from the first line of standard input, so it stays out of the process list and shell history. With `update --body -`, the content follows on the next lines. The password applies to that one command and does not unlock a running app. Both commands now exit with status 3 for a wrong password and 4 for a locked note given no password, so callers can ask again ([#2](https://github.com/thebanri/BetterNotes/issues/2)).
 

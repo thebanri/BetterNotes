@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.15" date="2026-10-04">
+      <description>
+        <p>The command line can read and update locked notes with the master password given on standard input, and reports a wrong password with its own exit status.</p>
+      </description>
+    </release>
     <release version="0.1.14" date="2026-10-03">
       <description>
         <p>The command line can open a note's sticky window, starting BetterNotes in the background when needed, and the master password prompt now appears while the app runs in the background.</p>
