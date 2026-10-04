@@ -36,8 +36,8 @@ pub use export_import::{
 };
 pub use ipc::{
     global_ipc_queue, handle_domain_request, is_server_running, require_openable_note,
-    send_request, valid_activation_token, IpcAction, IpcRequest, IpcResponse, IpcServer,
-    SharedIpcQueue,
+    send_request, valid_activation_token, IpcAction, IpcErrorKind, IpcRequest, IpcResponse,
+    IpcServer, Password, SharedIpcQueue,
 };
 pub use links::external_url;
 pub use notes::{Error, Note, NoteSummary, Result, SearchResult};

@@ -83,6 +83,23 @@ impl NoteStore {
     }
 
     pub fn get(&self, id: i64) -> Result<Note> {
+        self.get_with_key(id, None)
+    }
+
+    /// Whether a note is locked, without reading its content.
+    pub fn is_locked(&self, id: i64) -> Result<bool> {
+        self.connection
+            .query_row("SELECT is_locked FROM notes WHERE id = ?1", [id], |row| {
+                row.get::<_, i32>(0)
+            })
+            .optional()?
+            .map(|locked| locked != 0)
+            .ok_or(Error::NotFound(id))
+    }
+
+    /// Reads a note, opening locked content with `key` when one is given
+    /// rather than with the unlocked key.
+    pub fn get_with_key(&self, id: i64, key: Option<&crate::vault::PasswordKey>) -> Result<Note> {
         let note = self
             .connection
             .query_row(
@@ -117,7 +134,7 @@ impl NoteStore {
         // A locked note opens only while the master password is unlocked;
         // otherwise its empty draft could be saved over the sealed content.
         let content = if note.9 {
-            crate::vault::open(&note.2)?
+            crate::vault::open_using(key, &note.2)?
         } else {
             note.2
         };
@@ -160,6 +177,16 @@ impl NoteStore {
 
     /// A single conditional statement commits the entire draft atomically.
     pub fn update(&self, draft: &Note) -> Result<Note> {
+        self.update_with_key(draft, None)
+    }
+
+    /// Saves a draft, sealing locked content with `key` when one is given
+    /// rather than with the unlocked key.
+    pub fn update_with_key(
+        &self,
+        draft: &Note,
+        key: Option<&crate::vault::PasswordKey>,
+    ) -> Result<Note> {
         let revision = draft
             .revision
             .checked_add(1)
@@ -167,7 +194,10 @@ impl NoteStore {
         let updated_at = now_millis()?.max(draft.updated_at);
         // Locked content is stored sealed and is not searchable.
         let (stored, search_text) = if draft.is_locked {
-            (crate::vault::seal(&draft.content)?, String::new())
+            (
+                crate::vault::seal_using(key, &draft.content)?,
+                String::new(),
+            )
         } else {
             (
                 draft.content.clone(),

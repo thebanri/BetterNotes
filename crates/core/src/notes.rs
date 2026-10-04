@@ -73,6 +73,8 @@ pub enum Error {
     InvalidReminder,
     #[error("This note is locked. Unlock locked notes with your password first.")]
     Locked,
+    #[error("The password is wrong.")]
+    WrongPassword,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -2,8 +2,8 @@
 //!
 //! Uses private Unix domain sockets with peer credential checks and strict size validation.
 
-use crate::{Error, NoteStore, Result};
-use serde::{Deserialize, Serialize};
+use crate::{vault, Error, NoteStore, Result};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
     collections::VecDeque,
     io::{BufRead, BufReader, Write},
@@ -16,6 +16,7 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
+use zeroize::Zeroizing;
 
 /// Maximum allowed IPC request size in bytes (1 MiB) to prevent memory exhaustion attacks.
 pub const MAX_IPC_MESSAGE_SIZE: usize = 1024 * 1024;
@@ -43,6 +44,10 @@ pub enum IpcRequest {
     },
     ShowNote {
         id: i64,
+        /// The master password, for a locked note. Checking it does not
+        /// unlock the running app.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        password: Option<Password>,
     },
     ArchiveNote {
         id: i64,
@@ -53,6 +58,9 @@ pub enum IpcRequest {
         id: i64,
         title: Option<String>,
         content: Option<String>,
+        /// The master password, for a locked note.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        password: Option<Password>,
     },
     /// Opens an existing note's sticky window in the running app, or brings it
     /// forward when it is already open.
@@ -73,12 +81,56 @@ fn default_true() -> bool {
     true
 }
 
+/// A master password sent with one request. It is wiped from memory when
+/// dropped and left out of `Debug` output.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Password(Zeroizing<String>);
+
+impl Password {
+    pub fn new(password: String) -> Self {
+        Self(Zeroizing::new(password))
+    }
+
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for Password {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Password(<hidden>)")
+    }
+}
+
+impl Serialize for Password {
+    fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for Password {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        String::deserialize(deserializer).map(Self::new)
+    }
+}
+
 /// A blank title becomes the same placeholder the GUI uses.
 fn effective_title(title: &str) -> String {
     match title.trim() {
         "" => "Untitled Note".to_string(),
         title => title.to_string(),
     }
+}
+
+/// Why a request failed, for callers that act on it, such as asking for the
+/// password again. Other failures carry only a message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IpcErrorKind {
+    /// The note is locked and the request brought no password.
+    Locked,
+    /// The password sent with the request is wrong.
+    WrongPassword,
 }
 
 /// Standardized IPC response payload.
@@ -89,6 +141,9 @@ pub struct IpcResponse {
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
+    /// Older apps send none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<IpcErrorKind>,
 }
 
 impl IpcResponse {
@@ -97,6 +152,7 @@ impl IpcResponse {
             success: true,
             message: None,
             data,
+            error: None,
         }
     }
 
@@ -105,6 +161,7 @@ impl IpcResponse {
             success: true,
             message: Some(msg.into()),
             data,
+            error: None,
         }
     }
 
@@ -113,7 +170,51 @@ impl IpcResponse {
             success: false,
             message: Some(msg.into()),
             data: None,
+            error: None,
         }
+    }
+
+    pub fn err_kind(kind: IpcErrorKind, msg: impl Into<String>) -> Self {
+        Self {
+            error: Some(kind),
+            ..Self::err(msg)
+        }
+    }
+}
+
+/// The response for a note request that failed with `error`; `action` says
+/// what was being done, as in "Failed to read note".
+fn note_error(id: i64, action: &str, error: Error) -> IpcResponse {
+    match error {
+        Error::NotFound(id) => IpcResponse::err(format!("Note #{id} does not exist")),
+        Error::Locked => IpcResponse::err_kind(
+            IpcErrorKind::Locked,
+            format!("Note #{id} is locked and needs the master password"),
+        ),
+        Error::WrongPassword => {
+            IpcResponse::err_kind(IpcErrorKind::WrongPassword, "The password is wrong")
+        }
+        error => IpcResponse::err(format!("Failed to {action} note: {error}")),
+    }
+}
+
+/// The key for a locked note from the password sent with a request. Without a
+/// password, or for a note that is not locked, there is none, and locked
+/// content needs the app to be unlocked as before. A password given for a
+/// locked note is always checked, even while the app is unlocked.
+fn request_key(
+    store: &NoteStore,
+    id: i64,
+    password: Option<&Password>,
+) -> Result<Option<vault::PasswordKey>> {
+    match password {
+        Some(password) if store.is_locked(id)? => {
+            match vault::key_for_password(store, password.expose())? {
+                Some(key) => Ok(Some(key)),
+                None => Err(Error::WrongPassword),
+            }
+        }
+        _ => Ok(None),
     }
 }
 
@@ -294,7 +395,9 @@ pub fn handle_domain_request(store: &mut NoteStore, request: &IpcRequest) -> Ipc
             }
             Err(e) => IpcResponse::err(format!("Failed to search notes: {e}")),
         },
-        IpcRequest::ShowNote { id } => match store.get(*id) {
+        IpcRequest::ShowNote { id, password } => match request_key(store, *id, password.as_ref())
+            .and_then(|key| store.get_with_key(*id, key.as_ref()))
+        {
             Ok(note) => IpcResponse::ok(Some(serde_json::json!({
                 "id": note.id,
                 "title": note.title,
@@ -306,8 +409,7 @@ pub fn handle_domain_request(store: &mut NoteStore, request: &IpcRequest) -> Ipc
                 "created_at": note.created_at,
                 "updated_at": note.updated_at,
             }))),
-            Err(Error::NotFound(id)) => IpcResponse::err(format!("Note #{id} does not exist")),
-            Err(e) => IpcResponse::err(format!("Failed to find note: {e}")),
+            Err(e) => note_error(*id, "find", e),
         },
         IpcRequest::OpenFiles { .. } => {
             IpcResponse::err("Opening files needs the running BetterNotes window")
@@ -330,11 +432,20 @@ pub fn handle_domain_request(store: &mut NoteStore, request: &IpcRequest) -> Ipc
             Err(Error::NotFound(id)) => IpcResponse::err(format!("Note #{id} does not exist")),
             Err(e) => IpcResponse::err(format!("Failed to read note: {e}")),
         },
-        IpcRequest::UpdateNote { id, title, content } => {
+        IpcRequest::UpdateNote {
+            id,
+            title,
+            content,
+            password,
+        } => {
             if title.is_none() && content.is_none() {
                 return IpcResponse::err("Nothing to update: give a new title or content");
             }
-            match store.get(*id) {
+            let key = match request_key(store, *id, password.as_ref()) {
+                Ok(key) => key,
+                Err(e) => return note_error(*id, "read", e),
+            };
+            match store.get_with_key(*id, key.as_ref()) {
                 Ok(mut note) => {
                     if let Some(title) = title {
                         note.title = effective_title(title);
@@ -342,16 +453,15 @@ pub fn handle_domain_request(store: &mut NoteStore, request: &IpcRequest) -> Ipc
                     if let Some(content) = content {
                         note.content = content.clone();
                     }
-                    match store.update(&note) {
+                    match store.update_with_key(&note, key.as_ref()) {
                         Ok(saved) => IpcResponse::ok_msg(
                             format!("Updated note #{id}"),
                             Some(serde_json::json!({ "id": saved.id, "title": saved.title })),
                         ),
-                        Err(e) => IpcResponse::err(format!("Failed to update note: {e}")),
+                        Err(e) => note_error(*id, "update", e),
                     }
                 }
-                Err(Error::NotFound(id)) => IpcResponse::err(format!("Note #{id} does not exist")),
-                Err(e) => IpcResponse::err(format!("Failed to read note: {e}")),
+                Err(e) => note_error(*id, "read", e),
             }
         }
     }
@@ -592,6 +702,7 @@ mod tests {
                     id,
                     title: title.map(str::to_string),
                     content: content.map(str::to_string),
+                    password: None,
                 },
             )
         };
@@ -616,6 +727,7 @@ mod tests {
                 id: id + 100,
                 title: Some("x".to_string()),
                 content: None,
+                password: None,
             },
         );
         assert!(!missing.success);

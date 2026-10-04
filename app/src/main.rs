@@ -4,8 +4,8 @@ mod notes_bridge;
 mod platform;
 
 use betternotes_core::{
-    handle_domain_request, is_server_running, paths, send_request, IpcAction, IpcRequest,
-    IpcResponse, IpcServer, NoteStore,
+    handle_domain_request, is_server_running, paths, send_request, IpcAction, IpcErrorKind,
+    IpcRequest, IpcResponse, IpcServer, NoteStore, Password,
 };
 use cxx_qt_lib::QGuiApplication;
 use engine::{load_engine, MAIN_QML};
@@ -14,6 +14,11 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
+
+/// Exit status of `show` and `update` when the master password given is wrong.
+const EXIT_WRONG_PASSWORD: u8 = 3;
+/// Exit status of `show` and `update` for a locked note given no password.
+const EXIT_LOCKED: u8 = 4;
 
 /// Subcommands whose arguments may be arbitrary text, such as a note body of
 /// "-v". Global flags are only looked for outside of them.
@@ -81,11 +86,14 @@ fn print_help() {
     println!("      --no-open           Do not open the note's sticky window");
     println!("  list [-a, --archived]   List notes with tags, priority, and summary");
     println!("  search <QUERY>          Search note titles and contents using FTS5");
-    println!("  show <ID>               Display full content and metadata of a note");
+    println!("  show <ID> [--password-stdin]");
+    println!("                          Display full content and metadata of a note");
     println!("  archive <ID> [--unarchive] Archive or unarchive a note");
-    println!("  update <ID> [--title <TITLE>] [--body <TEXT|->]");
+    println!("  update <ID> [--title <TITLE>] [--body <TEXT|->] [--password-stdin]");
     println!("                          Change a note's title and/or content without the GUI;");
     println!("                          \"-\" reads the content from standard input");
+    println!("      --password-stdin    Read the master password for a locked note from the");
+    println!("                          first line of standard input (before any --body -)");
     println!("  open <ID>               Show a note's sticky window, starting BetterNotes in the");
     println!("                          background if it is not running");
     println!(
@@ -106,7 +114,12 @@ fn print_help() {
         "  -d, --diagnostics       Print desktop, compositor and display server diagnostic report"
     );
     println!("  -h, --help              Print this help message");
-    println!("  -v, --version           Print version information");
+    println!("  -v, --version           Print version information\n");
+    println!("Exit status of show and update:");
+    println!(
+        "  0 success, 1 error (such as a missing note), {EXIT_WRONG_PASSWORD} wrong password,"
+    );
+    println!("  {EXIT_LOCKED} the note is locked and no password was given");
 }
 
 fn resolve_data_paths() -> Result<(PathBuf, PathBuf, PathBuf), String> {
@@ -159,6 +172,37 @@ fn read_body(value: String) -> Result<String, String> {
     Ok(text)
 }
 
+/// `--password-stdin`: the master password is the first line of standard
+/// input, so it stays out of the process list and shell history. Anything
+/// after it is left for `--body -`.
+fn read_password() -> Result<Password, String> {
+    let mut line = String::with_capacity(128);
+    std::io::stdin()
+        .read_line(&mut line)
+        .map_err(|e| format!("Could not read the password from standard input: {e}"))?;
+    if line.ends_with('\n') {
+        line.pop();
+        if line.ends_with('\r') {
+            line.pop();
+        }
+    }
+    let password = Password::new(line);
+    if password.expose().is_empty() {
+        return Err("no password on standard input".to_string());
+    }
+    Ok(password)
+}
+
+/// The exit status for a failed `show` or `update`, telling a wrong or
+/// missing password apart from other failures.
+fn failure_status(response: &IpcResponse) -> std::process::ExitCode {
+    match response.error {
+        Some(IpcErrorKind::WrongPassword) => std::process::ExitCode::from(EXIT_WRONG_PASSWORD),
+        Some(IpcErrorKind::Locked) => std::process::ExitCode::from(EXIT_LOCKED),
+        None => std::process::ExitCode::FAILURE,
+    }
+}
+
 struct NewCommand {
     title: String,
     content: String,
@@ -201,7 +245,25 @@ fn parse_new_command(args: &[String]) -> Result<NewCommand, String> {
     })
 }
 
-/// `update <ID> [--title <TITLE>] [--body <TEXT|->]`
+/// `show <ID> [--password-stdin]`
+fn parse_show_command(args: &[String]) -> Result<IpcRequest, String> {
+    let mut args = args.iter();
+    let id_arg = args.next().ok_or("a note ID is required")?;
+    let id = id_arg
+        .parse::<i64>()
+        .map_err(|_| format!("Invalid note ID: {id_arg}"))?;
+    let mut password_stdin = false;
+    for arg in args {
+        match arg.as_str() {
+            "--password-stdin" => password_stdin = true,
+            other => return Err(format!("unknown argument: {other}")),
+        }
+    }
+    let password = password_stdin.then(read_password).transpose()?;
+    Ok(IpcRequest::ShowNote { id, password })
+}
+
+/// `update <ID> [--title <TITLE>] [--body <TEXT|->] [--password-stdin]`
 fn parse_update_command(args: &[String]) -> Result<IpcRequest, String> {
     let mut args = args.iter();
     let id_arg = args.next().ok_or("a note ID is required")?;
@@ -210,18 +272,27 @@ fn parse_update_command(args: &[String]) -> Result<IpcRequest, String> {
         .map_err(|_| format!("Invalid note ID: {id_arg}"))?;
     let mut title = None;
     let mut body = None;
+    let mut password_stdin = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--title" => title = Some(flag_value(&mut args, "--title")?),
             "--body" | "--content" => body = Some(flag_value(&mut args, arg)?),
+            "--password-stdin" => password_stdin = true,
             other => return Err(format!("unknown argument: {other}")),
         }
     }
     if title.is_none() && body.is_none() {
         return Err("give --title, --body or both".to_string());
     }
+    // The password line comes first on standard input, the content after it.
+    let password = password_stdin.then(read_password).transpose()?;
     let content = body.map(read_body).transpose()?;
-    Ok(IpcRequest::UpdateNote { id, title, content })
+    Ok(IpcRequest::UpdateNote {
+        id,
+        title,
+        content,
+        password,
+    })
 }
 
 /// How long `open` waits for an app it started to take requests.
@@ -587,18 +658,14 @@ fn main() -> std::process::ExitCode {
 
     // CLI Command: show
     if args.len() >= 2 && args[1] == "show" {
-        if args.len() < 3 {
-            eprintln!("Usage: betternotes show <ID>");
-            return std::process::ExitCode::FAILURE;
-        }
-        let id = match args[2].parse::<i64>() {
-            Ok(n) => n,
-            Err(_) => {
-                eprintln!("Invalid note ID: {}", args[2]);
+        let req = match parse_show_command(&args[2..]) {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("BetterNotes: {e}");
+                eprintln!("Usage: betternotes show <ID> [--password-stdin]");
                 return std::process::ExitCode::FAILURE;
             }
         };
-        let req = IpcRequest::ShowNote { id };
         return match dispatch_domain_command(&socket_path, &db_path, &req) {
             Ok(res) => {
                 if res.success {
@@ -609,7 +676,7 @@ fn main() -> std::process::ExitCode {
                         "Error: {}",
                         res.message.as_deref().unwrap_or("Note not found")
                     );
-                    std::process::ExitCode::FAILURE
+                    failure_status(&res)
                 }
             }
             Err(e) => {
@@ -665,7 +732,9 @@ fn main() -> std::process::ExitCode {
             Ok(req) => req,
             Err(e) => {
                 eprintln!("BetterNotes: {e}");
-                eprintln!("Usage: betternotes update <ID> [--title <TITLE>] [--body <TEXT|->]");
+                eprintln!(
+                    "Usage: betternotes update <ID> [--title <TITLE>] [--body <TEXT|->] [--password-stdin]"
+                );
                 return std::process::ExitCode::FAILURE;
             }
         };
@@ -681,7 +750,7 @@ fn main() -> std::process::ExitCode {
                         "Error: {}",
                         res.message.as_deref().unwrap_or("Failed to update note")
                     );
-                    std::process::ExitCode::FAILURE
+                    failure_status(&res)
                 }
             }
             Err(e) => {

@@ -100,8 +100,13 @@ pub fn set_up(store: &NoteStore, password: &str) -> Result<()> {
     Ok(())
 }
 
-/// Unlocks with the master password; false when it is wrong.
-pub fn unlock(store: &NoteStore, password: &str) -> Result<bool> {
+/// The key for one request that brings its own password, such as a CLI
+/// command. Unlike [`unlock`], it leaves the app's unlocked key alone, so
+/// checking a password this way unlocks nothing else.
+pub struct PasswordKey(Key);
+
+/// The key for the master password; `None` when the password is wrong.
+pub fn key_for_password(store: &NoteStore, password: &str) -> Result<Option<PasswordKey>> {
     let (Some(salt), Some(check)) = (store.get_setting(SALT_KEY)?, store.get_setting(CHECK_KEY)?)
     else {
         return Err(invalid("No password is set"));
@@ -109,12 +114,20 @@ pub fn unlock(store: &NoteStore, password: &str) -> Result<bool> {
     let salt = from_hex(&salt).ok_or_else(|| invalid("The password settings are damaged"))?;
     let key = derive(password, &salt)?;
     match open_with(&key, &check) {
-        Ok(value) if value == CHECK_VALUE => {
+        Ok(value) if value == CHECK_VALUE => Ok(Some(PasswordKey(key))),
+        Ok(_) | Err(Error::Locked) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+/// Unlocks with the master password; false when it is wrong.
+pub fn unlock(store: &NoteStore, password: &str) -> Result<bool> {
+    match key_for_password(store, password)? {
+        Some(PasswordKey(key)) => {
             *KEY.lock().map_err(|_| Error::Locked)? = Some(key);
             Ok(true)
         }
-        Ok(_) | Err(Error::Locked) => Ok(false),
-        Err(error) => Err(error),
+        None => Ok(false),
     }
 }
 
@@ -127,16 +140,34 @@ pub fn lock() {
 
 /// Seals note content with the unlocked key.
 pub fn seal(plain: &str) -> Result<String> {
+    seal_using(None, plain)
+}
+
+/// Opens sealed content with the unlocked key.
+pub fn open(sealed: &str) -> Result<String> {
+    open_using(None, sealed)
+}
+
+/// Seals with `key`, or with the unlocked key when there is none.
+pub(crate) fn seal_using(key: Option<&PasswordKey>, plain: &str) -> Result<String> {
+    if let Some(PasswordKey(key)) = key {
+        return seal_with(key, plain.as_bytes());
+    }
     let guard = KEY.lock().map_err(|_| Error::Locked)?;
     let key = guard.as_ref().ok_or(Error::Locked)?;
     seal_with(key, plain.as_bytes())
 }
 
-/// Opens sealed content with the unlocked key.
-pub fn open(sealed: &str) -> Result<String> {
-    let guard = KEY.lock().map_err(|_| Error::Locked)?;
-    let key = guard.as_ref().ok_or(Error::Locked)?;
-    String::from_utf8(open_with(key, sealed)?).map_err(|_| invalid("The locked note is damaged"))
+/// Opens with `key`, or with the unlocked key when there is none.
+pub(crate) fn open_using(key: Option<&PasswordKey>, sealed: &str) -> Result<String> {
+    let plain = match key {
+        Some(PasswordKey(key)) => open_with(key, sealed)?,
+        None => {
+            let guard = KEY.lock().map_err(|_| Error::Locked)?;
+            open_with(guard.as_ref().ok_or(Error::Locked)?, sealed)?
+        }
+    };
+    String::from_utf8(plain).map_err(|_| invalid("The locked note is damaged"))
 }
 
 /// Changes the master password: every locked note is resealed with the new

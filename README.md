@@ -233,6 +233,29 @@ betternotes show 4            # title, metadata and content of note 4
 `update` changes only the fields it is given and exits non-zero with a message on
 standard error when the note does not exist or is locked.
 
+[Locked notes](#locked-notes) need the master password. `show` and `update` read
+it from the first line of standard input with `--password-stdin`, so it never
+appears in the process list or shell history; for `update --body -` the content
+follows on the next lines:
+
+```bash
+printf '%s\n' "$password" | betternotes show 4 --password-stdin
+printf '%s\n%s\n' "$password" "new text" | betternotes update 4 --password-stdin --body -
+```
+
+The password is used for that one command only: it does not unlock a running
+BetterNotes, and nothing stores it. Both commands exit with:
+
+| Status | Meaning |
+| --- | --- |
+| `0` | Success |
+| `1` | Any other error, such as a note that does not exist |
+| `3` | The password is wrong |
+| `4` | The note is locked and no password was given |
+
+A note that is not locked ignores the password. A running BetterNotes older than
+this version ignores it too, so restart the app after updating.
+
 `betternotes open <ID>` is the one that shows a window: the note's sticky window,
 brought forward if it is already open. When the app is not running, it starts in
 the background first, as with `--background`, and the command returns once the

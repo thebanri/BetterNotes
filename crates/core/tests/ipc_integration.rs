@@ -116,7 +116,14 @@ fn ipc_crud_and_query_dispatch() {
     assert_eq!(search_hits[0]["id"].as_i64().unwrap(), note_id);
 
     // 4. ShowNote
-    let show_res = send_request(&socket_path, &IpcRequest::ShowNote { id: note_id }).unwrap();
+    let show_res = send_request(
+        &socket_path,
+        &IpcRequest::ShowNote {
+            id: note_id,
+            password: None,
+        },
+    )
+    .unwrap();
     assert!(show_res.success);
     let note = show_res.data.unwrap();
     assert_eq!(note["content"].as_str().unwrap(), "server { listen 80; }");
