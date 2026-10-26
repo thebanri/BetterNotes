@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.17" date="2026-10-26">
+      <description>
+        <p>Text and images copied from a note now paste into other apps with their images, and a single copied image pastes into file managers as its file.</p>
+      </description>
+    </release>
     <release version="0.1.16" date="2026-10-26">
       <description>
         <p>A note you click or open now comes in front of the notes covering it, expanded notes reopen above collapsed ones, expanding a note no longer shows its icons stretched, and a new setting opens notes in front of other windows.</p>

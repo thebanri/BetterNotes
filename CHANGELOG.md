@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-10-26
+
 ### Fixed
 - Copying text together with an image from a note put a U+FFFC placeholder in the plain text and named the image by its file in the note's attachments, which other apps cannot load: terminals and chat apps pasted "￼" and browsers showed a broken image. The copied HTML now carries the images themselves, the plain text leaves them out, and a single image is also offered as a picture, so an app that takes either text or a picture can paste the one it takes. Pasting into a note still refers to its attachment instead of embedding a copy. An image larger than 20 MB stays a file reference.
 - Copying a single image selected on its own copies it as Copy Image does, as the picture and its file: a file manager now pastes the image file instead of offering to save an OpenDocument text.
