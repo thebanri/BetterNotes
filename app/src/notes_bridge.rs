@@ -18,6 +18,7 @@ pub mod ffi {
         fn platformCursorGlobalX() -> i32;
         fn platformCursorGlobalY() -> i32;
         fn platformSetApplicationIcon() -> bool;
+        fn platformKeepCopiedImages();
         fn platformSetActivationToken(token: &QString);
         fn platformPicturesFolder() -> QString;
         fn platformDocumentsFolder() -> QString;

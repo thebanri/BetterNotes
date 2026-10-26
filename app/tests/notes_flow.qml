@@ -967,6 +967,28 @@ Window {
         check(!backend.copyImage("https://example.com/x.png"), "Copied a remote image")
         check(!backend.saveImageAs(stored, "https://example.com/x.png"), "Saved to a non-local URL")
 
+        // Text copied with its image: plain text leaves the image out, and
+        // pasting into a note keeps referring to the attachment.
+        body.insert(body.length, "caption")
+        body.select(0, body.length)
+        body.copy()
+        check(backend.getClipboardText() === "caption",
+            "Copied plain text kept the image placeholder: " + JSON.stringify(backend.getClipboardText()))
+        check(!window.pasteImages(), "Copied text and image pasted as a picture alone")
+        body.deselect()
+        body.cursorPosition = body.length
+        body.paste()
+        check((window.plainContent.match(/￼/g) || []).length === 2 && body.text.indexOf("data:") < 0,
+            "Pasting copied text and image into a note did not keep the attachment")
+        // Only the image selected: copied as Copy Image does, as the file.
+        const pastedAt = window.plainContent.lastIndexOf("\ufffc")
+        body.select(pastedAt, pastedAt + 1)
+        body.copy()
+        check(backend.clipboardFileUrls().indexOf("attachments/") >= 0, "Copying only an image did not offer its file")
+        body.select(0, body.length)
+        body.remove(0, body.length)
+        check(window.insertImages([fixtures + "still.png"], 0) === 1, "Image insert failed")
+
         check(window.insertImages([fixtures + "animated.gif"], body.length) === 1, "GIF insert failed")
         check(window.imageAnimator.animationCount === 1, "GIF animation did not start")
         check(window.flush(), "GIF note failed to save")

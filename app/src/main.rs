@@ -70,6 +70,7 @@ fn run() -> Result<i32, &'static str> {
     if !notes_bridge::ffi::platformSetApplicationIcon() {
         eprintln!("BetterNotes: the bundled application icon could not be loaded");
     }
+    notes_bridge::ffi::platformKeepCopiedImages();
 
     // Configure Linux desktop window manager rules/scripts (e.g. skip taskbar on KDE Plasma)
     betternotes_core::DesktopEnvironment::detect().setup_window_manager_integration();

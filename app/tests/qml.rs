@@ -57,6 +57,7 @@ fn main() {
         notes_bridge::ffi::platformSetApplicationIcon(),
         "the bundled application icon must load"
     );
+    notes_bridge::ffi::platformKeepCopiedImages();
     let engine = load_engine(MAIN_QML).expect("embedded QML window must load");
     drop(engine);
     assert!(load_engine("qrc:/betternotes/missing.qml").is_err());

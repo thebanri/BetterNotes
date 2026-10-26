@@ -6,7 +6,10 @@
 #include <QDir>
 #include <QIcon>
 #include <QImage>
+#include <QFile>
 #include <QMimeData>
+#include <QMimeDatabase>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QtWidgets/QApplication>
@@ -95,13 +98,91 @@ QString platformDocumentsFolder() {
         .toString();
 }
 
+// Marks clipboard contents already given their images.
+static const QString copiedImagesFormat = QStringLiteral("application/x-betternotes-images");
+
+// Note text copied with images in it names each image by its file in the
+// note's attachments. Other apps cannot use that: plain text holds U+FFFC in
+// its place and a browser will not load a local file. Once such a copy lands
+// on the clipboard it is replaced with one where the HTML carries the images
+// themselves and the plain text leaves them out. A single image is also
+// offered as a picture, so apps that take only text or only a picture can
+// paste either one. Qt's own rich text format keeps the file names, so
+// pasting into a note still refers to its attachments.
+static void giveCopiedImages(QClipboard *clipboard) {
+    // Another app's copy is left alone. The offscreen clipboard (tests) never
+    // reports an owner, but it only ever holds this app's data.
+    if (!clipboard->ownsClipboard() && QGuiApplication::platformName() != QLatin1String("offscreen"))
+        return;
+    const QMimeData *source = clipboard->mimeData();
+    if (!source || source->hasFormat(copiedImagesFormat) || !source->hasHtml())
+        return;
+    const QString html = source->html();
+    static const QRegularExpression imageSource(QStringLiteral(R"re(<img\s[^>]*?src="(file://[^"]*)")re"));
+    // An image larger than this stays a file name rather than filling the clipboard.
+    constexpr qint64 maximumBytes = 20 * 1024 * 1024;
+    QString embedded;
+    QStringList paths;
+    qsizetype done = 0;
+    for (const auto &match : imageSource.globalMatch(html)) {
+        const QString path = QUrl(match.captured(1).replace(QStringLiteral("&amp;"), QStringLiteral("&"))).toLocalFile();
+        QFile file(path);
+        if (path.isEmpty() || file.size() > maximumBytes || !file.open(QIODevice::ReadOnly))
+            continue;
+        paths.append(path);
+        embedded += html.mid(done, match.capturedStart(1) - done);
+        embedded += QStringLiteral("data:%1;base64,").arg(QMimeDatabase().mimeTypeForFile(path).name());
+        embedded += QString::fromLatin1(file.readAll().toBase64());
+        done = match.capturedEnd(1);
+    }
+    if (done == 0)
+        return;
+    embedded += html.mid(done);
+    static const QRegularExpression imageLine(QStringLiteral(R"re((?m)^\x{FFFC}+\n)re"));
+    const QString text = source->text().remove(imageLine).remove(QChar::ObjectReplacementCharacter);
+    // A single image selected on its own is copied as Copy Image does: file
+    // managers then paste the file instead of saving Qt's document format.
+    if (text.trimmed().isEmpty() && paths.size() == 1 && platformCopyImageFile(paths.first()))
+        return;
+
+    auto *data = new QMimeData;
+    // Every plain text variant is replaced: text() prefers the UTF-8 one.
+    for (const QString &format : source->formats()) {
+        if (!format.startsWith(QLatin1String("text/plain")) && format != QLatin1String("text/html"))
+            data->setData(format, source->data(format));
+    }
+    data->setData(QStringLiteral("application/x-qrichtext"), html.toUtf8());
+    data->setHtml(embedded);
+    // With only images selected there is no text to offer; an empty line
+    // would be pasted instead of the picture.
+    if (!text.trimmed().isEmpty())
+        data->setText(text);
+    if (paths.size() == 1) {
+        const QImage image(paths.first());
+        if (!image.isNull())
+            data->setImageData(image);
+    }
+    data->setData(copiedImagesFormat, {});
+    clipboard->setMimeData(data);
+}
+
+void platformKeepCopiedImages() {
+    auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
+    if (!app || !app->clipboard())
+        return;
+    QClipboard *clipboard = app->clipboard();
+    QObject::connect(clipboard, &QClipboard::dataChanged, clipboard,
+                     [clipboard] { giveCopiedImages(clipboard); });
+}
+
 // An image on the clipboard (a screenshot, or one copied from a browser)
 // written to a new PNG in the temporary folder; its path, or "" when the
 // clipboard holds no image data. The caller removes the file.
 QString platformClipboardImageToFile() {
     auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
     const QMimeData *data = app && app->clipboard() ? app->clipboard()->mimeData() : nullptr;
-    if (!data || !data->hasImage())
+    // Text copied from a note with its image is pasted as that text.
+    if (!data || !data->hasImage() || data->hasFormat(copiedImagesFormat))
         return {};
     // Office apps put a picture of copied text beside the text itself; that
     // is a text paste. Browsers copying an image add just its address.

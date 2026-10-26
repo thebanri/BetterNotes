@@ -12,3 +12,4 @@ QString platformDocumentsFolder();
 QString platformClipboardImageToFile();
 bool platformCopyImageFile(const QString& path);
 QString platformClipboardImageUrls();
+void platformKeepCopiedImages();
