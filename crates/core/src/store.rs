@@ -22,6 +22,7 @@ pub const TRASH_RETENTION_MS: i64 = 30 * 24 * 60 * 60 * 1000;
 const PREVIEW_CHARS: usize = 140;
 const NOTES_STAY_BELOW_KEY: &str = "notes_stay_below";
 const DESKTOP_WIDGETS_KEY: &str = "desktop_widgets";
+const OPEN_NOTES_IN_FRONT_KEY: &str = "open_notes_in_front";
 const RECENT_SEARCHES_KEY: &str = "recent_searches";
 /// How many recent library searches are remembered.
 pub const RECENT_SEARCH_LIMIT: usize = 8;
@@ -441,10 +442,14 @@ impl NoteStore {
         Ok(())
     }
 
+    /// The notes to reopen, collapsed ones first. Desktop widgets stack in the
+    /// order they are shown, so an expanded note shown later is not left
+    /// under the collapsed headers around it.
     pub fn open_window_ids(&self) -> Result<Vec<i64>> {
         let mut statement = self.connection.prepare(
             "SELECT w.note_id FROM note_windows w JOIN notes n ON n.id = w.note_id
-                 WHERE w.is_open = 1 AND n.deleted_at IS NULL ORDER BY w.note_id",
+                 WHERE w.is_open = 1 AND n.deleted_at IS NULL
+                 ORDER BY w.collapsed DESC, w.note_id",
         )?;
         let rows = statement.query_map([], |row| row.get(0))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -520,6 +525,19 @@ impl NoteStore {
 
     pub fn set_desktop_widgets(&self, enabled: bool) -> Result<()> {
         self.set_setting(DESKTOP_WIDGETS_KEY, if enabled { "true" } else { "false" })
+    }
+
+    /// Whether a note the user opens comes up above other windows until they
+    /// switch to another app. Off by default.
+    pub fn open_notes_in_front(&self) -> Result<bool> {
+        Ok(self.get_setting(OPEN_NOTES_IN_FRONT_KEY)?.as_deref() == Some("true"))
+    }
+
+    pub fn set_open_notes_in_front(&self, enabled: bool) -> Result<()> {
+        self.set_setting(
+            OPEN_NOTES_IN_FRONT_KEY,
+            if enabled { "true" } else { "false" },
+        )
     }
 
     /// The interface language: "system", "en" or "tr".

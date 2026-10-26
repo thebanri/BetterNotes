@@ -3,6 +3,7 @@
 #include <QGuiApplication>
 #include <QMargins>
 #include <QMouseEvent>
+#include <QPointer>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QWindow>
@@ -135,6 +136,83 @@ void commit(QWindow *window) {
     else
         window->requestUpdate();
 }
+
+// Widgets in the order their surfaces were mapped, which is how the
+// compositor stacks them within a layer: the last one is on top.
+QList<QPointer<QWindow>> &mapOrder() {
+    static QList<QPointer<QWindow>> order;
+    return order;
+}
+
+// Whether a widget mapped after this one, on the same screen and layer,
+// overlaps it.
+bool covered(QWindow *window) {
+    const auto *layer = LayerShellQt::Window::get(window);
+    const auto bounds = [](QWindow *widget) {
+        const QMargins margins = LayerShellQt::Window::get(widget)->margins();
+        return QRect(QPoint(margins.left(), margins.top()), widget->size());
+    };
+    const QRect area = bounds(window);
+    const auto &order = mapOrder();
+    for (qsizetype i = order.indexOf(window) + 1; i < order.size(); ++i) {
+        QWindow *other = order.at(i);
+        if (other && other->isVisible() && other->screen() == window->screen() &&
+            LayerShellQt::Window::get(other)->layer() == layer->layer() &&
+            bounds(other).intersects(area))
+            return true;
+    }
+    return false;
+}
+
+// Brings a clicked widget to the front of its layer. Layer-shell has no
+// request for that and KWin does not raise a layer surface when it is
+// clicked, so the note being edited could stay under another one. A surface
+// mapped anew goes on top, so a covered widget is remapped once the click is
+// over: replacing the surface mid-press would cancel the press. Whether it is
+// covered is decided after the click is handled, as the click may expand it.
+class Restacker : public QObject {
+  public:
+    explicit Restacker(QWindow *window) : QObject(window), m_window(window) {
+        setObjectName(QStringLiteral("restacker"));
+        window->installEventFilter(this);
+    }
+
+    bool eventFilter(QObject *, QEvent *event) override {
+        if (event->type() == QEvent::Show) {
+            mapOrder().removeIf([this](const QPointer<QWindow> &widget) {
+                return !widget || widget == m_window;
+            });
+            mapOrder().append(m_window);
+        } else if (event->type() == QEvent::MouseButtonRelease) {
+            auto *release = static_cast<QMouseEvent *>(event);
+            if (release->button() != Qt::LeftButton || release->buttons() != Qt::NoButton)
+                return false;
+            // Remap only once the click's frame is on screen: a note expanded
+            // by the click and remapped before drawing its new size shows its
+            // collapsed frame stretched for a moment.
+            if (auto *quick = qobject_cast<QQuickWindow *>(m_window)) {
+                connect(quick, &QQuickWindow::frameSwapped, this, &Restacker::remap,
+                        Qt::ConnectionType(Qt::QueuedConnection | Qt::SingleShotConnection));
+                quick->update();
+            } else {
+                QMetaObject::invokeMethod(this, &Restacker::remap, Qt::QueuedConnection);
+            }
+        }
+        return false;
+    }
+
+    void remap() {
+        if (!m_window->isVisible() || !covered(m_window))
+            return;
+        // Margins and screen stay, so the widget comes back in place; the
+        // new surface asks for focus as it is shown (activateOnShow).
+        m_window->hide();
+        m_window->show();
+    }
+
+  private:
+    QWindow *m_window;
+};
 #endif
 
 #ifdef BETTERNOTES_XCB_WINDOW_TYPE
@@ -176,6 +254,8 @@ bool DesktopWidgets::attach(QWindow *window, bool above, int x, int y) {
         layer->setExclusiveZone(-1);
         layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityOnDemand);
         placeLayer(layer, window, x, y);
+        if (!window->findChild<QObject *>(QStringLiteral("restacker"), Qt::FindDirectChildrenOnly))
+            new Restacker(window);
         return true;
     }
 #endif
@@ -222,6 +302,18 @@ void DesktopWidgets::settle(QWindow *window, int x, int y) {
     }
 #endif
     move(window, x, y);
+}
+
+void DesktopWidgets::raise(QWindow *window) {
+    if (!window)
+        return;
+#ifdef BETTERNOTES_LAYER_SHELL
+    if (auto *restacker =
+            window->findChild<QObject *>(QStringLiteral("restacker"), Qt::FindDirectChildrenOnly))
+        static_cast<Restacker *>(restacker)->remap();
+    return;
+#endif
+    window->raise();
 }
 
 void DesktopWidgets::setAbove(QWindow *window, bool above) {

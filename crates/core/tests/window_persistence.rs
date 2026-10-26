@@ -160,3 +160,25 @@ fn invalid_and_locked_window_writes_preserve_previous_state_and_content() {
     assert_eq!(store.get(note.id).unwrap(), note);
     assert!(store.save_window_state(999, &original).is_err());
 }
+
+#[test]
+fn collapsed_windows_reopen_before_expanded_ones() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = NoteStore::open(&directory.path().join("notes.sqlite3")).unwrap();
+    let expanded = store.create().unwrap();
+    let collapsed = store.create().unwrap();
+    let open = WindowState {
+        open: true,
+        ..WindowState::default()
+    };
+    store.save_window_state(expanded.id, &open).unwrap();
+    let folded = WindowState {
+        collapsed: true,
+        ..open.clone()
+    };
+    store.save_window_state(collapsed.id, &folded).unwrap();
+    assert_eq!(
+        store.open_window_ids().unwrap(),
+        [collapsed.id, expanded.id]
+    );
+}

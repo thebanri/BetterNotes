@@ -175,144 +175,144 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="112"/>
+        <location filename="../qml/windows/Main.qml" line="126"/>
         <source>Reminder from BetterNotes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="112"/>
+        <location filename="../qml/windows/Main.qml" line="126"/>
         <source>Open note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="112"/>
+        <location filename="../qml/windows/Main.qml" line="126"/>
         <source>Snooze 10 min</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="146"/>
+        <location filename="../qml/windows/Main.qml" line="167"/>
         <source>Could not create the note window. See Qt diagnostics.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="261"/>
+        <location filename="../qml/windows/Main.qml" line="283"/>
         <source>This desktop does not let apps arrange windows; the open notes were brought on screen instead.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="262"/>
+        <location filename="../qml/windows/Main.qml" line="284"/>
         <source>No notes are open on the desktop.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="263"/>
+        <location filename="../qml/windows/Main.qml" line="285"/>
         <source>Notes arranged</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="306"/>
-        <location filename="../qml/windows/Main.qml" line="325"/>
+        <location filename="../qml/windows/Main.qml" line="328"/>
+        <location filename="../qml/windows/Main.qml" line="347"/>
         <source>A note could not be saved. Resolve its error before quitting.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="424"/>
+        <location filename="../qml/windows/Main.qml" line="446"/>
         <source>Results for “%1”</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="426"/>
-        <location filename="../qml/windows/Main.qml" line="843"/>
+        <location filename="../qml/windows/Main.qml" line="448"/>
+        <location filename="../qml/windows/Main.qml" line="875"/>
         <source>Pinned</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="427"/>
-        <location filename="../qml/windows/Main.qml" line="858"/>
-        <location filename="../qml/windows/Main.qml" line="1225"/>
+        <location filename="../qml/windows/Main.qml" line="449"/>
+        <location filename="../qml/windows/Main.qml" line="890"/>
+        <location filename="../qml/windows/Main.qml" line="1282"/>
         <source>Archive</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="428"/>
-        <location filename="../qml/windows/Main.qml" line="851"/>
+        <location filename="../qml/windows/Main.qml" line="450"/>
+        <location filename="../qml/windows/Main.qml" line="883"/>
         <source>Reminders</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="429"/>
-        <location filename="../qml/windows/Main.qml" line="866"/>
+        <location filename="../qml/windows/Main.qml" line="451"/>
+        <location filename="../qml/windows/Main.qml" line="898"/>
         <source>Trash</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="430"/>
-        <location filename="../qml/windows/Main.qml" line="836"/>
+        <location filename="../qml/windows/Main.qml" line="452"/>
+        <location filename="../qml/windows/Main.qml" line="868"/>
         <source>All notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="463"/>
+        <location filename="../qml/windows/Main.qml" line="485"/>
         <source>Copied to the clipboard</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="481"/>
+        <location filename="../qml/windows/Main.qml" line="503"/>
         <source>Moved to the archive</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="502"/>
+        <location filename="../qml/windows/Main.qml" line="524"/>
         <source>Note locked. Its attached files and images are not encrypted.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="504"/>
+        <location filename="../qml/windows/Main.qml" line="526"/>
         <source>Note locked</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="504"/>
+        <location filename="../qml/windows/Main.qml" line="526"/>
         <source>Lock removed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="512"/>
+        <location filename="../qml/windows/Main.qml" line="534"/>
         <source>Moved to the trash</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="514"/>
+        <location filename="../qml/windows/Main.qml" line="536"/>
         <source>Restored</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="528"/>
+        <location filename="../qml/windows/Main.qml" line="550"/>
         <source>Untitled note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="536"/>
+        <location filename="../qml/windows/Main.qml" line="568"/>
         <source>That password is not right.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="551"/>
+        <location filename="../qml/windows/Main.qml" line="583"/>
         <source>Password changed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="569"/>
+        <location filename="../qml/windows/Main.qml" line="601"/>
         <source>A locked note could not be saved; it stays open.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="577"/>
+        <location filename="../qml/windows/Main.qml" line="609"/>
         <source>Locked notes are locked</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/windows/Main.qml" line="633"/>
+        <location filename="../qml/windows/Main.qml" line="665"/>
         <source>Moved %n note(s) to the trash</source>
         <translation>
             <numerusform>Moved %n note to the trash</numerusform>
@@ -320,7 +320,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/windows/Main.qml" line="648"/>
+        <location filename="../qml/windows/Main.qml" line="680"/>
         <source>Tagged %n note(s)</source>
         <translation>
             <numerusform>Tagged %n note</numerusform>
@@ -328,8 +328,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/windows/Main.qml" line="667"/>
-        <location filename="../qml/windows/Main.qml" line="1522"/>
+        <location filename="../qml/windows/Main.qml" line="699"/>
+        <location filename="../qml/windows/Main.qml" line="1579"/>
         <source>Deleted %n note(s) for good</source>
         <translation>
             <numerusform>Deleted %n note for good</numerusform>
@@ -337,126 +337,126 @@
         </translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="820"/>
-        <location filename="../qml/windows/Main.qml" line="1343"/>
-        <location filename="../qml/windows/Main.qml" line="1976"/>
-        <location filename="../qml/windows/Main.qml" line="2215"/>
+        <location filename="../qml/windows/Main.qml" line="852"/>
+        <location filename="../qml/windows/Main.qml" line="1400"/>
+        <location filename="../qml/windows/Main.qml" line="2047"/>
+        <location filename="../qml/windows/Main.qml" line="2293"/>
         <source>New note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="830"/>
+        <location filename="../qml/windows/Main.qml" line="862"/>
         <source>Create a note (Ctrl+N)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="875"/>
+        <location filename="../qml/windows/Main.qml" line="907"/>
         <source>Tags</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="913"/>
+        <location filename="../qml/windows/Main.qml" line="945"/>
         <source>Show all on desktop</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="920"/>
-        <location filename="../qml/windows/Main.qml" line="2237"/>
+        <location filename="../qml/windows/Main.qml" line="952"/>
+        <location filename="../qml/windows/Main.qml" line="2315"/>
         <source>Arrange notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="926"/>
+        <location filename="../qml/windows/Main.qml" line="958"/>
         <source>Hide all</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="972"/>
+        <location filename="../qml/windows/Main.qml" line="1004"/>
         <source>Search all notes: titles, text and tags</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="975"/>
-        <location filename="../qml/windows/Main.qml" line="2224"/>
+        <location filename="../qml/windows/Main.qml" line="1007"/>
+        <location filename="../qml/windows/Main.qml" line="2302"/>
         <source>Search notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1023"/>
+        <location filename="../qml/windows/Main.qml" line="1080"/>
         <source>Recent searches</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1029"/>
+        <location filename="../qml/windows/Main.qml" line="1086"/>
         <source>Clear</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1102"/>
+        <location filename="../qml/windows/Main.qml" line="1159"/>
         <source>Command palette (Ctrl+K)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1107"/>
-        <location filename="../qml/windows/Main.qml" line="1616"/>
+        <location filename="../qml/windows/Main.qml" line="1164"/>
+        <location filename="../qml/windows/Main.qml" line="1676"/>
         <source>Settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1120"/>
+        <location filename="../qml/windows/Main.qml" line="1177"/>
         <source>Minimise</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1125"/>
-        <location filename="../qml/windows/Main.qml" line="1248"/>
+        <location filename="../qml/windows/Main.qml" line="1182"/>
+        <location filename="../qml/windows/Main.qml" line="1305"/>
         <source>Restore</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1125"/>
+        <location filename="../qml/windows/Main.qml" line="1182"/>
         <source>Maximise</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1131"/>
+        <location filename="../qml/windows/Main.qml" line="1188"/>
         <source>Close — notes keep running</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1131"/>
-        <location filename="../qml/windows/Main.qml" line="2276"/>
+        <location filename="../qml/windows/Main.qml" line="1188"/>
+        <location filename="../qml/windows/Main.qml" line="2360"/>
         <source>Quit</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1156"/>
+        <location filename="../qml/windows/Main.qml" line="1213"/>
         <source>1 note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1156"/>
+        <location filename="../qml/windows/Main.qml" line="1213"/>
         <source>%1 notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1165"/>
-        <location filename="../qml/windows/Main.qml" line="1518"/>
+        <location filename="../qml/windows/Main.qml" line="1222"/>
+        <location filename="../qml/windows/Main.qml" line="1575"/>
         <source>Empty Trash</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1172"/>
+        <location filename="../qml/windows/Main.qml" line="1229"/>
         <source>Deleted notes stay here for 30 days, then they are deleted for good.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1198"/>
+        <location filename="../qml/windows/Main.qml" line="1255"/>
         <source>Clear selection (Esc)</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/windows/Main.qml" line="1202"/>
+        <location filename="../qml/windows/Main.qml" line="1259"/>
         <source>%n selected</source>
         <translation>
             <numerusform>%n selected</numerusform>
@@ -464,88 +464,88 @@
         </translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1211"/>
+        <location filename="../qml/windows/Main.qml" line="1268"/>
         <source>Select All</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1218"/>
+        <location filename="../qml/windows/Main.qml" line="1275"/>
         <source>Pin</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1225"/>
+        <location filename="../qml/windows/Main.qml" line="1282"/>
         <source>Unarchive</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1232"/>
+        <location filename="../qml/windows/Main.qml" line="1289"/>
         <source>Tag…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1241"/>
+        <location filename="../qml/windows/Main.qml" line="1298"/>
         <source>Move to Trash</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1256"/>
-        <location filename="../qml/windows/Main.qml" line="1498"/>
+        <location filename="../qml/windows/Main.qml" line="1313"/>
+        <location filename="../qml/windows/Main.qml" line="1555"/>
         <source>Delete for Good</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1290"/>
+        <location filename="../qml/windows/Main.qml" line="1347"/>
         <source>Retry opening</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1315"/>
+        <location filename="../qml/windows/Main.qml" line="1372"/>
         <source>No matching notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1316"/>
+        <location filename="../qml/windows/Main.qml" line="1373"/>
         <source>The archive is empty</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1317"/>
+        <location filename="../qml/windows/Main.qml" line="1374"/>
         <source>No pinned notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1318"/>
+        <location filename="../qml/windows/Main.qml" line="1375"/>
         <source>No notes with this tag</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1319"/>
+        <location filename="../qml/windows/Main.qml" line="1376"/>
         <source>No notes yet</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1328"/>
+        <location filename="../qml/windows/Main.qml" line="1385"/>
         <source>Try another word, or look in the archive.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1329"/>
+        <location filename="../qml/windows/Main.qml" line="1386"/>
         <source>Archived notes are kept here, out of the way.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1330"/>
+        <location filename="../qml/windows/Main.qml" line="1387"/>
         <source>Pin a note to keep it at the top of the list.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1331"/>
+        <location filename="../qml/windows/Main.qml" line="1388"/>
         <source>Create a note to keep it on your desktop.</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/windows/Main.qml" line="1489"/>
+        <location filename="../qml/windows/Main.qml" line="1546"/>
         <source>Delete %n note(s) for good?</source>
         <translation>
             <numerusform>Delete %n note for good?</numerusform>
@@ -553,17 +553,17 @@
         </translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1493"/>
+        <location filename="../qml/windows/Main.qml" line="1550"/>
         <source>They and their attached files will be deleted. This cannot be undone.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1509"/>
+        <location filename="../qml/windows/Main.qml" line="1566"/>
         <source>Empty the trash?</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/windows/Main.qml" line="1513"/>
+        <location filename="../qml/windows/Main.qml" line="1570"/>
         <source>All %n note(s) in the trash and their attached files will be deleted. This cannot be undone.</source>
         <translation>
             <numerusform>The note in the trash and its attached files will be deleted. This cannot be undone.</numerusform>
@@ -571,7 +571,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/windows/Main.qml" line="1532"/>
+        <location filename="../qml/windows/Main.qml" line="1589"/>
         <source>Add a tag to %n note(s)</source>
         <translation>
             <numerusform>Add a tag to %n note</numerusform>
@@ -579,451 +579,461 @@
         </translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1539"/>
+        <location filename="../qml/windows/Main.qml" line="1596"/>
         <source>Tag name</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1626"/>
+        <location filename="../qml/windows/Main.qml" line="1686"/>
         <source>Appearance</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1636"/>
-        <location filename="../qml/windows/Main.qml" line="1668"/>
+        <location filename="../qml/windows/Main.qml" line="1696"/>
+        <location filename="../qml/windows/Main.qml" line="1728"/>
         <source>System</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1637"/>
+        <location filename="../qml/windows/Main.qml" line="1697"/>
         <source>Light</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1638"/>
+        <location filename="../qml/windows/Main.qml" line="1698"/>
         <source>Dark</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1639"/>
+        <location filename="../qml/windows/Main.qml" line="1699"/>
         <source>Sepia</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1640"/>
+        <location filename="../qml/windows/Main.qml" line="1700"/>
         <source>Black</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1656"/>
+        <location filename="../qml/windows/Main.qml" line="1716"/>
         <source>Language</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1687"/>
+        <location filename="../qml/windows/Main.qml" line="1747"/>
         <source>Accent colour</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1727"/>
+        <location filename="../qml/windows/Main.qml" line="1787"/>
         <source>Keep notes on the desktop</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1729"/>
+        <location filename="../qml/windows/Main.qml" line="1789"/>
         <source>Unpinned notes stay beneath other windows. Pinned notes always stay on top.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1730"/>
+        <location filename="../qml/windows/Main.qml" line="1790"/>
         <source>Not available on this desktop: on Wayland only KDE Plasma lets notes stay beneath other windows.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1741"/>
+        <location filename="../qml/windows/Main.qml" line="1801"/>
         <source>Keep notes visible when showing the desktop</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1743"/>
+        <location filename="../qml/windows/Main.qml" line="1803"/>
         <source>Notes stay on screen like desktop widgets when you show the desktop or minimize all windows, and stay out of the taskbar.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1745"/>
+        <location filename="../qml/windows/Main.qml" line="1805"/>
         <source>Notes stay on screen like desktop widgets when you show the desktop. Some X11 window managers may place them behind desktop icons.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1746"/>
+        <location filename="../qml/windows/Main.qml" line="1806"/>
         <source>Not available here: GNOME on Wayland lets no app keep windows on screen when showing the desktop, and this build may lack LayerShellQt.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1757"/>
-        <location filename="../qml/windows/Main.qml" line="2246"/>
+        <location filename="../qml/windows/Main.qml" line="1817"/>
+        <source>Open notes in front</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/windows/Main.qml" line="1818"/>
+        <source>A note you open comes up above other windows until you switch to another app.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/windows/Main.qml" line="1828"/>
+        <location filename="../qml/windows/Main.qml" line="2324"/>
         <source>Start at login</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1758"/>
+        <location filename="../qml/windows/Main.qml" line="1829"/>
         <source>Open BetterNotes in the background when you sign in.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1768"/>
+        <location filename="../qml/windows/Main.qml" line="1839"/>
         <source>Show in applications menu</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1770"/>
+        <location filename="../qml/windows/Main.qml" line="1841"/>
         <source>Install BetterNotes for your user with its icon, so it can be launched from the menu and pinned to the taskbar. No administrator rights needed; removing it keeps your notes.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1771"/>
+        <location filename="../qml/windows/Main.qml" line="1842"/>
         <source>Already installed by your package manager or Flatpak.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1778"/>
+        <location filename="../qml/windows/Main.qml" line="1849"/>
         <source>Added to the applications menu</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1778"/>
+        <location filename="../qml/windows/Main.qml" line="1849"/>
         <source>Removed from the applications menu</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1806"/>
+        <location filename="../qml/windows/Main.qml" line="1877"/>
         <source>Backups</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1814"/>
+        <location filename="../qml/windows/Main.qml" line="1885"/>
         <source>Back up automatically</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1816"/>
+        <location filename="../qml/windows/Main.qml" line="1887"/>
         <source>Last backup: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1817"/>
+        <location filename="../qml/windows/Main.qml" line="1888"/>
         <source>No backup yet. Backups copy your notes and attached files.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1831"/>
+        <location filename="../qml/windows/Main.qml" line="1902"/>
         <source>Every day</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1832"/>
+        <location filename="../qml/windows/Main.qml" line="1903"/>
         <source>Every week</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1839"/>
+        <location filename="../qml/windows/Main.qml" line="1910"/>
         <source>Keep</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1867"/>
+        <location filename="../qml/windows/Main.qml" line="1938"/>
         <source>Change Folder…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1874"/>
+        <location filename="../qml/windows/Main.qml" line="1945"/>
         <source>Default</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1884"/>
+        <location filename="../qml/windows/Main.qml" line="1955"/>
         <source>Back Up Now</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1888"/>
+        <location filename="../qml/windows/Main.qml" line="1959"/>
         <source>Backed up</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1888"/>
+        <location filename="../qml/windows/Main.qml" line="1959"/>
         <source>Backup failed: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1894"/>
+        <location filename="../qml/windows/Main.qml" line="1965"/>
         <source>Open Folder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1899"/>
+        <location filename="../qml/windows/Main.qml" line="1970"/>
         <source>To restore, quit BetterNotes and run: betternotes restore &lt;backup folder&gt;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1908"/>
+        <location filename="../qml/windows/Main.qml" line="1979"/>
         <source>Choose a Backup Folder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1919"/>
+        <location filename="../qml/windows/Main.qml" line="1990"/>
         <source>Locked notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1926"/>
+        <location filename="../qml/windows/Main.qml" line="1997"/>
         <source>Lock a note from its ⋯ menu or its card&apos;s menu to encrypt its text with a password. Titles, attached files and images are not encrypted.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1927"/>
+        <location filename="../qml/windows/Main.qml" line="1998"/>
         <source>Unlocked: locked notes can be opened until you lock them or quit.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1928"/>
+        <location filename="../qml/windows/Main.qml" line="1999"/>
         <source>Locked: enter the password to open locked notes.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1939"/>
+        <location filename="../qml/windows/Main.qml" line="2010"/>
         <source>Set Password…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1946"/>
+        <location filename="../qml/windows/Main.qml" line="2017"/>
         <source>Unlock…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1953"/>
+        <location filename="../qml/windows/Main.qml" line="2024"/>
         <source>Lock Now</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1960"/>
+        <location filename="../qml/windows/Main.qml" line="2031"/>
         <source>Change Password…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1977"/>
+        <location filename="../qml/windows/Main.qml" line="2048"/>
         <source>Search the library</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1978"/>
+        <location filename="../qml/windows/Main.qml" line="2049"/>
         <source>Command palette</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1979"/>
+        <location filename="../qml/windows/Main.qml" line="2050"/>
         <source>Quick Capture (while BetterNotes is active)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1980"/>
+        <location filename="../qml/windows/Main.qml" line="2051"/>
         <source>Bold</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1981"/>
+        <location filename="../qml/windows/Main.qml" line="2052"/>
         <source>Italic</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1982"/>
+        <location filename="../qml/windows/Main.qml" line="2053"/>
         <source>Underline</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1983"/>
+        <location filename="../qml/windows/Main.qml" line="2054"/>
         <source>Heading 1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1984"/>
+        <location filename="../qml/windows/Main.qml" line="2055"/>
         <source>Heading 2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1985"/>
+        <location filename="../qml/windows/Main.qml" line="2056"/>
         <source>Bulleted list</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1986"/>
+        <location filename="../qml/windows/Main.qml" line="2057"/>
         <source>Numbered list</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1987"/>
+        <location filename="../qml/windows/Main.qml" line="2058"/>
         <source>Checklist</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1988"/>
+        <location filename="../qml/windows/Main.qml" line="2059"/>
         <source>Tick checklist item</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1989"/>
+        <location filename="../qml/windows/Main.qml" line="2060"/>
         <source>Find in note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1990"/>
+        <location filename="../qml/windows/Main.qml" line="2061"/>
         <source>Replace in note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1991"/>
+        <location filename="../qml/windows/Main.qml" line="2062"/>
         <source>Align left</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1992"/>
+        <location filename="../qml/windows/Main.qml" line="2063"/>
         <source>Align center</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1993"/>
+        <location filename="../qml/windows/Main.qml" line="2064"/>
         <source>Align right</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="1994"/>
+        <location filename="../qml/windows/Main.qml" line="2065"/>
         <source>Justify</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2015"/>
+        <location filename="../qml/windows/Main.qml" line="2086"/>
         <source>Keyboard shortcuts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2024"/>
+        <location filename="../qml/windows/Main.qml" line="2095"/>
         <source>Reset All</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2029"/>
+        <location filename="../qml/windows/Main.qml" line="2100"/>
         <source>Click a shortcut, then press the new keys. Esc cancels.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2044"/>
+        <location filename="../qml/windows/Main.qml" line="2115"/>
         <source>Library</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2044"/>
+        <location filename="../qml/windows/Main.qml" line="2115"/>
         <source>Notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2067"/>
+        <location filename="../qml/windows/Main.qml" line="2138"/>
         <source>Press keys…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2092"/>
+        <location filename="../qml/windows/Main.qml" line="2163"/>
         <source>Export Notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2095"/>
+        <location filename="../qml/windows/Main.qml" line="2166"/>
         <source>JSON files (*.json)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2100"/>
-        <location filename="../qml/windows/Main.qml" line="2112"/>
+        <location filename="../qml/windows/Main.qml" line="2171"/>
+        <location filename="../qml/windows/Main.qml" line="2183"/>
         <source>Notes exported to %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2102"/>
-        <location filename="../qml/windows/Main.qml" line="2114"/>
+        <location filename="../qml/windows/Main.qml" line="2173"/>
+        <location filename="../qml/windows/Main.qml" line="2185"/>
         <source>Export failed: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2109"/>
+        <location filename="../qml/windows/Main.qml" line="2180"/>
         <source>Export Notes as Markdown — choose a folder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2121"/>
+        <location filename="../qml/windows/Main.qml" line="2192"/>
         <source>Import Notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2123"/>
+        <location filename="../qml/windows/Main.qml" line="2194"/>
         <source>BetterNotes exports and Markdown (*.json *.md *.markdown *.txt)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2134"/>
+        <location filename="../qml/windows/Main.qml" line="2205"/>
         <source>Imported %1 notes; could not import %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2135"/>
+        <location filename="../qml/windows/Main.qml" line="2206"/>
         <source>Imported %1 notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2156"/>
+        <location filename="../qml/windows/Main.qml" line="2234"/>
         <source>Reminder set</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2162"/>
+        <location filename="../qml/windows/Main.qml" line="2240"/>
         <source>Reminder removed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2220"/>
+        <location filename="../qml/windows/Main.qml" line="2298"/>
         <source>Quick capture</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2233"/>
+        <location filename="../qml/windows/Main.qml" line="2311"/>
         <source>Show all notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2241"/>
+        <location filename="../qml/windows/Main.qml" line="2319"/>
         <source>Hide all notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2252"/>
+        <location filename="../qml/windows/Main.qml" line="2336"/>
         <source>Open library</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2259"/>
+        <location filename="../qml/windows/Main.qml" line="2343"/>
         <source>Desktop diagnostics</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2267"/>
+        <location filename="../qml/windows/Main.qml" line="2351"/>
         <source>Export notes…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2284"/>
+        <location filename="../qml/windows/Main.qml" line="2368"/>
         <source>Desktop Environment &amp; Diagnostics</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/Main.qml" line="2363"/>
+        <location filename="../qml/windows/Main.qml" line="2452"/>
         <source>Reminder snoozed for 10 minutes</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1475,90 +1485,90 @@
 <context>
     <name>StickyNote</name>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="177"/>
-        <location filename="../qml/windows/StickyNote.qml" line="623"/>
+        <location filename="../qml/windows/StickyNote.qml" line="188"/>
+        <location filename="../qml/windows/StickyNote.qml" line="668"/>
         <source>Untitled note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="555"/>
+        <location filename="../qml/windows/StickyNote.qml" line="602"/>
         <source>New Note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="568"/>
+        <location filename="../qml/windows/StickyNote.qml" line="614"/>
         <source>Expand Note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="568"/>
+        <location filename="../qml/windows/StickyNote.qml" line="614"/>
         <source>Collapse Note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="610"/>
+        <location filename="../qml/windows/StickyNote.qml" line="655"/>
         <source>Locked: the text is encrypted with your password</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="646"/>
+        <location filename="../qml/windows/StickyNote.qml" line="691"/>
         <source>Always on Top (Active) — Click to stay on Desktop</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="646"/>
+        <location filename="../qml/windows/StickyNote.qml" line="691"/>
         <source>On Desktop (Always on Bottom) — Click to Pin on Top</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="665"/>
+        <location filename="../qml/windows/StickyNote.qml" line="708"/>
         <source>Reminder: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="666"/>
+        <location filename="../qml/windows/StickyNote.qml" line="709"/>
         <source>Add a reminder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="681"/>
+        <location filename="../qml/windows/StickyNote.qml" line="722"/>
         <source>Note Settings &amp; Color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="697"/>
+        <location filename="../qml/windows/StickyNote.qml" line="736"/>
         <source>Close Note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="796"/>
+        <location filename="../qml/windows/StickyNote.qml" line="835"/>
         <source>%1 image (*.%2)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="796"/>
-        <location filename="../qml/windows/StickyNote.qml" line="797"/>
-        <location filename="../qml/windows/StickyNote.qml" line="1038"/>
+        <location filename="../qml/windows/StickyNote.qml" line="835"/>
+        <location filename="../qml/windows/StickyNote.qml" line="836"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1100"/>
         <source>All files (*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1025"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1087"/>
         <source>%1 B</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1026"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1088"/>
         <source>%1 KB</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1027"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1089"/>
         <source>%1 MB</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/windows/StickyNote.qml" line="1129"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1191"/>
         <source>Replaced %n</source>
         <translation>
             <numerusform>Replaced %n</numerusform>
@@ -1566,285 +1576,285 @@
         </translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1276"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1338"/>
         <source>Insert Images or GIFs</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1280"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1342"/>
         <source>Images and GIFs (*.png *.jpg *.jpeg *.gif *.webp *.bmp *.svg)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1281"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1343"/>
         <source>Animated GIFs (*.gif)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1294"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1356"/>
         <source>Save Image</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1305"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1367"/>
         <source>Attach Files</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1319"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1381"/>
         <source>Open</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1319"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1381"/>
         <source>Open (not allowed for programs and scripts)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1324"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1386"/>
         <source>Save As…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1329"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1391"/>
         <source>Remove…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1358"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1420"/>
         <source>Copy Image</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1362"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1424"/>
         <source>View Full Size</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1367"/>
-        <location filename="../qml/windows/StickyNote.qml" line="1961"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1429"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2023"/>
         <source>Align Left</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1371"/>
-        <location filename="../qml/windows/StickyNote.qml" line="1967"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1433"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2029"/>
         <source>Align Center</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1375"/>
-        <location filename="../qml/windows/StickyNote.qml" line="1973"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1437"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2035"/>
         <source>Align Right</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1381"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1443"/>
         <source>Save Image As…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1385"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1447"/>
         <source>Remove Image</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1443"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1505"/>
         <source>Title</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1444"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1506"/>
         <source>Note title</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1524"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1586"/>
         <source>Remove tag %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1543"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1605"/>
         <source>Add tag</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1543"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1605"/>
         <source>Add tags, press Enter</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1544"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1606"/>
         <source>Add a tag</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1582"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1644"/>
         <source>High</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1583"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1645"/>
         <source>Med</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1584"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1646"/>
         <source>Low</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1585"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1647"/>
         <source>Priority</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1636"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1698"/>
         <source>Heading 1 (%1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1656"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1718"/>
         <source>Heading 2 (%1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1683"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1745"/>
         <source>Bold (%1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1703"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1765"/>
         <source>Italic (%1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1723"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1785"/>
         <source>Underline (%1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1751"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1813"/>
         <source>Bulleted list (%1) — or type &quot;- &quot;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1769"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1831"/>
         <source>Numbered list (%1) — or type &quot;1. &quot;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1787"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1849"/>
         <source>Checklist (%1) — or type &quot;[ ] &quot;. Tab makes a sub-item.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1806"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1868"/>
         <source>Code block — or type ``` and press Enter</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1834"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1896"/>
         <source>Text Color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1859"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1921"/>
         <source>Default</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1860"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1922"/>
         <source>Red</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1861"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1923"/>
         <source>Orange</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1862"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1924"/>
         <source>Yellow</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1863"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1925"/>
         <source>Green</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1864"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1926"/>
         <source>Cyan</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1865"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1927"/>
         <source>Indigo</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1866"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1928"/>
         <source>Fuchsia</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1913"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1975"/>
         <source>Insert images or GIFs — or drop them onto the note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1931"/>
+        <location filename="../qml/windows/StickyNote.qml" line="1993"/>
         <source>Attach files — or drop them onto the note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1953"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2015"/>
         <source>More: alignment, find and replace, word count</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1979"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2041"/>
         <source>Justify</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1987"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2049"/>
         <source>Make Sub-item (Tab)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="1993"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2055"/>
         <source>Move Up a Level (Shift+Tab)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2001"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2063"/>
         <source>Remove Lock…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2001"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2063"/>
         <source>Lock with Password…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2006"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2068"/>
         <source>Attach File…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2011"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2073"/>
         <source>Find… (%1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2015"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2077"/>
         <source>Replace… (%1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/windows/StickyNote.qml" line="2024"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2086"/>
         <source>%n word(s)</source>
         <translation>
             <numerusform>%n word</numerusform>
@@ -1852,7 +1862,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/windows/StickyNote.qml" line="2025"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2087"/>
         <source>%n character(s)</source>
         <translation>
             <numerusform>%n character</numerusform>
@@ -1860,138 +1870,138 @@
         </translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2026"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2088"/>
         <source>Selection: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2053"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2115"/>
         <source>Write your note…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2054"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2116"/>
         <source>Note content</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2162"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2224"/>
         <source>Copied</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2173"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2235"/>
         <source>Copy code</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2285"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2356"/>
         <source>%1 × %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2383"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2454"/>
         <source>Double-click to open; click for more</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2384"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2455"/>
         <source>Programs and scripts are never opened from a note; save it to use it</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2442"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2513"/>
         <source>Find in note</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2453"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2524"/>
         <source>No matches</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2454"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2525"/>
         <source>%1 of %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2462"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2533"/>
         <source>Match case</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2465"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2536"/>
         <source>Previous (Shift+Enter)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2466"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2537"/>
         <source>Next (Enter)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2470"/>
-        <location filename="../qml/windows/StickyNote.qml" line="2495"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2541"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2566"/>
         <source>Replace</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2473"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2544"/>
         <source>Close (Esc)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2486"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2557"/>
         <source>Replace with</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2504"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2575"/>
         <source>All</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2556"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2627"/>
         <source>Drop to add to the note — images go into the text, other files are attached</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2573"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2644"/>
         <source>Remove this file?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2577"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2648"/>
         <source>“%1” will be removed from the note and deleted from BetterNotes&apos; storage.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2592"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2663"/>
         <source>Move this note to the trash?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2595"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2666"/>
         <source>You can restore it from the library&apos;s Trash for 30 days. Unsaved edits are not kept.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2603"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2674"/>
         <source>Discard changes and close?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2607"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2678"/>
         <source>Unsaved text will be lost. If storage is unavailable, this window may reopen next time.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2622"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2693"/>
         <source>Discard unsaved changes?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/windows/StickyNote.qml" line="2625"/>
+        <location filename="../qml/windows/StickyNote.qml" line="2696"/>
         <source>Reload the saved note and discard this draft?</source>
         <translation type="unfinished"></translation>
     </message>

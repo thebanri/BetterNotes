@@ -126,11 +126,13 @@ ApplicationWindow {
         backend.setReminderTexts(qsTr("Reminder from BetterNotes"), qsTr("Open note"), qsTr("Snooze 10 min"))
         const ids = backend.restoreIds
         const errors = []
+        restoring = true
         for (let i = 0; i < ids.length; ++i) {
             // Locked notes wait until they are unlocked.
             if (isLockedNote(ids[i]) && !backend.vaultUnlocked) continue
             if (!openNote(ids[i])) errors.push(windowError)
         }
+        restoring = false
         windowError = errors.join("\n")
         if (applicationInfo.startQuickCapture()) {
             openQuickCapture()
@@ -147,15 +149,20 @@ ApplicationWindow {
         return i >= 0 && backend.lockedStates[i] === "true"
     }
 
+    // Notes restored at startup keep their layer; "Open notes in front" is
+    // for notes the user opens.
+    property bool restoring: false
+
     function openNote(id, recover, activate) {
         let sticky = noteWindows[id]
+        const front = activate !== false && !restoring && backend.openNotesInFront
         // A locked note opens after its password; then this runs again.
         if (!sticky && isLockedNote(id) && !backend.vaultUnlocked) {
             askPassword("unlock", id, "open")
             return null
         }
         if (!sticky) {
-            sticky = stickyComponent.createObject(window, {noteId: id}) as StickyNote
+            sticky = stickyComponent.createObject(window, {noteId: id, inFront: front}) as StickyNote
             if (!sticky) {
                 windowError = qsTr("Could not create the note window. See Qt diagnostics.")
                 return null
@@ -169,6 +176,7 @@ ApplicationWindow {
             windowsRevision += 1
         }
         windowError = ""
+        if (front) sticky.inFront = true
         if (recover) {
             sticky.recover(window.screen)
         } else if (sticky.visibility === Window.Minimized) {
@@ -178,6 +186,7 @@ ApplicationWindow {
             sticky.show()
             if (activate !== false) sticky.requestActivate()
         } else if (activate !== false) {
+            if (sticky.widget) desktopWidgets.raise(sticky)
             sticky.requestActivate()
         }
         // A note that is already on screen is left untouched when activate is
@@ -1801,6 +1810,17 @@ ApplicationWindow {
                 onToggled: function(checked) {
                     if (!backend.setDesktopWidgets(checked)) widgetsRow.checked = backend.desktopWidgets
                     else window.reopenNotes()
+                }
+            }
+
+            SettingRow {
+                id: inFrontRow
+                title: qsTr("Open notes in front")
+                detail: qsTr("A note you open comes up above other windows until you switch to another app.")
+                enabled: backend.ready
+                checked: backend.openNotesInFront
+                onToggled: function(checked) {
+                    if (!backend.setOpenNotesInFront(checked)) inFrontRow.checked = backend.openNotesInFront
                 }
             }
 

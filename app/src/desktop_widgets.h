@@ -38,6 +38,8 @@ class DesktopWidgets : public QObject {
     // is another one. On Wayland that takes a new surface, which cancels a
     // press on the old one; pointerReleased() still ends a tracked drag.
     Q_INVOKABLE void settle(QWindow *window, int x, int y);
+    // Brings a widget in front of the widgets covering it in its layer.
+    Q_INVOKABLE void raise(QWindow *window);
     // Puts a widget above other windows (pinned) or below them.
     Q_INVOKABLE void setAbove(QWindow *window, bool above);
 

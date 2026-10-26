@@ -102,6 +102,12 @@ Window {
             button.clicked()
             button.clicked()
             applied(false, false, true)
+            // "Open notes in front" lifts the note like a pin, not the pin itself.
+            sticky.inFront = true
+            applied(true, true, false)
+            check(!sticky.alwaysOnTop, "Opening in front pinned the note")
+            sticky.inFront = false
+            applied(false, false, true)
         } finally {
             sticky.retiring = true
             sticky.destroy()

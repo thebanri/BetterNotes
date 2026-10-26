@@ -49,6 +49,15 @@ fn run() -> Result<i32, &'static str> {
     // Wayland only shows a new size once the client has drawn it. The cost is
     // that the compositor places notes on Wayland; layers are handled by the
     // desktop integration (see DesktopEnvironment::supports_note_layers).
+    //
+    // Without wp_viewporter: Qt sends a resized window's new viewport size
+    // before the frame drawn for it, so expanding a collapsed note showed its
+    // old frame stretched to the new height for a moment. The cost is on
+    // fractional scales, where the compositor then scales down a frame drawn
+    // at the next whole scale. Setting the variable yourself overrides this.
+    if std::env::var_os("QT_WAYLAND_DISABLED_INTERFACES").is_none() {
+        std::env::set_var("QT_WAYLAND_DISABLED_INTERFACES", "wp_viewporter");
+    }
     let mut app = QGuiApplication::new();
     let mut app = app.as_mut().ok_or("could not create the Qt application")?;
     app.as_mut()

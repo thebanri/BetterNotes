@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- "Open notes in front" setting (off by default). A note you open from the library, search, the tray or `betternotes open` comes up above other windows, as if pinned, until you switch to another app; then it goes back to its usual layer. Notes restored at startup are not affected.
+
+### Fixed
+- A note could stay under another note while you worked in it. As desktop widgets on Wayland, notes are layer-shell surfaces, which KWin does not raise when clicked and which have no request to raise themselves. A note that another note overlaps now comes to the front when you click it: its surface is shown anew once the click is over, which may flicker briefly. This includes expanding a collapsed note that grows over others, and opening from the library a note that is already on screen.
+- After a restart, an expanded note could open under the collapsed notes around it. Collapsed notes are now reopened first, so expanded ones end up on top.
+- Expanding a collapsed note briefly showed its icons stretched. The window first grew to its 180px minimum height and then to its full height, and on Wayland Qt reported each new size to the compositor before drawing it, so the previous frame was shown stretched. The note now resizes once, and Qt's `wp_viewporter` support is turned off. On fractional display scales the compositor then scales down a frame drawn at the next whole scale; setting `QT_WAYLAND_DISABLED_INTERFACES` yourself overrides this.
+
 ## [0.1.15] - 2026-10-04
 
 ### Added

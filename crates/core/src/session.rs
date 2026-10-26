@@ -113,6 +113,14 @@ impl NotesSession {
         self.store.set_desktop_widgets(enabled)
     }
 
+    pub fn open_notes_in_front(&self) -> Result<bool> {
+        self.store.open_notes_in_front()
+    }
+
+    pub fn set_open_notes_in_front(&mut self, enabled: bool) -> Result<()> {
+        self.store.set_open_notes_in_front(enabled)
+    }
+
     pub fn is_autostart_enabled(&self) -> Result<bool> {
         crate::autostart::is_autostart_enabled()
     }

@@ -98,6 +98,21 @@ fn session_manages_desktop_widgets_preference() {
 }
 
 #[test]
+fn session_manages_open_notes_in_front_preference() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("notes.sqlite3");
+    let mut session = NotesSession::open(&path).unwrap();
+
+    // Opened notes keep the desktop layer unless the user opts in.
+    assert!(!session.open_notes_in_front().unwrap());
+    session.set_open_notes_in_front(true).unwrap();
+
+    drop(session);
+    let session = NotesSession::open(&path).unwrap();
+    assert!(session.open_notes_in_front().unwrap());
+}
+
+#[test]
 fn theme_preference_parsing_and_formatting() {
     assert_eq!(
         "light".parse::<ThemePreference>().unwrap(),

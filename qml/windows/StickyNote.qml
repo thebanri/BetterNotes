@@ -56,6 +56,17 @@ ApplicationWindow {
     signal linkClicked(string link)
 
     property bool alwaysOnTop: false
+    // Set by the library when it opens the note with "Open notes in front":
+    // the note sits above other windows like a pinned one until the user
+    // switches to another app.
+    property bool inFront: false
+    readonly property bool onTop: alwaysOnTop || inFront
+    Connections {
+        target: Qt.application
+        function onStateChanged() {
+            if (Qt.application.state !== Qt.ApplicationActive) noteWindow.inFront = false
+        }
+    }
     // Asked for by the library: show the note as a desktop widget where this
     // session can (see DesktopWidgets), so "show desktop" leaves it in place.
     property bool widgetMode: false
@@ -68,7 +79,7 @@ ApplicationWindow {
     // no way to set its own layer, so on KDE Plasma the desktop integration's
     // KWin script reads it from the caption and applies keep-below/keep-above.
     // Must match the markers in crates/core/src/desktop.rs.
-    readonly property string layerMarker: alwaysOnTop ? "\u2064" : (stayBelow ? "\u2063" : "")
+    readonly property string layerMarker: onTop ? "\u2064" : (stayBelow ? "\u2063" : "")
     // Invisible caption key naming this note (its id as Unicode tag digits,
     // U+E0030..U+E0039). The KWin script uses it to ask WindowPlacement where
     // the note belongs, since Wayland lets no client position its own windows.
@@ -170,7 +181,7 @@ ApplicationWindow {
     // the taskbar and switcher is done by the desktop integration instead.
     transientParent: null
     flags: Qt.Window | Qt.FramelessWindowHint
-        | (alwaysOnTop ? Qt.WindowStaysOnTopHint : (stayBelow ? Qt.WindowStaysOnBottomHint : 0))
+        | (onTop ? Qt.WindowStaysOnTopHint : (stayBelow ? Qt.WindowStaysOnBottomHint : 0))
     // Flipped to ask the KDE Plasma integration to move the note to the
     // position the library gave it (see arrangeNotes in Main.qml).
     property bool arrangeMarker: false
@@ -178,8 +189,9 @@ ApplicationWindow {
     width: 380
     height: 360
     minimumWidth: 240
-    minimumHeight: collapsed ? collapsedHeight : 180
-    maximumHeight: collapsed ? collapsedHeight : 16384
+    // Kept in step with collapsed by resizeHeight().
+    minimumHeight: 180
+    maximumHeight: 16384
     visible: false
     // The surface must stay opaque. A translucent sticky note leaves stale
     // pixels behind on Wayland/KWin every time an interactive resize shrinks it,
@@ -263,7 +275,7 @@ ApplicationWindow {
         expandedWidth = fitted.width
         expandedHeight = fitted.height
         width = expandedWidth
-        height = collapsed ? collapsedHeight : expandedHeight
+        resizeHeight(collapsed ? collapsedHeight : expandedHeight)
         if (state.positioned || recover || canPosition || widget) {
             x = fitted.x
             y = fitted.y
@@ -297,7 +309,7 @@ ApplicationWindow {
     function restoreStacking() {
         if (!initialized || retiring) return
         if (widget) desktopWidgets.setAbove(noteWindow, widgetAbove)
-        else if (alwaysOnTop) raise()
+        else if (onTop) raise()
         else if (stayBelow) lower()
     }
 
@@ -325,7 +337,7 @@ ApplicationWindow {
 
     // Widgets sit above other windows while pinned, or when the library does
     // not keep notes beneath them; otherwise below.
-    readonly property bool widgetAbove: alwaysOnTop || !stayBelow
+    readonly property bool widgetAbove: onTop || !stayBelow
 
     // Moves a widget to a global position, as long as the middle of its
     // header stays on some screen.
@@ -455,12 +467,24 @@ ApplicationWindow {
         dialog.open()
     }
 
+    // Sets the height and the limits for the collapsed state so the window is
+    // resized only once. A limit changed first resizes the window on its own
+    // (expanding went 46 -> 180 -> full height), and on Wayland the compositor
+    // shows the frame drawn for the size in between stretched to the next one.
+    function resizeHeight(target) {
+        if (target > height) maximumHeight = collapsed ? collapsedHeight : 16384
+        else minimumHeight = collapsed ? collapsedHeight : 180
+        height = target
+        minimumHeight = collapsed ? collapsedHeight : 180
+        maximumHeight = collapsed ? collapsedHeight : 16384
+    }
+
     function toggleCollapsed() {
         if (!collapsed && !flush()) return
         if (visibility !== Window.Windowed) showNormal()
         placing = true
         collapsed = !collapsed
-        height = collapsed ? collapsedHeight : expandedHeight
+        resizeHeight(collapsed ? collapsedHeight : expandedHeight)
         placing = false
         persist(true)
     }
@@ -477,7 +501,7 @@ ApplicationWindow {
     // Let widgetAbove and flags settle before restacking. Change handlers can
     // run before those bindings update, otherwise the layer lags one click
     // behind the pin. callLater also coalesces rapid changes to the final state.
-    onAlwaysOnTopChanged: if (initialized && !retiring) Qt.callLater(restoreStacking)
+    onOnTopChanged: if (initialized && !retiring) Qt.callLater(restoreStacking)
     onStayBelowChanged: if (initialized && !retiring) Qt.callLater(restoreStacking)
     onXChanged: captureGeometry()
     onYChanged: captureGeometry()
