@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-10-26
+
 ### Added
 - "Open notes in front" setting (off by default). A note you open from the library, search, the tray or `betternotes open` comes up above other windows, as if pinned, until you switch to another app; then it goes back to its usual layer. Notes restored at startup are not affected.
 

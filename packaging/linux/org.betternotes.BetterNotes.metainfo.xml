@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.16" date="2026-10-26">
+      <description>
+        <p>A note you click or open now comes in front of the notes covering it, expanded notes reopen above collapsed ones, expanding a note no longer shows its icons stretched, and a new setting opens notes in front of other windows.</p>
+      </description>
+    </release>
     <release version="0.1.15" date="2026-10-04">
       <description>
         <p>The command line can read and update locked notes with the master password given on standard input, and reports a wrong password with its own exit status.</p>
