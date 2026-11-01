@@ -496,7 +496,7 @@ ApplicationWindow {
             if (sticky) {
                 if (sticky.editorBackend.setArchived(archived) && sticky.flush() && archived) {
                     // Archiving puts a note away, so its window goes too.
-                    sticky.close()
+                    sticky.dismissNote()
                 }
             } else {
                 backend.setNoteArchived(id, archived)
@@ -602,7 +602,7 @@ ApplicationWindow {
                     showToast(qsTr("A locked note could not be saved; it stays open."))
                     return
                 }
-                sticky.close()
+                sticky.dismissNote()
             }
         }
         backend.lockNotes()
@@ -2263,6 +2263,7 @@ ApplicationWindow {
             else if (action === "export_json") exportJsonDialog.open()
             else if (action === "export_markdown") exportMarkdownDialog.open()
             else if (action === "import") importDialog.open()
+            else if (action === "quit") window.quitApplication()
         }
     }
 
@@ -2393,10 +2394,24 @@ ApplicationWindow {
     }
 
     Shortcut { sequence: window.keys.new_note || "Ctrl+N"; context: Qt.WindowShortcut; enabled: backend.ready; onActivated: window.createNote() }
-    Shortcut { sequences: [StandardKey.Quit]; context: Qt.WindowShortcut; onActivated: window.close() }
+    Shortcut { sequences: [StandardKey.Quit]; context: Qt.WindowShortcut; onActivated: window.quitApplication() }
     Shortcut { sequences: [window.keys.command_palette || "Ctrl+K", "Ctrl+Shift+P"]; context: Qt.WindowShortcut; onActivated: commandPalette.open() }
     Shortcut { sequence: window.keys.focus_search || "Ctrl+F"; context: Qt.WindowShortcut; onActivated: searchField.forceActiveFocus() }
     Shortcut { sequence: window.keys.quick_capture || "Ctrl+Alt+Space"; onActivated: window.openQuickCapture() }
+
+    Connections {
+        target: Qt.application
+        function onAboutToQuit() {
+            const ids = Object.keys(noteWindows)
+            for (let i = 0; i < ids.length; ++i) {
+                const sticky = noteWindows[ids[i]]
+                if (sticky) {
+                    sticky.retiring = true
+                    sticky.prepareQuit()
+                }
+            }
+        }
+    }
 
     // Automatic backups are due daily at most; checking hourly is plenty.
     Timer {

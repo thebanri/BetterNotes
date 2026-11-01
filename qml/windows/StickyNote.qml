@@ -37,6 +37,7 @@ ApplicationWindow {
     property bool initialized: false
     property bool retiring: false
     property bool placing: false
+    property bool explicitClose: false
     property int expandedWidth: 380
     property int expandedHeight: 360
     property int normalX: 0
@@ -462,6 +463,11 @@ ApplicationWindow {
 
     function prepareQuit() { return flush() && persist(true) }
 
+    function dismissNote() {
+        explicitClose = true
+        close()
+    }
+
     function showDialog(dialog) {
         if (collapsed) toggleCollapsed()
         dialog.open()
@@ -510,9 +516,19 @@ ApplicationWindow {
     onScreenChanged: captureGeometry()
     onClosing: function(close) {
         settingsModal.close()
-        if (!retiring && (!flush() || !persist(false))) {
-            close.accepted = false
-            return
+        if (!retiring) {
+            if (!flush()) {
+                close.accepted = false
+                return
+            }
+            if (explicitClose) {
+                if (!persist(false)) {
+                    close.accepted = false
+                    return
+                }
+            } else {
+                persist(true)
+            }
         }
         geometrySave.stop()
         autosave.stop()
@@ -739,6 +755,8 @@ ApplicationWindow {
             }
 
             UI.StyledButton {
+                id: closeBtn
+                objectName: "closeButton"
                 iconName: "x"
                 iconSize: 14
                 theme: noteWindow.theme
@@ -747,7 +765,7 @@ ApplicationWindow {
                 implicitWidth: 28
                 padding: 0
                 Accessible.name: qsTr("Close Note")
-                onClicked: noteWindow.close()
+                onClicked: noteWindow.dismissNote()
             }
         }
     }
@@ -2833,6 +2851,6 @@ ApplicationWindow {
     }
 
     Shortcut { sequences: [StandardKey.Save]; context: Qt.WindowShortcut; onActivated: noteWindow.flush() && noteWindow.persist(true) }
-    Shortcut { sequences: [StandardKey.Close]; context: Qt.WindowShortcut; onActivated: noteWindow.close() }
+    Shortcut { sequences: [StandardKey.Close]; context: Qt.WindowShortcut; onActivated: noteWindow.dismissNote() }
     Shortcut { sequences: [StandardKey.Quit]; context: Qt.WindowShortcut; onActivated: noteWindow.quitRequested() }
 }

@@ -448,7 +448,7 @@ impl NoteStore {
     pub fn open_window_ids(&self) -> Result<Vec<i64>> {
         let mut statement = self.connection.prepare(
             "SELECT w.note_id FROM note_windows w JOIN notes n ON n.id = w.note_id
-                 WHERE w.is_open = 1 AND n.deleted_at IS NULL
+                 WHERE w.is_open = 1 AND n.deleted_at IS NULL AND n.is_archived = 0
                  ORDER BY w.collapsed DESC, w.note_id",
         )?;
         let rows = statement.query_map([], |row| row.get(0))?;
