@@ -25,8 +25,18 @@ function fit(saved, screens, fallback, recover) {
     return {
         screen: target, width: width, height: height,
         x: Math.round(Math.max(minX, Math.min(x, target.virtualX + target.width - width - 16))),
-        y: Math.round(Math.max(minY, Math.min(y, target.virtualY + target.height - height - 40)))
+        y: Math.round(Math.max(minY, Math.min(y, target.virtualY + target.height - height - 40))),
+        matched: matched
     }
+}
+
+// Whether a screen with the given name exists in screens.
+function hasScreen(screens, name) {
+    if (!name || !screens) return false
+    for (let i = 0; i < screens.length; ++i) {
+        if (screens[i].name === name) return true
+    }
+    return false
 }
 
 // The screen containing a global point, or null when none does.

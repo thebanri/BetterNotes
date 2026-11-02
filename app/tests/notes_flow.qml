@@ -60,9 +60,13 @@ Window {
         const left = {name: "left", virtualX: -1280, virtualY: 0, width: 1280, height: 720}
         const saved = {screen: "left", x: -1200, y: 100, width: 420, height: 320, positioned: true}
         const retained = Placement.fit(saved, [primary, left], primary, false)
-        check(retained.x === -1200 && retained.screen === left, "Negative monitor coordinates lost")
+        check(retained.x === -1200 && retained.screen === left && retained.matched === true, "Negative monitor coordinates lost or not matched")
         const removed = Placement.fit(saved, [primary], primary, false)
-        check(removed.x >= 0 && removed.y >= 40 && removed.screen === primary, "Disconnected monitor not recovered")
+        check(removed.x >= 0 && removed.y >= 40 && removed.screen === primary && removed.matched === false, "Disconnected monitor not recovered with matched=false")
+        check(Placement.hasScreen([primary, left], "left") === true, "Connected monitor not found by hasScreen")
+        check(Placement.hasScreen([primary], "left") === false, "Disconnected monitor reported present by hasScreen")
+        const lateConnected = Placement.fit(saved, [primary, left], primary, false)
+        check(lateConnected.x === -1200 && lateConnected.screen === left && lateConnected.matched === true, "Late-connecting monitor failed to restore position")
         const huge = Placement.fit({screen: "primary", x: 99999, y: -99999, width: 5000, height: 5000, positioned: true}, [primary], primary, false)
         check(huge.x >= 0 && huge.y >= 40 && huge.width < primary.width && huge.height < primary.height, "Offscreen/oversized geometry not clamped")
         check(!platformInfo.canPositionWindows("wayland") && !platformInfo.canPositionWindows("wayland-egl"), "Wayland must not restore absolute positions")

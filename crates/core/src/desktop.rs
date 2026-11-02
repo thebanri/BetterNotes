@@ -270,6 +270,11 @@ function restore(win) {
                 win.frameGeometry = {x: x, y: y, width: g.width, height: g.height};
                 return;
             }
+            // Screen not reachable yet (e.g. monitor starting late).
+            // Center temporarily so the note is visible, but do not report
+            // this temporary position as the note's saved position.
+            center(win);
+            return;
         }
         // Nothing usable saved: a new note starts in the middle of the screen,
         // and that becomes its saved position.
@@ -307,6 +312,14 @@ workspace.windowAdded.connect(function(win) { watch(win, true); });
 var existing = workspace.windowList();
 for (var i = 0; i < existing.length; i++) {
     watch(existing[i], false);
+}
+if (workspace.screensChanged) {
+    workspace.screensChanged.connect(function() {
+        var all = workspace.windowList();
+        for (var i = 0; i < all.length; i++) {
+            if (isNote(all[i])) restore(all[i]);
+        }
+    });
 }
 "#;
 

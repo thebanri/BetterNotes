@@ -43,6 +43,7 @@ ApplicationWindow {
     property int normalX: 0
     property int normalY: 0
     property string normalScreen: ""
+    property bool displaced: false
     readonly property bool canPosition: platformInfo.canPositionWindows(Qt.platform.pluginName)
     readonly property int collapsedHeight: 46
 
@@ -257,7 +258,7 @@ ApplicationWindow {
         // Register before the window appears: the window manager asks for the
         // saved position as soon as it maps the window.
         if (widget)
-            widget = desktopWidgets.attach(noteWindow, widgetAbove, normalX, normalY)
+            widget = desktopWidgets.attach(noteWindow, widgetAbove, displaced ? x : normalX, displaced ? y : normalY)
         else if (placement)
             placement.track(noteId, backend.savedPositioned(), backend.savedX(), backend.savedY())
         show()
@@ -277,26 +278,39 @@ ApplicationWindow {
         expandedHeight = fitted.height
         width = expandedWidth
         resizeHeight(collapsed ? collapsedHeight : expandedHeight)
+
+        const wasDisplaced = !recover && !!(state.screen && state.screen.length > 0) && !fitted.matched
+        displaced = wasDisplaced
+
         if (state.positioned || recover || canPosition || widget) {
             x = fitted.x
             y = fitted.y
         }
-        if (widget) {
-            // Widgets go exactly where the app puts them.
-            normalX = fitted.x
-            normalY = fitted.y
-            desktopWidgets.settle(noteWindow, normalX, normalY)
-        } else if (canPosition) {
-            normalX = (x !== 0 || y !== 0) ? x : (state.x || fitted.x)
-            normalY = (x !== 0 || y !== 0) ? y : (state.y || fitted.y)
+        if (displaced) {
+            normalScreen = state.screen
+            normalX = state.positioned ? state.x : fitted.x
+            normalY = state.positioned ? state.y : fitted.y
+            if (widget) {
+                desktopWidgets.settle(noteWindow, fitted.x, fitted.y)
+            }
         } else {
-            // Where the window really is comes only from the window manager
-            // (WindowPlacement); a computed default must not be saved as if
-            // the user had put the note there.
-            normalX = state.positioned ? state.x : 0
-            normalY = state.positioned ? state.y : 0
+            normalScreen = screen.name
+            if (widget) {
+                // Widgets go exactly where the app puts them.
+                normalX = fitted.x
+                normalY = fitted.y
+                desktopWidgets.settle(noteWindow, normalX, normalY)
+            } else if (canPosition) {
+                normalX = (x !== 0 || y !== 0) ? x : (state.x || fitted.x)
+                normalY = (x !== 0 || y !== 0) ? y : (state.y || fitted.y)
+            } else {
+                // Where the window really is comes only from the window manager
+                // (WindowPlacement); a computed default must not be saved as if
+                // the user had put the note there.
+                normalX = state.positioned ? state.x : 0
+                normalY = state.positioned ? state.y : 0
+            }
         }
-        normalScreen = screen.name
         placing = false
     }
 
@@ -317,6 +331,7 @@ ApplicationWindow {
     function recover(fallbackScreen) {
         if (widget) show()
         else showNormal()
+        displaced = false
         place({width: expandedWidth, height: expandedHeight, positioned: false}, fallbackScreen, true)
         persist(true)
         requestActivate()
@@ -326,6 +341,7 @@ ApplicationWindow {
         if (!initialized || placing || retiring || visibility !== Window.Windowed) return
         expandedWidth = width
         if (!collapsed) expandedHeight = height
+        if (displaced) return
         // On Wayland x and y are not the window's position, so they must not
         // overwrite one reported by the window manager.
         if (canPosition && (x !== 0 || y !== 0)) {
@@ -349,7 +365,8 @@ ApplicationWindow {
             else if (Placement.screenAt(screens, normalX + width / 2, nextY + 20)) nextX = normalX
             else return
         }
-        if (nextX === normalX && nextY === normalY) return
+        if (nextX === normalX && nextY === normalY && !displaced) return
+        displaced = false
         normalX = nextX
         normalY = nextY
         normalScreen = Placement.screenAt(screens, nextX + width / 2, nextY + 20).name
@@ -436,14 +453,16 @@ ApplicationWindow {
 
     // The window manager reports where the note is (see WindowPlacement).
     function moveReported(reportedX, reportedY) {
+        displaced = false
         normalX = reportedX
         normalY = reportedY
+        normalScreen = screen ? screen.name : ""
         if (initialized && !retiring) persist(true)
     }
 
     function persist(open) {
         geometrySave.stop()
-        const isPositioned = (normalX !== 0 || normalY !== 0)
+        const isPositioned = (normalX !== 0 || normalY !== 0) || backend.savedPositioned()
         return backend.saveWindow(normalX, normalY, expandedWidth, expandedHeight,
             normalScreen, collapsed, isPositioned, open)
     }
@@ -538,12 +557,49 @@ ApplicationWindow {
     Connections {
         target: Application
         function onScreensChanged() {
-            if (noteWindow.initialized && !noteWindow.retiring) {
-                noteWindow.place({x: noteWindow.normalX, y: noteWindow.normalY,
-                    width: noteWindow.expandedWidth, height: noteWindow.expandedHeight,
-                    screen: noteWindow.normalScreen, positioned: noteWindow.canPosition || noteWindow.widget},
-                    noteWindow.screen, false)
-                noteWindow.persist(true)
+            if (!noteWindow.initialized || noteWindow.retiring) return
+            const screens = Application.screens
+            const hasTarget = Placement.hasScreen(screens, noteWindow.normalScreen)
+
+            if (noteWindow.displaced) {
+                if (hasTarget) {
+                    noteWindow.displaced = false
+                    noteWindow.place({
+                        x: noteWindow.normalX,
+                        y: noteWindow.normalY,
+                        width: noteWindow.expandedWidth,
+                        height: noteWindow.expandedHeight,
+                        screen: noteWindow.normalScreen,
+                        positioned: true
+                    }, noteWindow.screen, false)
+                    if (noteWindow.placement) {
+                        noteWindow.placement.track(noteWindow.noteId, true, noteWindow.normalX, noteWindow.normalY)
+                        noteWindow.arrangeMarker = !noteWindow.arrangeMarker
+                    }
+                    noteWindow.persist(true)
+                }
+            } else {
+                if (noteWindow.normalScreen && !hasTarget) {
+                    noteWindow.displaced = true
+                    noteWindow.place({
+                        x: noteWindow.normalX,
+                        y: noteWindow.normalY,
+                        width: noteWindow.expandedWidth,
+                        height: noteWindow.expandedHeight,
+                        screen: noteWindow.normalScreen,
+                        positioned: noteWindow.canPosition || noteWindow.widget || noteWindow.backend.savedPositioned()
+                    }, null, false)
+                } else if (hasTarget) {
+                    noteWindow.place({
+                        x: noteWindow.normalX,
+                        y: noteWindow.normalY,
+                        width: noteWindow.expandedWidth,
+                        height: noteWindow.expandedHeight,
+                        screen: noteWindow.normalScreen,
+                        positioned: noteWindow.canPosition || noteWindow.widget || noteWindow.backend.savedPositioned()
+                    }, noteWindow.screen, false)
+                    noteWindow.persist(true)
+                }
             }
         }
     }
@@ -598,6 +654,7 @@ ApplicationWindow {
                 var dx = Math.abs(mouse.x - clickPos.x)
                 var dy = Math.abs(mouse.y - clickPos.y)
                 if (dx > 3 || dy > 3) {
+                    noteWindow.displaced = false
                     noteWindow.startSystemMove()
                 }
             }
