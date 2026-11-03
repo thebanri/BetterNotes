@@ -86,6 +86,9 @@ if [ -d "$integrations" ]; then
     # needs none of them.
     rm -f "$appdir/usr/plugins/wayland-graphics-integration-client/"*-server.so
 fi
+# Qt 6.12 looks for qt.conf next to the AppRun symlink, not next to the real
+# binary; without it no platform plugin loads. Older Qt uses usr/bin/qt.conf.
+printf '[Paths]\nPrefix = usr\nPlugins = plugins\nImports = qml\nQml2Imports = qml\n' > "$appdir/qt.conf"
 "$tools/linuxdeploy-$arch.AppImage" \
     --appdir "$appdir" \
     --deploy-deps-only "$appdir/usr/plugins/wayland-graphics-integration-client" \
