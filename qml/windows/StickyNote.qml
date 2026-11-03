@@ -456,7 +456,9 @@ ApplicationWindow {
         displaced = false
         normalX = reportedX
         normalY = reportedY
-        normalScreen = screen ? screen.name : ""
+        // Qt's screen lags behind the compositor's move; the reported spot is exact.
+        const at = Placement.screenAt(Application.screens, reportedX + width / 2, reportedY + 20)
+        normalScreen = at ? at.name : (screen ? screen.name : "")
         if (initialized && !retiring) persist(true)
     }
 
